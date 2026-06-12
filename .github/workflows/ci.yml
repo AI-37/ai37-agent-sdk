@@ -1,0 +1,100 @@
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Отменять предыдущий прогон на той же ветке/PR.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
+  ts:
+    name: ts · @ai37/agent-sdk
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/ts/package-lock.json
+      - run: npm ci
+      - run: npm run lint   # tsc --noEmit
+      - run: npm test       # vitest run
+      - run: npm run build  # tsup
+
+  # ───────────────────────── @ai37/agent-host (TS) ─────────────────────────
+  # Зависит от @ai37/agent-sdk (file:../ts) — сначала собираем ядро, чтобы был его dist.
+  ts-host:
+    name: ts · @ai37/agent-host
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: |
+            packages/ts/package-lock.json
+            packages/ts-host/package-lock.json
+      - name: build @ai37/agent-sdk (зависимость)
+        working-directory: packages/ts
+        run: npm ci && npm run build
+      - name: install @ai37/agent-host
+        working-directory: packages/ts-host
+        run: npm ci
+      - name: lint
+        working-directory: packages/ts-host
+        run: npm run lint
+      - name: test
+        working-directory: packages/ts-host
+        run: npm test
+      - name: build
+        working-directory: packages/ts-host
+        run: npm run build
+
+  # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
+  python:
+    name: py · ai37-agent-sdk
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # единый источник версии — packages/python/.python-version (как локально через pyenv)
+          python-version-file: packages/python/.python-version
+      - name: install poetry
+        run: pipx install poetry
+      - name: install deps
+        run: poetry install --with dev --no-interaction
+      - run: poetry run ruff check .
+      - run: poetry run mypy src
+      - run: poetry run pytest
+
+  # ───────────────────────── codegen parity ─────────────────────────
+  # codes.ts / codes.py должны соответствовать contract/feature-codes.json.
+  codegen-parity:
+    name: codegen parity
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - run: node scripts/codegen.mjs
+      - name: проверить отсутствие diff
+        run: |
+          git diff --exit-code -- \
+            packages/ts/src/codes.ts \
+            packages/python/src/ai37_agent_sdk/codes.py \
+          || (echo "::error::codes.* рассинхронизированы с contract/ — запустите make codegen и закоммитьте" && exit 1)
