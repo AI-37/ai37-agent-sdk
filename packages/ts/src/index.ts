@@ -4,6 +4,10 @@
 export { BillingFeatureCode, BillingPrivilegeCode } from './codes'
 export * from './billing'
 export * from './auth'
-
-// TODO(WP0b): export * from './a2a'
-// TODO(WP0b): export { AgentContext } from './context'
+export * from './a2a'
+export { AgentContext } from './context'
+export type {
+  AgentContextSettings,
+  AgentContextOverrides,
+  ReportUsageInput,
+} from './context'

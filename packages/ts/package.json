@@ -14,9 +14,14 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.cjs"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.cjs"
     }
   },
-  "_todo_wp0b": "восстановить ./testing export и bin ai37-agent-sdk при реализации testing kit + CLI",
+  "_todo_wp0b": "добавить bin ai37-agent-sdk (CLI dev-jwks/make-token/dev-billing)",
   "packageManager": "npm@10.9.8",
   "engines": {
     "node": ">=22"

@@ -115,7 +115,8 @@ export function createBillingClient(
 /** @deprecated alias — используйте createBillingClient. Сохранён для совместимости с @ai37/billing-apps-client. */
 export const createBillingAppsClient = createBillingClient
 
-function hasRequiredAccess(
+/** Чистая проверка прав по runtime state. Переиспользуется in-memory клиентом в testing kit. */
+export function hasRequiredAccess(
   state: BillingRuntimeState,
   requirement?: BillingExecutionRequirement,
 ): boolean {

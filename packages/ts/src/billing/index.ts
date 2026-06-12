@@ -1,4 +1,8 @@
-export { createBillingClient, createBillingAppsClient } from './client'
+export {
+  createBillingClient,
+  createBillingAppsClient,
+  hasRequiredAccess,
+} from './client'
 export {
   BillingConfigurationError,
   BillingExecutionDeniedError,

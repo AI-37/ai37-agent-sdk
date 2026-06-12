@@ -1,9 +1,10 @@
 import { defineConfig } from 'tsup'
 
 export default defineConfig({
-  // WP0b: пока собираем только основной вход. testing/index и cli добавятся при их реализации.
+  // cli добавится при реализации dev-серверов (WP0b).
   entry: {
     index: 'src/index.ts',
+    'testing/index': 'src/testing/index.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,
