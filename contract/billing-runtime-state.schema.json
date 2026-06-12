@@ -1,0 +1,56 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai37.ru/contracts/ai37-agent-sdk/billing-runtime-state.schema.json",
+  "title": "BillingRuntimeState (v1.2)",
+  "description": "Ответ billing-microservice GET /api/v1/billing/customers/by-billing-org/{billing_org_id}/state. v1.2 добавляет litellmKey (агент берёт ключ LiteLLM отсюда, не из JWT/тела).",
+  "type": "object",
+  "required": ["orgId", "billingOrgId", "entitlementStatus", "remainingTotalTokens", "features", "stale"],
+  "additionalProperties": true,
+  "properties": {
+    "orgId": { "type": "string" },
+    "billingOrgId": { "type": "string" },
+    "licensedExternalSubscriptionId": { "type": ["string", "null"] },
+    "meteredExternalSubscriptionId": { "type": ["string", "null"] },
+    "currentPlanCode": { "type": ["string", "null"] },
+    "currentSubscriptionStatus": { "type": ["string", "null"] },
+    "entitlementStatus": { "type": "string", "description": "active | no_resources | ..." },
+    "remainingTotalTokens": { "type": "number" },
+    "features": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["code", "privileges"],
+        "properties": {
+          "code": { "type": "string" },
+          "name": { "type": ["string", "null"] },
+          "description": { "type": ["string", "null"] },
+          "privileges": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": ["code", "valueType", "config"],
+              "properties": {
+                "code": { "type": "string" },
+                "name": { "type": ["string", "null"] },
+                "value": { "type": ["number", "boolean", "string", "null"] },
+                "valueType": { "type": "string", "enum": ["integer", "boolean", "string", "select"] },
+                "config": {
+                  "type": "object",
+                  "properties": { "selectOptions": { "type": "array", "items": { "type": "string" } } }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "litellmKey": {
+      "type": ["string", "null"],
+      "description": "Виртуальный ключ LiteLLM (v1.2+). Используется как apiKey к LiteLLM. Секрет — не логировать."
+    },
+    "trialEndsAt": { "type": ["string", "null"] },
+    "snapshotUpdatedAt": { "type": "string" },
+    "snapshotVersion": { "type": "number" },
+    "stale": { "type": "boolean" }
+  }
+}

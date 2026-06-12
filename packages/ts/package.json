@@ -1,0 +1,46 @@
+{
+  "name": "@ai37/agent-sdk",
+  "version": "0.1.0-alpha.0",
+  "description": "AI37 agent SDK: JWKS auth + billing + A2A forward for ecosystem agents",
+  "type": "module",
+  "license": "MIT",
+  "sideEffects": false,
+  "files": ["dist", "README.md", "LICENSE"],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "_todo_wp0b": "восстановить ./testing export и bin ai37-agent-sdk при реализации testing kit + CLI",
+  "packageManager": "npm@10.9.8",
+  "engines": {
+    "node": ">=22"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run verify"
+  },
+  "dependencies": {
+    "jose": "^5.9.6",
+    "lru-cache": "^11.5.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.11.0",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}

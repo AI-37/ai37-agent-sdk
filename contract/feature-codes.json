@@ -1,0 +1,17 @@
+{
+  "$comment": "Источник истины для BillingFeatureCode / BillingPrivilegeCode. Кодоген в packages/ts/src/codes.ts и packages/python/src/ai37_agent_sdk/codes.py (см. scripts/codegen.mjs). Менять только согласованно (WP0a).",
+  "features": [
+    {
+      "code": "elevator-calc-agent",
+      "constant": "ElevatorCalcAgent",
+      "name": "Elevator Calculation Agent"
+    }
+  ],
+  "privileges": [
+    {
+      "code": "elevator-calc-allowed",
+      "constant": "ElevatorCalcAllowed",
+      "name": "Elevator Calculation Allowed"
+    }
+  ]
+}
