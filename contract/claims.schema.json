@@ -1,0 +1,25 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://ai37.ru/contracts/ai37-agent-sdk/claims.schema.json",
+  "title": "AI37 user-JWT claims (v1.2)",
+  "description": "Claims, которые агент извлекает из access-JWT после JWKS-верификации. v1.2: один issuer. app_id появляется в v2 (мультипродукт) и здесь опционален.",
+  "type": "object",
+  "required": ["iss", "aud", "sub", "exp", "iat", "org_id", "billing_org_id"],
+  "additionalProperties": true,
+  "properties": {
+    "iss": { "type": "string", "description": "Issuer OIDC-провайдера, напр. https://<issuer>/" },
+    "aud": {
+      "description": "Audience (client_id). Строка или массив строк.",
+      "oneOf": [{ "type": "string" }, { "type": "array", "items": { "type": "string" } }]
+    },
+    "sub": { "type": "string", "description": "User uuid (sub_mode=user_uuid)" },
+    "exp": { "type": "integer" },
+    "iat": { "type": "integer" },
+    "nbf": { "type": "integer" },
+    "org_id": { "type": "string", "description": "Внешний ID организации/пользователя (= sub в текущей модели)" },
+    "billing_org_id": { "type": "string", "description": "ID customer в billing (через property mapping OIDC-провайдера)" },
+    "app_id": { "type": "string", "description": "Продукт = приложение OIDC-провайдера (v2). В v1.2 может отсутствовать." },
+    "email": { "type": "string" },
+    "name": { "type": "string" }
+  }
+}

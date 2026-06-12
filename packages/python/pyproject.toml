@@ -1,0 +1,40 @@
+[tool.poetry]
+name = "ai37-agent-sdk"
+version = "0.1.0a0"
+description = "AI37 agent SDK (Python): JWKS auth + billing + A2A forward for ecosystem agents"
+authors = ["AI37"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{ include = "ai37_agent_sdk", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pyjwt = { extras = ["crypto"], version = "^2.9.0" }
+httpx = ">=0.27,<0.29"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+ruff = ">=0.6,<0.13"
+mypy = "^1.11"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+# codes.py генерируется codegen.mjs — не линтуем/не форматируем (иначе ломается парити).
+extend-exclude = ["src/ai37_agent_sdk/codes.py"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
