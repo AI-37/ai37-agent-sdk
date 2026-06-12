@@ -7,10 +7,10 @@ SDK для агентов экосистемы **AI37**: **auth** (JWKS-вери
 
 Монорепо, две реализации с общим контрактом:
 
-| Пакет | Реестр | Путь |
-|---|---|---|
-| `@ai37/agent-sdk` | npm | `packages/ts` |
-| `ai37-agent-sdk` | PyPI | `packages/python` |
+| Пакет | Реестр | Путь | Статус |
+|---|---|---|---|
+| `@ai37/agent-sdk` | npm | `packages/ts` | реализован (auth, billing, a2a, AgentContext, testing, CLI) |
+| `ai37-agent-sdk` | PyPI | `packages/python` | **намеренно отложен** (вернёмся позже; пока не нужен). Сгенерирован только `codes.py` |
 
 - **Контракт (источник истины):** [`contract/`](contract/) — claims, runtime state, feature-codes,
   webhook, env. Кодоген `codes` в оба пакета: `make codegen`.
