@@ -21,6 +21,11 @@ export class HostExecutor implements AgentExecutor {
   ): Promise<void> {
     const ctx = currentCtx()
     const parsed = parseA2AMessage(rc)
+    // Состояние прошлого хода: A2A-SDK грузит прошлый Task по message.taskId,
+    // host прокидывает его в handler (server-side multi-turn/HITL).
+    const priorState = (
+      rc.task?.metadata as Record<string, unknown> | undefined
+    )?.state as Record<string, unknown> | undefined
     const input: AgentInput = {
       text: parsed.text,
       data: parsed.data,
@@ -29,6 +34,7 @@ export class HostExecutor implements AgentExecutor {
       billingOrgId: ctx?.billingOrgId,
       taskId: rc.taskId,
       contextId: rc.contextId,
+      ...(priorState !== undefined ? { taskState: priorState } : {}),
     }
 
     let result: AgentResult

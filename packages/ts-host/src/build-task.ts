@@ -50,6 +50,7 @@ export function toTask(
       },
       metadata: {
         a2ui: result.followup ? [result.followup] : (result.a2ui ?? []),
+        ...(result.state !== undefined ? { state: result.state } : {}),
       },
     }
   }
@@ -63,6 +64,7 @@ export function toTask(
       message: agentMessage(taskId, contextId, result.message ?? 'Готово'),
       timestamp: now(),
     },
+    ...(result.state !== undefined ? { metadata: { state: result.state } } : {}),
     artifacts: [
       {
         artifactId: uuidv4(),

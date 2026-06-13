@@ -42,6 +42,12 @@ export interface AgentInput {
   billingOrgId?: string
   taskId: string
   contextId: string
+  /**
+   * Персистентное состояние прошлого хода этого task (HITL/мастер). Host достаёт
+   * его из task-store по `taskId` (A2A SDK грузит прошлый Task), handler не хранит
+   * состояние сам и не полагается на клиента. undefined на первом ходу.
+   */
+  taskState?: Record<string, unknown>
 }
 
 /** Событие для стрима (AG-UI). */
@@ -57,6 +63,12 @@ export interface AgentResult {
   result?: unknown
   /** для input-required — карточка-вопрос пользователю (HITL). */
   followup?: A2uiComponent
+  /**
+   * Состояние для следующего хода — host персистит его в `task.metadata.state`
+   * (multi-turn/HITL). На следующем `message/send` с тем же `taskId` оно вернётся
+   * в `AgentInput.taskState`.
+   */
+  state?: Record<string, unknown>
 }
 
 export interface AgentRequest {
