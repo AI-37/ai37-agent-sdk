@@ -1,6 +1,10 @@
 import express, { type Express } from 'express'
 import { AGENT_CARD_PATH, type AgentCard } from '@a2a-js/sdk'
-import { DefaultRequestHandler, InMemoryTaskStore } from '@a2a-js/sdk/server'
+import {
+  DefaultRequestHandler,
+  InMemoryTaskStore,
+  type TaskStore,
+} from '@a2a-js/sdk/server'
 import {
   agentCardHandler,
   jsonRpcHandler,
@@ -23,6 +27,12 @@ export interface AgentHostOptions {
   basePath?: string
   /** Объект для /health и /version. */
   buildInfo?: Record<string, unknown>
+  /**
+   * Хранилище task'ов (multi-turn/HITL: состояние хода персистится в task.metadata
+   * и возвращается в `AgentInput.taskState`). По умолчанию `InMemoryTaskStore`
+   * (per-process, не переживает рестарт/реплики) — для durable передайте свой стор.
+   */
+  taskStore?: TaskStore
 }
 
 /**
@@ -42,10 +52,11 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     res.json(info)
   })
 
-  // TODO(state): InMemoryTaskStore → персистентный стор для HITL/тредов.
+  // Multi-turn/HITL: состояние хода живёт в task-store (см. AgentResult.state /
+  // AgentInput.taskState). По умолчанию in-memory; для durable — opts.taskStore.
   const requestHandler = new DefaultRequestHandler(
     opts.card,
-    new InMemoryTaskStore(),
+    opts.taskStore ?? new InMemoryTaskStore(),
     new HostExecutor(opts.handler),
   )
 

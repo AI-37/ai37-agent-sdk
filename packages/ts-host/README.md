@@ -37,8 +37,30 @@ app.listen(8080);
 ## Контракт
 
 Агент реализует `AgentHandler.run(req)` — получает нормализованный `AgentInput` + verified `AgentContext`,
-возвращает `AgentResult` (`status` + опц. `a2ui`/`message`/`followup`/`result`). Host не содержит
+возвращает `AgentResult` (`status` + опц. `a2ui`/`message`/`followup`/`result`/`state`). Host не содержит
 доменной логики.
+
+## Multi-turn / HITL (состояние хода — server-side)
+
+Для уточняющих вопросов (мастер/HITL) состояние живёт в **task-store**, а не у клиента:
+
+```ts
+async run({ input }) {
+  const step = (input.taskState?.step as number) ?? 0;   // состояние прошлого хода
+  if (step === 0) {
+    return {
+      status: "input-required",
+      followup: { component: "ChoiceCard", props: { /* ai37-a2ui-catalog */ } },
+      state: { step: 1 },                                  // host персистит в task.metadata
+    };
+  }
+  return { status: "completed", result: /* ... */ };
+}
+```
+
+На следующем `message/send` с тем же `taskId` host грузит прошлый Task и отдаёт его состояние в
+`input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process). Для durable
+(переживает рестарт/реплики) передайте свой `taskStore` в `createAgentHost({ ..., taskStore })`.
 
 ## Установка
 
