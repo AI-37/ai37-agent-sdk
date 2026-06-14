@@ -1,6 +1,11 @@
 import { describe, expect, it } from 'vitest'
 import { SignJWT, exportJWK, generateKeyPair } from 'jose'
-import { AuthError, createJwtVerifier, extractBearer } from '../src'
+import {
+  AuthError,
+  createJwtVerifier,
+  createMultiIssuerVerifier,
+  extractBearer,
+} from '../src'
 import type { JSONWebKeySet } from 'jose'
 
 const ISSUER = 'https://auth.dev.sp-ai.ru/application/o/sp-ai/'
@@ -102,5 +107,72 @@ describe('extractBearer', () => {
   it('возвращает undefined без заголовка', () => {
     expect(extractBearer({})).toBeUndefined()
     expect(extractBearer(undefined)).toBeUndefined()
+  })
+})
+
+const WIDGET_ISSUER = 'https://auth.dev.sp-ai.ru/application/o/widgets/'
+const WIDGET_AUDIENCE = 'widgets-agent'
+
+async function setupKeyset(kid: string) {
+  const { publicKey, privateKey } = await generateKeyPair('RS256')
+  const publicJwk = await exportJWK(publicKey)
+  publicJwk.kid = kid
+  publicJwk.alg = 'RS256'
+  const jwks: JSONWebKeySet = { keys: [publicJwk] }
+  const sign = (claims: Record<string, unknown>, iss: string, aud: string) =>
+    new SignJWT(claims)
+      .setProtectedHeader({ alg: 'RS256', kid })
+      .setIssuedAt()
+      .setIssuer(iss)
+      .setAudience(aud)
+      .setExpirationTime('1h')
+      .sign(privateKey)
+  return { jwks, sign }
+}
+
+describe('MultiIssuerJwtVerifier', () => {
+  async function setupMulti() {
+    const sp = await setupKeyset('sp-key')
+    const widget = await setupKeyset('widget-key')
+    const verifier = createMultiIssuerVerifier({
+      issuers: [
+        { issuer: ISSUER, audience: AUDIENCE, jwks: sp.jwks },
+        { issuer: WIDGET_ISSUER, audience: WIDGET_AUDIENCE, jwks: widget.jwks },
+      ],
+    })
+    return { sp, widget, verifier }
+  }
+
+  it('маршрутизирует токен sp-ai к правильному issuer', async () => {
+    const { sp, verifier } = await setupMulti()
+    const token = await sp.sign(baseClaims, ISSUER, AUDIENCE)
+    const claims = await verifier.verify(token)
+    expect(claims.sub).toBe('user-1')
+  })
+
+  it('верифицирует токен виджет-провайдера (второй issuer/aud)', async () => {
+    const { widget, verifier } = await setupMulti()
+    const token = await widget.sign(baseClaims, WIDGET_ISSUER, WIDGET_AUDIENCE)
+    const claims = await verifier.verify(token)
+    expect(claims.billing_org_id).toBe('org-1')
+  })
+
+  it('отклоняет недоверенный issuer', async () => {
+    const { sp, verifier } = await setupMulti()
+    const token = await sp.sign(baseClaims, 'https://evil.example/', AUDIENCE)
+    await expect(verifier.verify(token)).rejects.toMatchObject({
+      code: 'invalid_token',
+    })
+  })
+
+  it('не принимает токен issuer A, подписанный ключом issuer B', async () => {
+    const { widget, verifier } = await setupMulti()
+    // подписан widget-ключом, но прикидывается sp-ai issuer -> подпись не сойдётся
+    const token = await widget.sign(baseClaims, ISSUER, AUDIENCE)
+    await expect(verifier.verify(token)).rejects.toBeInstanceOf(AuthError)
+  })
+
+  it('требует хотя бы один issuer', () => {
+    expect(() => createMultiIssuerVerifier({ issuers: [] })).toThrow(AuthError)
   })
 })

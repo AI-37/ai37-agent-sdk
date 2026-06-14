@@ -36,3 +36,19 @@ export interface JwtVerifierOptions {
 export interface JwtVerifier {
   verify(token: string): Promise<Claims>
 }
+
+/** One trusted issuer in a multi-issuer setup (e.g. product `web` + `widget` channel). */
+export interface IssuerConfig {
+  issuer: string
+  audience: string | string[]
+  jwksUrl?: string
+  jwks?: JSONWebKeySet
+  keyResolver?: JWTVerifyGetKey
+}
+
+export interface MultiIssuerVerifierOptions {
+  /** Trusted issuers; a token is routed to the one matching its `iss`. */
+  issuers: IssuerConfig[]
+  /** Допуск по времени (сек), применяется ко всем issuer'ам. По умолчанию 60. */
+  leeway?: number
+}

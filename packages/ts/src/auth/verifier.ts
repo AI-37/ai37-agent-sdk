@@ -1,11 +1,17 @@
 import {
   createLocalJWKSet,
   createRemoteJWKSet,
+  decodeJwt,
   jwtVerify,
   type JWTVerifyGetKey,
 } from 'jose'
 import { AuthError } from './errors'
-import type { Claims, JwtVerifier, JwtVerifierOptions } from './types'
+import type {
+  Claims,
+  JwtVerifier,
+  JwtVerifierOptions,
+  MultiIssuerVerifierOptions,
+} from './types'
 
 /**
  * Верификатор user-JWT через JWKS. Делегирует кэш ключей (по kid, ротация, single-flight)
@@ -78,4 +84,65 @@ export class JwksJwtVerifier implements JwtVerifier {
 
 export function createJwtVerifier(options: JwtVerifierOptions): JwtVerifier {
   return new JwksJwtVerifier(options)
+}
+
+/**
+ * Верификатор для нескольких доверенных issuer'ов (напр. продукт `web` + канал `widget`).
+ * По незаверенному `iss` из токена выбирает соответствующий per-issuer JwksJwtVerifier,
+ * который и выполняет полную проверку (подпись/iss/aud/exp). `iss` из payload используется
+ * только для маршрутизации — выбранный verifier всё равно сверяет его со своим issuer.
+ */
+export class MultiIssuerJwtVerifier implements JwtVerifier {
+  private readonly byIssuer: Map<string, JwksJwtVerifier>
+
+  constructor(options: MultiIssuerVerifierOptions) {
+    if (!options.issuers?.length) {
+      throw new AuthError(
+        'MultiIssuerJwtVerifier: at least one issuer is required',
+        'config',
+      )
+    }
+    this.byIssuer = new Map()
+    for (const cfg of options.issuers) {
+      if (!cfg.issuer?.trim()) {
+        throw new AuthError('MultiIssuerJwtVerifier: issuer is required', 'config')
+      }
+      if (this.byIssuer.has(cfg.issuer)) {
+        throw new AuthError(
+          `MultiIssuerJwtVerifier: duplicate issuer ${cfg.issuer}`,
+          'config',
+        )
+      }
+      this.byIssuer.set(
+        cfg.issuer,
+        new JwksJwtVerifier({ ...cfg, leeway: options.leeway }),
+      )
+    }
+  }
+
+  async verify(token: string): Promise<Claims> {
+    if (!token?.trim()) {
+      throw new AuthError('Empty bearer token')
+    }
+    let iss: string | undefined
+    try {
+      iss = decodeJwt(token).iss
+    } catch (cause) {
+      throw new AuthError('JWT decode failed', 'invalid_token', { cause })
+    }
+    if (!iss) {
+      throw new AuthError('JWT missing iss claim', 'invalid_token')
+    }
+    const verifier = this.byIssuer.get(iss)
+    if (!verifier) {
+      throw new AuthError(`Untrusted issuer: ${iss}`, 'invalid_token')
+    }
+    return verifier.verify(token)
+  }
+}
+
+export function createMultiIssuerVerifier(
+  options: MultiIssuerVerifierOptions,
+): JwtVerifier {
+  return new MultiIssuerJwtVerifier(options)
 }
