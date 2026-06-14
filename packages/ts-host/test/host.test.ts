@@ -135,3 +135,25 @@ describe('multi-turn state (HITL)', () => {
     expect(r2.body.result.artifacts[0].parts[0].data.result.resumedStep).toBe(1)
   })
 })
+
+describe('AG-UI (/agui) канон', () => {
+  it('эмитит RUN_STARTED, текст и ACTIVITY_SNAPSHOT a2ui-surface', async () => {
+    const r = await request(app())
+      .post('/agui')
+      .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
+
+    expect(r.status).toBe(200)
+    expect(r.headers['content-type']).toContain('text/event-stream')
+
+    const body = r.text
+    expect(body).toContain('RUN_STARTED')
+    expect(body).toContain('TEXT_MESSAGE_CONTENT')
+    // готовый A2UI -> activity `a2ui-surface` с v0.9-операциями (не tool-call render_a2ui)
+    expect(body).toContain('ACTIVITY_SNAPSHOT')
+    expect(body).toContain('a2ui-surface')
+    expect(body).toContain('a2ui_operations')
+    expect(body).toContain('SimpleTable')
+    expect(body).not.toContain('a2ui_render')
+    expect(body).toContain('RUN_FINISHED')
+  })
+})
