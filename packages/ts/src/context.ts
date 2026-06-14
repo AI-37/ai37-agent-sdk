@@ -1,6 +1,6 @@
 // AgentContext — высокоуровневый sugar для агентов: verify JWT → billing → preflight/usage.
 // Принимает инъекцию verifier/billingClient (шов для тестов).
-import { JwksJwtVerifier } from './auth/verifier'
+import { JwksJwtVerifier, MultiIssuerJwtVerifier } from './auth/verifier'
 import { extractBearer } from './auth/headers'
 import { AuthError } from './auth/errors'
 import { createBillingClient } from './billing/client'
@@ -9,13 +9,16 @@ import type {
   BillingExecutionRequirement,
   BillingRuntimeState,
 } from './billing/types'
-import type { Claims, JwtVerifier } from './auth/types'
+import type { Claims, IssuerConfig, JwtVerifier } from './auth/types'
 
 export interface AgentContextSettings {
   auth: {
-    issuer: string
-    audience: string | string[]
+    /** Single-issuer config (legacy). Ignored when `issuers` is set. */
+    issuer?: string
+    audience?: string | string[]
     jwksUrl?: string
+    /** Multi-issuer config (preferred). Routes by `iss`; e.g. product + widget channel. */
+    issuers?: IssuerConfig[]
     /** JWT обязателен (true) или допускается отсутствие на миграции (false). */
     required?: boolean
     leeway?: number
@@ -38,6 +41,31 @@ export interface ReportUsageInput {
   transactionId: string
   code: string
   properties?: Record<string, unknown>
+}
+
+/**
+ * Build a verifier from auth settings: multi-issuer when `issuers` is set, otherwise the
+ * legacy single-issuer config (requires issuer + audience + jwksUrl). Returns undefined
+ * when no verification source is configured (migration mode handles a missing verifier).
+ */
+function buildVerifier(
+  auth: AgentContextSettings['auth'],
+): JwtVerifier | undefined {
+  if (auth.issuers?.length) {
+    return new MultiIssuerJwtVerifier({
+      issuers: auth.issuers,
+      leeway: auth.leeway,
+    })
+  }
+  if (auth.jwksUrl && auth.issuer && auth.audience !== undefined) {
+    return new JwksJwtVerifier({
+      issuer: auth.issuer,
+      audience: auth.audience,
+      jwksUrl: auth.jwksUrl,
+      leeway: auth.leeway,
+    })
+  }
+  return undefined
 }
 
 export class AgentContext {
@@ -67,22 +95,13 @@ export class AgentContext {
     const token = extractBearer(headers)
     const required = settings.auth.required ?? true
 
-    const verifier =
-      overrides.verifier ??
-      (settings.auth.jwksUrl
-        ? new JwksJwtVerifier({
-            issuer: settings.auth.issuer,
-            audience: settings.auth.audience,
-            jwksUrl: settings.auth.jwksUrl,
-            leeway: settings.auth.leeway,
-          })
-        : undefined)
+    const verifier = overrides.verifier ?? buildVerifier(settings.auth)
 
     let claims: Claims | undefined
     if (token) {
       if (!verifier) {
         throw new AuthError(
-          'AgentContext: no JWT verifier configured (set auth.jwksUrl)',
+          'AgentContext: no JWT verifier configured (set auth.issuers or auth.issuer+audience+jwksUrl)',
           'config',
         )
       }
