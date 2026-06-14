@@ -9,6 +9,8 @@ export type { ParsedMessage } from './parse'
 export { toTask, agentMessage } from './build-task'
 export { HostExecutor } from './a2a-executor'
 export { aguiRouter } from './agui'
+export { componentToA2uiOperations } from './a2ui'
+export type { A2uiMessage } from './a2ui'
 export type {
   AgentChannel,
   IntentEnvelope,
