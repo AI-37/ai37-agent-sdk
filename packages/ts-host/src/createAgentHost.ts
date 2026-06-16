@@ -11,6 +11,10 @@ import {
   UserBuilder,
 } from '@a2a-js/sdk/server/express'
 import type { AgentContextSettings } from '@ai37/agent-sdk'
+import {
+  buildDevContextOverrides,
+  isDevModeRequested,
+} from '@ai37/agent-sdk/dev'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -66,7 +70,16 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   )
 
   const required = opts.agentContext.auth.required ?? true
-  const guard = jwtGuard(opts.agentContext, required)
+  // Dev-режим (insecure-dev / fake billing) включается ТОЛЬКО через env и fail-closed в проде
+  // (см. @ai37/agent-sdk/dev). В обычном режиме возвращает {} → поведение не меняется.
+  const devOverrides = buildDevContextOverrides()
+  if (isDevModeRequested()) {
+    console.warn(
+      '[ai37-agent-host] ⚠️ агент запущен в DEV-режиме (insecure-dev / fake billing). ' +
+        'Не использовать в проде.',
+    )
+  }
+  const guard = jwtGuard(opts.agentContext, required, devOverrides)
   const base = opts.basePath ?? '/a2a/v1'
 
   app.use(

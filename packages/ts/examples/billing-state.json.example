@@ -1,0 +1,20 @@
+{
+  "orgId": "dev-user-0001",
+  "billingOrgId": "dev-billing-org",
+  "currentPlanCode": "pro",
+  "currentSubscriptionStatus": "active",
+  "entitlementStatus": "active",
+  "remainingTotalTokens": 1000000,
+  "features": [
+    {
+      "code": "ExampleFeature",
+      "name": "Пример фичи",
+      "privileges": [
+        { "code": "ExampleAllowed", "value": true, "valueType": "boolean", "config": {} }
+      ]
+    }
+  ],
+  "llmKey": "sk-dev-fake-llm-key",
+  "trialEndsAt": null,
+  "stale": false
+}

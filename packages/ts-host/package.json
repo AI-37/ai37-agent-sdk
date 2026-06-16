@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -45,7 +45,7 @@
     "uuid": "^14.0.0"
   },
   "peerDependencies": {
-    "@ai37/agent-sdk": ">=0.1.0-alpha.1"
+    "@ai37/agent-sdk": ">=0.1.0-alpha.2"
   },
   "devDependencies": {
     "@ai37/agent-sdk": "file:../ts",
