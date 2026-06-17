@@ -1,0 +1,12 @@
+{
+  "iss": "http://localhost/dev",
+  "aud": "ai37-agents",
+  "sub": "dev-user-0001",
+  "exp": 9999999999,
+  "iat": 0,
+  "org_id": "dev-user-0001",
+  "billing_org_id": "dev-billing-org",
+  "app_id": "sp-ai",
+  "email": "dev@sp-ai.ru",
+  "name": "Dev User"
+}
