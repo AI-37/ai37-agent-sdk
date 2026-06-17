@@ -2,9 +2,11 @@ import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { EventEncoder } from '@ag-ui/encoder'
 import { EventType, type BaseEvent } from '@ag-ui/core'
+import type { TaskStore } from '@a2a-js/sdk/server'
 import { negotiateOutput, readClientCapabilities } from '@ai37/agent-sdk'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
+import { toTask } from './build-task'
 import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent } from './types'
 
 /**
@@ -55,6 +57,7 @@ export function aguiRouter(
   handler: AgentHandler,
   agentTextModes: string[] = [],
   agentCatalogIds?: string | string[],
+  taskStore?: TaskStore,
 ): Router {
   const r = Router()
   const encoder = new EventEncoder()
@@ -94,6 +97,13 @@ export function aguiRouter(
       if (supportedCatalogIds.length > 0) scope.supportedCatalogIds = supportedCatalogIds
     }
 
+    // Multi-turn/HITL: состояние прошлого хода thread'а из task-store
+    // (taskId = threadId). undefined на первом ходу. Симметрично A2A-пути.
+    const priorTask = taskStore ? await taskStore.load(threadId) : undefined
+    const priorState = priorTask?.metadata?.state as
+      | Record<string, unknown>
+      | undefined
+
     const input: AgentInput = {
       text: lastUserText(body.messages),
       data: (body.forwardedProps?.data as Record<string, unknown>) ?? {},
@@ -105,6 +115,7 @@ export function aguiRouter(
       negotiation,
       ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
       ...(supportedCatalogIds.length > 0 ? { supportedCatalogIds } : {}),
+      ...(priorState !== undefined ? { taskState: priorState } : {}),
     }
 
     // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10): эмитим ТОЛЬКО если каталог
@@ -151,6 +162,12 @@ export function aguiRouter(
           // 'node' — внутренняя телеметрия агента; в AG-UI не пробрасываем.
         },
       })
+
+      // Персистим состояние хода в task-store (multi-turn/HITL). Тот же формат
+      // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы.
+      if (taskStore) {
+        await taskStore.save(toTask(result, threadId, threadId, negotiation))
+      }
 
       if (textMessageId) {
         emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: textMessageId })

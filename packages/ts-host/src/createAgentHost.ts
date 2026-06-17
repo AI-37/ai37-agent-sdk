@@ -72,9 +72,12 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   const agentTextModes = opts.card.defaultOutputModes ?? []
   const agentCatalogIds = opts.catalogId
 
+  // Один стор на оба пути (A2A + AG-UI), чтобы state переживал ходы в обоих.
+  const taskStore = opts.taskStore ?? new InMemoryTaskStore()
+
   const requestHandler = new DefaultRequestHandler(
     opts.card,
-    opts.taskStore ?? new InMemoryTaskStore(),
+    taskStore,
     new HostExecutor(opts.handler, agentTextModes, agentCatalogIds),
   )
 
@@ -105,7 +108,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     }),
   )
 
-  app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds))
+  app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds, taskStore))
 
   return app
 }
