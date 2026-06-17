@@ -5,8 +5,8 @@ import type { A2uiComponent, AgentResult } from './types'
 
 const now = (): string => new Date().toISOString()
 
-/** Текст эмитится всегда; A2UI — только когда клиент запросил A2UI-mode. */
-const TEXT_ONLY: OutputNegotiation = { text: 'text/plain', a2ui: false }
+/** Дефолт без негоциации: текст-only (каталог не согласован → A2UI не шлём). */
+const TEXT_ONLY: OutputNegotiation = { text: 'text/plain', catalogId: null }
 
 export function agentMessage(
   taskId: string,
@@ -25,8 +25,9 @@ export function agentMessage(
 
 /**
  * Заворачивает результат handler'а в A2A-`Task`. `negotiation` определяет content-negotiation
- * вывода (РЕШЕНИЕ 10): текст — всегда, A2UI (включая HITL-карточку `followup`) — только если
- * клиент запросил A2UI-mode. По умолчанию (без negotiation) — text-only.
+ * вывода (РЕШЕНИЕ 10, две оси): A2UI (включая HITL-карточку `followup`) — только если каталог
+ * согласован (`negotiation.catalogId`); текст для `completed` — только если агент дал `message`
+ * (никаких дефолтов). По умолчанию (без negotiation) — text-only.
  */
 export function toTask(
   result: AgentResult,
@@ -34,9 +35,9 @@ export function toTask(
   contextId: string,
   negotiation: OutputNegotiation = TEXT_ONLY,
 ): Task {
-  // A2UI отдаётся только при явном запросе; иначе пустой список (дефолт — текст).
+  // A2UI отдаётся только при согласованном каталоге; иначе пустой список (агент даёт текст).
   const a2ui = filterA2uiComponents<A2uiComponent>(result.a2ui, negotiation)
-  const followup = negotiation.a2ui ? result.followup : undefined
+  const followup = negotiation.catalogId ? result.followup : undefined
 
   if (result.status === 'failed') {
     return {
@@ -74,7 +75,11 @@ export function toTask(
     contextId,
     status: {
       state: 'completed',
-      message: agentMessage(taskId, contextId, result.message ?? 'Готово'),
+      // Текст — только если агент его дал (компонент-онли каноничен: AG-UI content опционален,
+      // A2A не требует текстовый part). Никаких болванок '.Готово'.
+      ...(result.message
+        ? { message: agentMessage(taskId, contextId, result.message) }
+        : {}),
       timestamp: now(),
     },
     ...(result.state !== undefined ? { metadata: { state: result.state } } : {}),

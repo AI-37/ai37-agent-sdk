@@ -1,14 +1,17 @@
-// Канон content-negotiation вывода (output modes) — единый источник истины (SSOT).
+// Канон content-negotiation вывода — ДВЕ НЕЗАВИСИМЫЕ ОСИ (A2A + AG-UI + A2UI), SSOT.
 //
-// Формат ответа выбирает КЛИЕНТ через список MIME-типов `acceptedOutputModes`
-// (нативное поле A2A `MessageSendConfiguration.acceptedOutputModes`, прямой аналог HTTP `Accept`).
-// Дефолт — текст: если A2UI-тип не запрошен явно, агент компоненты НЕ присылает.
-// Enforcement живёт в хосте (`@ai37/agent-host`); здесь — только чистая логика негоциации.
+//  1. Формат текста — A2A `acceptedOutputModes` (media-типы). Аналог HTTP `Accept` (SHOULD).
+//  2. Каталог UI — A2UI-нативно: клиент шлёт `a2uiClientCapabilities.v0.9.supportedCatalogIds`
+//     (список URL каталогов, по убыванию предпочтения) в метаданных КАЖДОГО сообщения; агент
+//     берёт лучший матч; нет матча → UI не шлётся.
 //
-// См. docs/ecosystem/v2/10-agui-protocol.md (РЕШЕНИЕ 10) и docs/a2ui-negotiation-plan.md.
+// Текст НЕ обязателен (AG-UI `content` опционален; A2A не требует текстовый part). Агент эмитит
+// ОДНО представление: каталог поддержан → компонент (XOR короткий не-дублирующий лид-ин), иначе →
+// текст-fallback. Enforcement — в хосте (`@ai37/agent-host`).
+//
+// См. docs/ecosystem/v2/10-agui-protocol.md (РЕШЕНИЕ 10), client_capabilities.json (@a2ui/web_core).
 
-// Лёгкий subpath — только строковые id каталогов, без zod-схем из барреля.
-import { CATALOG_ID, A2UI_BASE_CATALOG_ID } from '@ai37/a2ui-catalog-schemas/constants'
+// ── Ось 1: формат текста (media-типы) ──────────────────────────────────────────────────────────
 
 /** Простой текст. */
 export const OUTPUT_MODE_TEXT = 'text/plain'
@@ -16,97 +19,125 @@ export const OUTPUT_MODE_TEXT = 'text/plain'
 export const OUTPUT_MODE_MARKDOWN = 'text/markdown'
 /** Markdown под рендерер SP-AI. */
 export const OUTPUT_MODE_MARKDOWN_SPAI = 'text/vnd.markdown+spai-renderer'
-/** A2UI, базовый каталог (`@a2ui` basicCatalog). */
-export const OUTPUT_MODE_A2UI_BASE = 'application/vnd.a2ui+json'
-/** A2UI, ai37-каталог (`ai37-a2ui-catalog`, `CATALOG_ID`). */
-export const OUTPUT_MODE_A2UI_AI37 = 'application/vnd.a2ui.ai37+json'
 
-/**
- * Текстовые modes по убыванию «богатства» — порядок для дефолтного выбора кодировки,
- * когда клиент не выразил предпочтения среди текстовых.
- */
+/** Текстовые modes по убыванию «богатства». */
 export const TEXT_OUTPUT_MODES = [
   OUTPUT_MODE_MARKDOWN_SPAI,
   OUTPUT_MODE_MARKDOWN,
   OUTPUT_MODE_TEXT,
 ] as const
 
-/** A2UI-MIME → catalogId. Каталог кодируется отдельным MIME-типом, не отдельным полем. */
-export const A2UI_MODE_CATALOG: Readonly<Record<string, string>> = {
-  [OUTPUT_MODE_A2UI_BASE]: A2UI_BASE_CATALOG_ID,
-  [OUTPUT_MODE_A2UI_AI37]: CATALOG_ID,
+const TEXT_MODE_SET = new Set<string>(TEXT_OUTPUT_MODES)
+/** Является ли mode текстовым media-типом. */
+export const isTextOutputMode = (mode: string): boolean => TEXT_MODE_SET.has(mode)
+
+/**
+ * Выбор текстового формата: первый текстовый mode из пересечения (client ∩ agentSupported) по
+ * порядку клиента; если пересечения нет — `text/plain`. Текст всегда имеет валидный формат — но это
+ * НЕ значит, что текст обязан эмититься (это решает агент, отдавая `message` или нет).
+ */
+export function negotiateText(
+  accepted: readonly string[] | undefined,
+  agentSupported: readonly string[],
+): string {
+  const supported = new Set(agentSupported)
+  const list = Array.isArray(accepted) ? accepted : []
+  return list.find((m) => isTextOutputMode(m) && supported.has(m)) ?? OUTPUT_MODE_TEXT
 }
 
-const TEXT_MODE_SET = new Set<string>(TEXT_OUTPUT_MODES)
-const A2UI_MODE_SET = new Set<string>([OUTPUT_MODE_A2UI_BASE, OUTPUT_MODE_A2UI_AI37])
+// ── Ось 2: каталог UI (A2UI supportedCatalogIds) ────────────────────────────────────────────────
 
-/** Является ли mode текстовым. */
-export const isTextOutputMode = (mode: string): boolean => TEXT_MODE_SET.has(mode)
-/** Является ли mode A2UI-каталогом. */
-export const isA2uiOutputMode = (mode: string): boolean => A2UI_MODE_SET.has(mode)
+/** Версия A2UI-протокола в конверте capabilities. */
+export const A2UI_CAPABILITIES_VERSION = 'v0.9'
 
-/** Запросил ли клиент хоть один A2UI-mime. */
-export function clientAcceptsA2ui(accepted: readonly string[] | undefined): boolean {
-  return Array.isArray(accepted) && accepted.some(isA2uiOutputMode)
+/** Форма `a2uiClientCapabilities` (A2A message metadata / AG-UI forwardedProps). */
+export interface A2uiClientCapabilities {
+  [version: string]: { supportedCatalogIds?: string[] } | undefined
 }
 
 /**
- * Результат негоциации формата вывода.
- * - `text` — текстовый mode, в котором эмитить текст. Текст эмитится ВСЕГДА (это не фолбэк на
- *   компоненты, а выбор кодировки текста: текст обязан присутствовать в любом ответе).
- * - `a2ui` — `false`, если A2UI не запрошен/не поддержан (дефолт). Иначе `{ catalogId, mode }`.
+ * Достаёт `supportedCatalogIds` из объекта-носителя (A2A `message.metadata` или AG-UI
+ * `forwardedProps`), который может содержать `a2uiClientCapabilities.v0.9.supportedCatalogIds`.
+ * Возвращает упорядоченный список URL каталогов (или []).
+ */
+export function readClientCapabilities(source: unknown): string[] {
+  const caps = (source as { a2uiClientCapabilities?: A2uiClientCapabilities } | undefined)
+    ?.a2uiClientCapabilities
+  const ids = caps?.[A2UI_CAPABILITIES_VERSION]?.supportedCatalogIds
+  return Array.isArray(ids) ? ids.filter((s): s is string => typeof s === 'string') : []
+}
+
+/** Поддерживает ли клиент данный каталог. */
+export function clientSupportsCatalog(
+  supportedCatalogIds: readonly string[] | undefined,
+  agentCatalogId: string | undefined,
+): boolean {
+  return (
+    !!agentCatalogId &&
+    Array.isArray(supportedCatalogIds) &&
+    supportedCatalogIds.includes(agentCatalogId)
+  )
+}
+
+/**
+ * Выбор каталога: возвращает `agentCatalogId`, если он есть в списке клиента (нет матча → null →
+ * UI не шлётся). Агент эмитит один каталог (`agentCatalogId`); расширяемо до нескольких — тогда
+ * берётся первый из клиентского списка, который агент поддерживает (по порядку клиента).
+ */
+export function negotiateCatalog(
+  supportedCatalogIds: readonly string[] | undefined,
+  agentCatalogIds: string | readonly string[] | undefined,
+): string | null {
+  const agentSet = new Set(
+    typeof agentCatalogIds === 'string'
+      ? [agentCatalogIds]
+      : Array.isArray(agentCatalogIds)
+        ? agentCatalogIds
+        : [],
+  )
+  if (agentSet.size === 0) return null
+  const clientList = Array.isArray(supportedCatalogIds) ? supportedCatalogIds : []
+  return clientList.find((id) => agentSet.has(id)) ?? null
+}
+
+// ── Сводная негоциация ──────────────────────────────────────────────────────────────────────────
+
+/**
+ * Резолвнутая негоциация вывода (две оси):
+ * - `text` — формат текста, ЕСЛИ агент его эмитит (текст не обязателен).
+ * - `catalogId` — выбранный каталог A2UI, либо `null` (UI не слать).
  */
 export interface OutputNegotiation {
   text: string
-  a2ui: false | { catalogId: string; mode: string }
+  catalogId: string | null
 }
 
-/**
- * Строгая негоциация (дефолт — текст).
- *
- * @param accepted        упорядоченный список предпочтений клиента (A2A-семантика `acceptedOutputModes`).
- * @param agentSupported  что агент реально умеет отдавать (agent-card `defaultOutputModes`/`outputModes`).
- *
- * Правила:
- * - **Текст всегда есть.** `text` = первый текстовый mode из пересечения (client ∩ agentSupported)
- *   по порядку клиента; если пересечения нет — `text/plain`.
- * - **A2UI только по явному запросу.** `a2ui` ≠ false только если клиент перечислил A2UI-mime
- *   И агент его поддерживает. Каталог берётся из mime; `ai37` предпочтительнее `base`, если клиент
- *   принял оба. Нет A2UI-mime у клиента → `a2ui: false`.
- */
-export function negotiateOutput(
-  accepted: readonly string[] | undefined,
-  agentSupported: readonly string[],
-): OutputNegotiation {
-  const supported = new Set(agentSupported)
-  const acceptedList = Array.isArray(accepted) ? accepted : []
+export interface NegotiateOutputArgs {
+  /** A2A `acceptedOutputModes` клиента (media-типы текста). */
+  acceptedOutputModes?: readonly string[]
+  /** Текстовые форматы, которые умеет агент (agent-card `defaultOutputModes`). */
+  agentTextModes?: readonly string[]
+  /** Каталоги, заявленные клиентом (`a2uiClientCapabilities.supportedCatalogIds`). */
+  supportedCatalogIds?: readonly string[]
+  /** Каталог(и), которые эмитит агент (обычно один — `CATALOG_ID`). */
+  agentCatalogIds?: string | readonly string[]
+}
 
-  // --- текст: первый текстовый mode из пересечения по порядку клиента, иначе text/plain ---
-  const text =
-    acceptedList.find((m) => isTextOutputMode(m) && supported.has(m)) ?? OUTPUT_MODE_TEXT
-
-  // --- A2UI: только при явном запросе клиента и поддержке агентом; ai37 предпочтительнее base ---
-  const a2uiAccepted = acceptedList.filter((m) => isA2uiOutputMode(m) && supported.has(m))
-  let a2ui: OutputNegotiation['a2ui'] = false
-  if (a2uiAccepted.length > 0) {
-    const mode = a2uiAccepted.includes(OUTPUT_MODE_A2UI_AI37)
-      ? OUTPUT_MODE_A2UI_AI37
-      : a2uiAccepted[0]
-    a2ui = { catalogId: A2UI_MODE_CATALOG[mode], mode }
+export function negotiateOutput(args: NegotiateOutputArgs): OutputNegotiation {
+  return {
+    text: negotiateText(args.acceptedOutputModes, args.agentTextModes ?? TEXT_OUTPUT_MODES),
+    catalogId: negotiateCatalog(args.supportedCatalogIds, args.agentCatalogIds),
   }
-
-  return { text, a2ui }
 }
 
 /**
- * Отсекает A2UI-компоненты, если они не были запрошены (enforcement-хелпер для хоста/хендлера).
- * Компоненты не помечены каталогом по-отдельности — каталог задаётся на уровне поверхности
- * через `negotiation.a2ui.catalogId`, поэтому фильтр бинарный: запрошен A2UI или нет.
+ * Отсекает A2UI-компоненты, если каталог не согласован (enforcement-хелпер для хоста/хендлера).
+ * Бинарно: каталог согласован (`catalogId`) → компоненты как есть; иначе → [].
  */
 export function filterA2uiComponents<T>(
   components: readonly T[] | undefined,
   negotiation: OutputNegotiation,
 ): T[] {
-  if (!negotiation.a2ui) return []
+  if (!negotiation.catalogId) return []
   return components ? [...components] : []
 }

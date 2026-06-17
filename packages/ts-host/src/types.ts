@@ -50,13 +50,16 @@ export interface AgentInput {
   billingOrgId?: string
   taskId: string
   contextId: string
-  /** Сырой список принимаемых клиентом форматов (как пришёл; для прозрачности/логов). */
+  /** Сырой список принимаемых клиентом форматов текста (media-типы; как пришёл). */
   acceptedOutputModes?: string[]
+  /** Каталоги A2UI, заявленные клиентом (`a2uiClientCapabilities.supportedCatalogIds`). */
+  supportedCatalogIds?: string[]
   /**
-   * Резолвнутая хостом негоциация формата вывода (РЕШЕНИЕ 10). Хост считает её один раз
-   * из `acceptedOutputModes` клиента и `defaultOutputModes` agent-card. Хендлер может на неё
-   * смотреть (`negotiation.a2ui === false` → не строить A2UI), но финальный enforcement —
-   * всё равно на хосте: текст эмитится всегда, A2UI — только при `negotiation.a2ui`.
+   * Резолвнутая хостом негоциация вывода (две оси, РЕШЕНИЕ 10):
+   * `text` — формат текста ЕСЛИ агент его эмитит; `catalogId` — согласованный каталог A2UI
+   * или `null`. Хендлер смотрит на неё (`catalogId === null` → не строить A2UI, отдать текст),
+   * но финальный enforcement — на хосте: A2UI только при `negotiation.catalogId`, текст — только
+   * если агент дал `message` (никаких дефолтов).
    */
   negotiation: OutputNegotiation
   /**

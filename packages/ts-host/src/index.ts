@@ -5,6 +5,7 @@ export {
   currentCtx,
   currentBearer,
   currentAcceptedOutputModes,
+  currentSupportedCatalogIds,
   requestScope,
 } from './als'
 export type { HostScope } from './als'

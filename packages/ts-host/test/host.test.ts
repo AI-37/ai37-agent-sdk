@@ -4,12 +4,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { AgentCard } from '@a2a-js/sdk'
-import {
-  OUTPUT_MODE_TEXT,
-  OUTPUT_MODE_MARKDOWN,
-  OUTPUT_MODE_A2UI_AI37,
-} from '@ai37/agent-sdk'
+import { OUTPUT_MODE_TEXT, OUTPUT_MODE_MARKDOWN } from '@ai37/agent-sdk'
 import { createAgentHost, type AgentHandler } from '../src/index'
+
+// Каталог A2UI этого агента (две оси: формат текста ≠ выбор каталога).
+const CATALOG = 'https://ai-37.github.io/ai37-a2ui-catalog/a2ui/catalogs/ai37-a2ui/v1/catalog.json'
 
 const card: AgentCard = {
   name: 'Test Agent',
@@ -18,10 +17,14 @@ const card: AgentCard = {
   url: 'http://localhost/a2a/v1',
   protocolVersion: '0.3',
   preferredTransport: 'JSONRPC',
-  capabilities: { streaming: true, pushNotifications: false },
+  // ось каталога: агент объявляет каталог в extensions (discovery); формат текста — defaultOutputModes
+  capabilities: {
+    streaming: true,
+    pushNotifications: false,
+    extensions: [{ uri: CATALOG, description: 'A2UI catalog', required: false }],
+  },
   defaultInputModes: ['application/json'],
-  // content-negotiation: агент умеет текст (md/plain) + ai37-A2UI
-  defaultOutputModes: [OUTPUT_MODE_MARKDOWN, OUTPUT_MODE_TEXT, OUTPUT_MODE_A2UI_AI37],
+  defaultOutputModes: [OUTPUT_MODE_MARKDOWN, OUTPUT_MODE_TEXT],
   skills: [{ id: 's', name: 's', description: 'd', tags: [] }],
 }
 
@@ -36,10 +39,16 @@ const handler: AgentHandler = {
   },
 }
 
+/** Хелпер: A2UI capabilities в метаданных A2A-сообщения. */
+function caps(ids: string[]) {
+  return { a2uiClientCapabilities: { 'v0.9': { supportedCatalogIds: ids } } }
+}
+
 function app() {
   return createAgentHost({
     card,
     handler,
+    catalogId: CATALOG,
     agentContext: {
       auth: { issuer: 'https://issuer', audience: 'aud', required: false },
       billing: { baseUrl: 'http://localhost:9999' },
@@ -61,7 +70,7 @@ describe('createAgentHost', () => {
     expect(r.body.skills.length).toBe(1)
   })
 
-  it('A2A message/send без acceptedOutputModes → completed Task БЕЗ A2UI (дефолт текст)', async () => {
+  it('A2A без supportedCatalogIds → completed Task БЕЗ A2UI (каталог не согласован)', async () => {
     const r = await request(app())
       .post('/a2a/v1')
       .send({
@@ -79,12 +88,12 @@ describe('createAgentHost', () => {
       })
     expect(r.status).toBe(200)
     expect(r.body.result.status.state).toBe('completed')
-    // дефолт — текст: компоненты не отдаются, но текст (status.message) есть
+    // каталог не согласован → компоненты не отдаются; текст (status.message) есть, т.к. агент его дал
     expect(r.body.result.artifacts[0].parts[0].data.a2ui).toEqual([])
     expect(r.body.result.status.message.parts[0].text).toBe('ok')
   })
 
-  it('A2A message/send с configuration.acceptedOutputModes(ai37) → Task С A2UI', async () => {
+  it('A2A с message.metadata.a2uiClientCapabilities(CATALOG) → Task С A2UI', async () => {
     const r = await request(app())
       .post('/a2a/v1')
       .send({
@@ -97,15 +106,68 @@ describe('createAgentHost', () => {
             messageId: 'm1',
             role: 'user',
             parts: [{ kind: 'text', text: 'hi' }],
+            metadata: caps([CATALOG]),
           },
-          configuration: { acceptedOutputModes: [OUTPUT_MODE_A2UI_AI37] },
         },
       })
     expect(r.status).toBe(200)
     expect(r.body.result.status.state).toBe('completed')
-    expect(r.body.result.artifacts[0].parts[0].data.a2ui[0].component).toBe(
-      'SimpleTable',
-    )
+    expect(r.body.result.artifacts[0].parts[0].data.a2ui[0].component).toBe('SimpleTable')
+  })
+
+  it('A2A: клиент поддерживает только чужой каталог → A2UI не шлётся', async () => {
+    const r = await request(app())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'hi' }],
+            metadata: caps(['https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json']),
+          },
+        },
+      })
+    expect(r.body.result.artifacts[0].parts[0].data.a2ui).toEqual([])
+  })
+
+  it('component-only: completed без message → НЕТ status.message (текст не форсится)', async () => {
+    const compOnly = createAgentHost({
+      card,
+      handler: {
+        async run() {
+          return { status: 'completed', a2ui: [{ component: 'SimpleTable', props: {} }] }
+        },
+      },
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'i', audience: 'a', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+    })
+    const r = await request(compOnly)
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'hi' }],
+            metadata: caps([CATALOG]),
+          },
+        },
+      })
+    expect(r.body.result.status.state).toBe('completed')
+    expect(r.body.result.status.message).toBeUndefined()
+    expect(r.body.result.artifacts[0].parts[0].data.a2ui[0].component).toBe('SimpleTable')
   })
 })
 
@@ -170,7 +232,7 @@ describe('multi-turn state (HITL)', () => {
 })
 
 describe('AG-UI (/agui) канон + content-negotiation', () => {
-  it('дефолт (без acceptedOutputModes) → текст, БЕЗ ACTIVITY_SNAPSHOT a2ui-surface', async () => {
+  it('дефолт (без supportedCatalogIds) → текст, БЕЗ ACTIVITY_SNAPSHOT a2ui-surface', async () => {
     const r = await request(app())
       .post('/agui')
       .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
@@ -181,26 +243,26 @@ describe('AG-UI (/agui) канон + content-negotiation', () => {
     const body = r.text
     expect(body).toContain('RUN_STARTED')
     expect(body).toContain('TEXT_MESSAGE_CONTENT')
-    // дефолт — текст: A2UI-поверхности нет
+    // каталог не согласован → A2UI-поверхности нет
     expect(body).not.toContain('a2ui-surface')
     expect(body).not.toContain('SimpleTable')
     expect(body).toContain('RUN_FINISHED')
   })
 
-  it('forwardedProps.ai37.acceptedOutputModes(ai37) → ACTIVITY_SNAPSHOT a2ui-surface с catalogId', async () => {
+  it('forwardedProps.a2uiClientCapabilities(CATALOG) → ACTIVITY_SNAPSHOT a2ui-surface с catalogId', async () => {
     const r = await request(app())
       .post('/agui')
       .send({
         threadId: 't1',
         runId: 'r1',
         messages: [{ role: 'user', content: 'hi' }],
-        forwardedProps: { ai37: { acceptedOutputModes: [OUTPUT_MODE_A2UI_AI37] } },
+        forwardedProps: { a2uiClientCapabilities: { 'v0.9': { supportedCatalogIds: [CATALOG] } } },
       })
 
     expect(r.status).toBe(200)
     const body = r.text
     expect(body).toContain('TEXT_MESSAGE_CONTENT')
-    // A2UI запрошен → activity `a2ui-surface` с v0.9-операциями (не tool-call render_a2ui)
+    // каталог согласован → activity `a2ui-surface` с v0.9-операциями (не tool-call render_a2ui)
     expect(body).toContain('ACTIVITY_SNAPSHOT')
     expect(body).toContain('a2ui-surface')
     expect(body).toContain('a2ui_operations')

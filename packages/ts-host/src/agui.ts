@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { EventEncoder } from '@ag-ui/encoder'
 import { EventType, type BaseEvent } from '@ag-ui/core'
-import { negotiateOutput } from '@ai37/agent-sdk'
+import { negotiateOutput, readClientCapabilities } from '@ai37/agent-sdk'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent } from './types'
@@ -51,7 +51,11 @@ function extractAi37(body: RunAgentInputLike): Ai37Metadata {
   return ai37
 }
 
-export function aguiRouter(handler: AgentHandler, agentSupportedModes: string[] = []): Router {
+export function aguiRouter(
+  handler: AgentHandler,
+  agentTextModes: string[] = [],
+  agentCatalogIds?: string | string[],
+): Router {
   const r = Router()
   const encoder = new EventEncoder()
 
@@ -70,14 +74,25 @@ export function aguiRouter(handler: AgentHandler, agentSupportedModes: string[] 
     const runId = body.runId ?? uuidv4()
 
     const metadata = extractAi37(body)
-    // content-negotiation: для AG-UI accepted приходит в forwardedProps.ai37 (нативного поля нет).
+    // content-negotiation (две оси) для AG-UI (нативных A2A-полей нет):
+    //  - формат текста — forwardedProps.ai37.acceptedOutputModes;
+    //  - каталог — forwardedProps.a2uiClientCapabilities.v0.9.supportedCatalogIds.
     const accepted = metadata.acceptedOutputModes
-    const negotiation = negotiateOutput(accepted, agentSupportedModes)
-    // Симметрия с A2A-путём: кладём accepted в ALS, чтобы downstream (напр. оркестратор,
-    // форвардящий к remote-агентам через `currentAcceptedOutputModes`) видел его так же, как
-    // `currentBearer`. Guard уже открыл scope; для AG-UI-тела он пуст (нет `params`), дополняем.
+    const supportedCatalogIds = readClientCapabilities(body.forwardedProps)
+    const negotiation = negotiateOutput({
+      acceptedOutputModes: accepted,
+      agentTextModes,
+      supportedCatalogIds,
+      agentCatalogIds,
+    })
+    // Симметрия с A2A-путём: кладём обе оси в ALS, чтобы downstream (напр. оркестратор, форвардящий
+    // вниз через `currentAcceptedOutputModes`/`currentSupportedCatalogIds`) видел их как `currentBearer`.
+    // Guard уже открыл scope; для AG-UI-тела он пуст (нет `params`), дополняем.
     const scope = requestScope.getStore()
-    if (scope) scope.acceptedOutputModes = accepted
+    if (scope) {
+      scope.acceptedOutputModes = accepted
+      if (supportedCatalogIds.length > 0) scope.supportedCatalogIds = supportedCatalogIds
+    }
 
     const input: AgentInput = {
       text: lastUserText(body.messages),
@@ -89,12 +104,13 @@ export function aguiRouter(handler: AgentHandler, agentSupportedModes: string[] 
       contextId: threadId,
       negotiation,
       ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
+      ...(supportedCatalogIds.length > 0 ? { supportedCatalogIds } : {}),
     }
 
-    // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10): эмитим ТОЛЬКО если клиент
-    // запросил A2UI-mode; catalogId — из негоциации (ai37/base). Иначе — no-op (дефолт текст).
+    // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10): эмитим ТОЛЬКО если каталог
+    // согласован (`negotiation.catalogId`); catalogId — из негоциации. Иначе — no-op (агент даёт текст).
     const emitA2ui = (component: A2uiComponent): void => {
-      if (!negotiation.a2ui) return
+      if (!negotiation.catalogId) return
       const surfaceId = `surf-${uuidv4()}`
       emitEvent({
         type: EventType.ACTIVITY_SNAPSHOT,
@@ -103,7 +119,7 @@ export function aguiRouter(handler: AgentHandler, agentSupportedModes: string[] 
         content: {
           a2ui_operations: componentToA2uiOperations(component, {
             surfaceId,
-            catalogId: negotiation.a2ui.catalogId,
+            catalogId: negotiation.catalogId,
           }),
         },
         replace: true,
