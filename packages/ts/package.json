@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-sdk",
-  "version": "0.1.0-alpha.2",
+  "version": "0.1.0-alpha.3",
   "description": "AI37 agent SDK: JWKS auth + billing + A2A forward for ecosystem agents",
   "type": "module",
   "license": "Apache-2.0",
@@ -8,6 +8,7 @@
   "files": [
     "dist",
     "README.md",
+    "CHANGELOG.md",
     "LICENSE"
   ],
   "main": "./dist/index.cjs",
@@ -51,6 +52,7 @@
     "prepublishOnly": "npm run verify"
   },
   "dependencies": {
+    "@ai37/a2ui-catalog-schemas": "^0.3.0",
     "jose": "^5.9.6",
     "lru-cache": "^11.5.1"
   },

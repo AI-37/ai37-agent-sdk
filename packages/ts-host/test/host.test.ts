@@ -4,6 +4,11 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { AgentCard } from '@a2a-js/sdk'
+import {
+  OUTPUT_MODE_TEXT,
+  OUTPUT_MODE_MARKDOWN,
+  OUTPUT_MODE_A2UI_AI37,
+} from '@ai37/agent-sdk'
 import { createAgentHost, type AgentHandler } from '../src/index'
 
 const card: AgentCard = {
@@ -15,7 +20,8 @@ const card: AgentCard = {
   preferredTransport: 'JSONRPC',
   capabilities: { streaming: true, pushNotifications: false },
   defaultInputModes: ['application/json'],
-  defaultOutputModes: ['application/json'],
+  // content-negotiation: агент умеет текст (md/plain) + ai37-A2UI
+  defaultOutputModes: [OUTPUT_MODE_MARKDOWN, OUTPUT_MODE_TEXT, OUTPUT_MODE_A2UI_AI37],
   skills: [{ id: 's', name: 's', description: 'd', tags: [] }],
 }
 
@@ -55,7 +61,7 @@ describe('createAgentHost', () => {
     expect(r.body.skills.length).toBe(1)
   })
 
-  it('A2A message/send → handler → completed Task с A2UI', async () => {
+  it('A2A message/send без acceptedOutputModes → completed Task БЕЗ A2UI (дефолт текст)', async () => {
     const r = await request(app())
       .post('/a2a/v1')
       .send({
@@ -69,6 +75,30 @@ describe('createAgentHost', () => {
             role: 'user',
             parts: [{ kind: 'text', text: 'hi' }],
           },
+        },
+      })
+    expect(r.status).toBe(200)
+    expect(r.body.result.status.state).toBe('completed')
+    // дефолт — текст: компоненты не отдаются, но текст (status.message) есть
+    expect(r.body.result.artifacts[0].parts[0].data.a2ui).toEqual([])
+    expect(r.body.result.status.message.parts[0].text).toBe('ok')
+  })
+
+  it('A2A message/send с configuration.acceptedOutputModes(ai37) → Task С A2UI', async () => {
+    const r = await request(app())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'hi' }],
+          },
+          configuration: { acceptedOutputModes: [OUTPUT_MODE_A2UI_AI37] },
         },
       })
     expect(r.status).toBe(200)
@@ -139,8 +169,8 @@ describe('multi-turn state (HITL)', () => {
   })
 })
 
-describe('AG-UI (/agui) канон', () => {
-  it('эмитит RUN_STARTED, текст и ACTIVITY_SNAPSHOT a2ui-surface', async () => {
+describe('AG-UI (/agui) канон + content-negotiation', () => {
+  it('дефолт (без acceptedOutputModes) → текст, БЕЗ ACTIVITY_SNAPSHOT a2ui-surface', async () => {
     const r = await request(app())
       .post('/agui')
       .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
@@ -151,11 +181,32 @@ describe('AG-UI (/agui) канон', () => {
     const body = r.text
     expect(body).toContain('RUN_STARTED')
     expect(body).toContain('TEXT_MESSAGE_CONTENT')
-    // готовый A2UI -> activity `a2ui-surface` с v0.9-операциями (не tool-call render_a2ui)
+    // дефолт — текст: A2UI-поверхности нет
+    expect(body).not.toContain('a2ui-surface')
+    expect(body).not.toContain('SimpleTable')
+    expect(body).toContain('RUN_FINISHED')
+  })
+
+  it('forwardedProps.ai37.acceptedOutputModes(ai37) → ACTIVITY_SNAPSHOT a2ui-surface с catalogId', async () => {
+    const r = await request(app())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { ai37: { acceptedOutputModes: [OUTPUT_MODE_A2UI_AI37] } },
+      })
+
+    expect(r.status).toBe(200)
+    const body = r.text
+    expect(body).toContain('TEXT_MESSAGE_CONTENT')
+    // A2UI запрошен → activity `a2ui-surface` с v0.9-операциями (не tool-call render_a2ui)
     expect(body).toContain('ACTIVITY_SNAPSHOT')
     expect(body).toContain('a2ui-surface')
     expect(body).toContain('a2ui_operations')
     expect(body).toContain('SimpleTable')
+    // catalogId из негоциации (ai37-каталог)
+    expect(body).toContain('ai37-a2ui/v1/catalog.json')
     expect(body).not.toContain('a2ui_render')
     expect(body).toContain('RUN_FINISHED')
   })

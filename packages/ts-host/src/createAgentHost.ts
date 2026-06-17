@@ -58,10 +58,14 @@ export function createAgentHost(opts: AgentHostOptions): Express {
 
   // Multi-turn/HITL: состояние хода живёт в task-store (см. AgentResult.state /
   // AgentInput.taskState). По умолчанию in-memory; для durable — opts.taskStore.
+  // Что агент реально умеет отдавать (content-negotiation, РЕШЕНИЕ 10): источник — agent-card.
+  // Хост негоциирует формат из этого набора и `acceptedOutputModes` клиента; enforcement — здесь.
+  const agentSupportedModes = opts.card.defaultOutputModes ?? []
+
   const requestHandler = new DefaultRequestHandler(
     opts.card,
     opts.taskStore ?? new InMemoryTaskStore(),
-    new HostExecutor(opts.handler),
+    new HostExecutor(opts.handler, agentSupportedModes),
   )
 
   app.use(
@@ -91,7 +95,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     }),
   )
 
-  app.use('/agui', guard, aguiRouter(opts.handler))
+  app.use('/agui', guard, aguiRouter(opts.handler, agentSupportedModes))
 
   return app
 }

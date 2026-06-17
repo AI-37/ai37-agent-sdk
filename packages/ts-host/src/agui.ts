@@ -2,7 +2,8 @@ import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { EventEncoder } from '@ag-ui/encoder'
 import { EventType, type BaseEvent } from '@ag-ui/core'
-import { currentCtx } from './als'
+import { negotiateOutput } from '@ai37/agent-sdk'
+import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent } from './types'
 
@@ -50,7 +51,7 @@ function extractAi37(body: RunAgentInputLike): Ai37Metadata {
   return ai37
 }
 
-export function aguiRouter(handler: AgentHandler): Router {
+export function aguiRouter(handler: AgentHandler, agentSupportedModes: string[] = []): Router {
   const r = Router()
   const encoder = new EventEncoder()
 
@@ -68,24 +69,43 @@ export function aguiRouter(handler: AgentHandler): Router {
     const threadId = body.threadId ?? uuidv4()
     const runId = body.runId ?? uuidv4()
 
+    const metadata = extractAi37(body)
+    // content-negotiation: для AG-UI accepted приходит в forwardedProps.ai37 (нативного поля нет).
+    const accepted = metadata.acceptedOutputModes
+    const negotiation = negotiateOutput(accepted, agentSupportedModes)
+    // Симметрия с A2A-путём: кладём accepted в ALS, чтобы downstream (напр. оркестратор,
+    // форвардящий к remote-агентам через `currentAcceptedOutputModes`) видел его так же, как
+    // `currentBearer`. Guard уже открыл scope; для AG-UI-тела он пуст (нет `params`), дополняем.
+    const scope = requestScope.getStore()
+    if (scope) scope.acceptedOutputModes = accepted
+
     const input: AgentInput = {
       text: lastUserText(body.messages),
       data: (body.forwardedProps?.data as Record<string, unknown>) ?? {},
-      metadata: extractAi37(body),
+      metadata,
       claims: ctx?.claims,
       billingOrgId: ctx?.billingOrgId,
       taskId: threadId,
       contextId: threadId,
+      negotiation,
+      ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
     }
 
-    // Готовый A2UI -> activity `a2ui-surface` (одна поверхность на компонент).
+    // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10): эмитим ТОЛЬКО если клиент
+    // запросил A2UI-mode; catalogId — из негоциации (ai37/base). Иначе — no-op (дефолт текст).
     const emitA2ui = (component: A2uiComponent): void => {
+      if (!negotiation.a2ui) return
       const surfaceId = `surf-${uuidv4()}`
       emitEvent({
         type: EventType.ACTIVITY_SNAPSHOT,
         messageId: uuidv4(),
         activityType: 'a2ui-surface',
-        content: { a2ui_operations: componentToA2uiOperations(component, { surfaceId }) },
+        content: {
+          a2ui_operations: componentToA2uiOperations(component, {
+            surfaceId,
+            catalogId: negotiation.a2ui.catalogId,
+          }),
+        },
         replace: true,
       })
     }

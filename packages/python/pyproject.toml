@@ -6,6 +6,7 @@ authors = ["AI37"]
 license = "Apache-2.0"
 readme = "README.md"
 packages = [{ include = "ai37_agent_sdk", from = "src" }]
+include = ["CHANGELOG.md"]
 
 [tool.poetry.dependencies]
 python = "^3.11"
