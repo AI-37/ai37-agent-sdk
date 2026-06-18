@@ -12,7 +12,7 @@ import {
 } from '../src'
 
 const AI37 = 'https://ai-37.github.io/ai37-a2ui-catalog/a2ui/catalogs/ai37-a2ui/v1/catalog.json'
-const BASE = 'https://a2ui.org/specification/v0_9/basic_catalog.json'
+const BASE = 'https://a2ui.org/specification/v0_9/catalogs/basic/catalog.json'
 const AGENT_TEXT = [OUTPUT_MODE_MARKDOWN, OUTPUT_MODE_TEXT]
 
 describe('negotiateText (ось формата текста)', () => {
