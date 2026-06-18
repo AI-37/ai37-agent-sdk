@@ -1,4 +1,6 @@
-import type { AgentContext, Claims } from '@ai37/agent-sdk'
+import type { AgentContext, Claims, OutputNegotiation } from '@ai37/agent-sdk'
+
+export type { OutputNegotiation }
 
 /**
  * Контракт host'а. Host не знает про «ноды» агента — он знает про `AgentHandler`:
@@ -23,6 +25,12 @@ export interface Ai37Metadata {
   context_refs?: string[]
   intent?: IntentEnvelope
   trace_id?: string
+  /**
+   * Принимаемые клиентом форматы вывода (content-negotiation, РЕШЕНИЕ 10).
+   * Носитель ТОЛЬКО для AG-UI (`forwardedProps.ai37`), где нет нативного A2A-поля.
+   * Для A2A носитель — нативный `params.configuration.acceptedOutputModes` (НЕ этот конверт).
+   */
+  acceptedOutputModes?: string[]
 }
 
 /** Декларативный UI-компонент (ai37-a2ui-catalog). */
@@ -42,6 +50,18 @@ export interface AgentInput {
   billingOrgId?: string
   taskId: string
   contextId: string
+  /** Сырой список принимаемых клиентом форматов текста (media-типы; как пришёл). */
+  acceptedOutputModes?: string[]
+  /** Каталоги A2UI, заявленные клиентом (`a2uiClientCapabilities.supportedCatalogIds`). */
+  supportedCatalogIds?: string[]
+  /**
+   * Резолвнутая хостом негоциация вывода (две оси, РЕШЕНИЕ 10):
+   * `text` — формат текста ЕСЛИ агент его эмитит; `catalogId` — согласованный каталог A2UI
+   * или `null`. Хендлер смотрит на неё (`catalogId === null` → не строить A2UI, отдать текст),
+   * но финальный enforcement — на хосте: A2UI только при `negotiation.catalogId`, текст — только
+   * если агент дал `message` (никаких дефолтов).
+   */
+  negotiation: OutputNegotiation
   /**
    * Персистентное состояние прошлого хода этого task (HITL/мастер). Host достаёт
    * его из task-store по `taskId` (A2A SDK грузит прошлый Task), handler не хранит

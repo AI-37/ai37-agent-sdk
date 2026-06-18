@@ -1,8 +1,12 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Message, Task } from '@a2a-js/sdk'
-import type { AgentResult } from './types'
+import { filterA2uiComponents, type OutputNegotiation } from '@ai37/agent-sdk'
+import type { A2uiComponent, AgentResult } from './types'
 
 const now = (): string => new Date().toISOString()
+
+/** Дефолт без негоциации: текст-only (каталог не согласован → A2UI не шлём). */
+const TEXT_ONLY: OutputNegotiation = { text: 'text/plain', catalogId: null }
 
 export function agentMessage(
   taskId: string,
@@ -19,12 +23,22 @@ export function agentMessage(
   }
 }
 
-/** Заворачивает результат handler'а в A2A-`Task`. */
+/**
+ * Заворачивает результат handler'а в A2A-`Task`. `negotiation` определяет content-negotiation
+ * вывода (РЕШЕНИЕ 10, две оси): A2UI (включая HITL-карточку `followup`) — только если каталог
+ * согласован (`negotiation.catalogId`); текст для `completed` — только если агент дал `message`
+ * (никаких дефолтов). По умолчанию (без negotiation) — text-only.
+ */
 export function toTask(
   result: AgentResult,
   taskId: string,
   contextId: string,
+  negotiation: OutputNegotiation = TEXT_ONLY,
 ): Task {
+  // A2UI отдаётся только при согласованном каталоге; иначе пустой список (агент даёт текст).
+  const a2ui = filterA2uiComponents<A2uiComponent>(result.a2ui, negotiation)
+  const followup = negotiation.catalogId ? result.followup : undefined
+
   if (result.status === 'failed') {
     return {
       kind: 'task',
@@ -49,7 +63,7 @@ export function toTask(
         timestamp: now(),
       },
       metadata: {
-        a2ui: result.followup ? [result.followup] : (result.a2ui ?? []),
+        a2ui: followup ? [followup] : a2ui,
         ...(result.state !== undefined ? { state: result.state } : {}),
       },
     }
@@ -61,7 +75,11 @@ export function toTask(
     contextId,
     status: {
       state: 'completed',
-      message: agentMessage(taskId, contextId, result.message ?? 'Готово'),
+      // Текст — только если агент его дал (компонент-онли каноничен: AG-UI content опционален,
+      // A2A не требует текстовый part). Никаких болванок '.Готово'.
+      ...(result.message
+        ? { message: agentMessage(taskId, contextId, result.message) }
+        : {}),
       timestamp: now(),
     },
     ...(result.state !== undefined ? { metadata: { state: result.state } } : {}),
@@ -72,7 +90,7 @@ export function toTask(
         parts: [
           {
             kind: 'data',
-            data: { a2ui: result.a2ui ?? [], result: result.result },
+            data: { a2ui, result: result.result },
           },
         ],
       },

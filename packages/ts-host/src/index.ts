@@ -1,7 +1,13 @@
 // @ai37/agent-host — публичная точка входа.
 export { createAgentHost } from './createAgentHost'
 export type { AgentHostOptions } from './createAgentHost'
-export { currentCtx, currentBearer, requestScope } from './als'
+export {
+  currentCtx,
+  currentBearer,
+  currentAcceptedOutputModes,
+  currentSupportedCatalogIds,
+  requestScope,
+} from './als'
 export type { HostScope } from './als'
 export { jwtGuard } from './auth-guard'
 export { parseA2AMessage } from './parse'
@@ -22,4 +28,5 @@ export type {
   AgentResult,
   AgentRequest,
   AgentHandler,
+  OutputNegotiation,
 } from './types'

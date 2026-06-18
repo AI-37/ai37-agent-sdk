@@ -29,6 +29,13 @@ export interface AgentHostOptions {
   agentContext: AgentContextSettings
   /** Базовый путь A2A JSON-RPC. По умолчанию '/a2a/v1'. */
   basePath?: string
+  /**
+   * Каталог(и) A2UI, которые эмитит этот агент (обычно один — `CATALOG_ID` из
+   * `@ai37/a2ui-catalog-schemas`). Нужен для негоциации каталога (РЕШЕНИЕ 10): surface шлётся
+   * только если он есть в клиентском `supportedCatalogIds`. Не задан → агент текстовый (A2UI не шлёт).
+   * Каталог также объявляется в card `capabilities.extensions[].uri` (для внешней discovery).
+   */
+  catalogId?: string | string[]
   /** Объект для /health и /version. */
   buildInfo?: Record<string, unknown>
   /**
@@ -58,10 +65,17 @@ export function createAgentHost(opts: AgentHostOptions): Express {
 
   // Multi-turn/HITL: состояние хода живёт в task-store (см. AgentResult.state /
   // AgentInput.taskState). По умолчанию in-memory; для durable — opts.taskStore.
+  // Content-negotiation (РЕШЕНИЕ 10), две оси:
+  //  - формат текста — из card.defaultOutputModes (media-типы текста) ∩ acceptedOutputModes клиента;
+  //  - каталог UI — opts.catalogId ∩ supportedCatalogIds клиента.
+  // Enforcement — в адаптерах (a2a-executor/agui), которым передаём оба набора.
+  const agentTextModes = opts.card.defaultOutputModes ?? []
+  const agentCatalogIds = opts.catalogId
+
   const requestHandler = new DefaultRequestHandler(
     opts.card,
     opts.taskStore ?? new InMemoryTaskStore(),
-    new HostExecutor(opts.handler),
+    new HostExecutor(opts.handler, agentTextModes, agentCatalogIds),
   )
 
   app.use(
@@ -91,7 +105,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     }),
   )
 
-  app.use('/agui', guard, aguiRouter(opts.handler))
+  app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds))
 
   return app
 }
