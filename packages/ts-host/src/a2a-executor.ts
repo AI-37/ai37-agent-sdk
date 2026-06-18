@@ -3,7 +3,7 @@ import type {
   ExecutionEventBus,
   RequestContext,
 } from '@a2a-js/sdk/server'
-import { negotiateOutput } from '@ai37/agent-sdk'
+import { negotiateOutput } from './output-modes'
 import {
   currentCtx,
   currentAcceptedOutputModes,
