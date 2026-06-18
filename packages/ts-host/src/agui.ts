@@ -3,7 +3,7 @@ import { v4 as uuidv4 } from 'uuid'
 import { EventEncoder } from '@ag-ui/encoder'
 import { EventType, type BaseEvent } from '@ag-ui/core'
 import type { TaskStore } from '@a2a-js/sdk/server'
-import { negotiateOutput, readClientCapabilities } from '@ai37/agent-sdk'
+import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import { toTask } from './build-task'
@@ -118,20 +118,19 @@ export function aguiRouter(
       ...(priorState !== undefined ? { taskState: priorState } : {}),
     }
 
-    // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10): эмитим ТОЛЬКО если каталог
-    // согласован (`negotiation.catalogId`); catalogId — из негоциации. Иначе — no-op (агент даёт текст).
+    // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10) + роутинг (A): каталог surface —
+    // тег компонента (`component.catalogId`) либо первичный согласованный; эмитим ТОЛЬКО если он в
+    // согласованном множестве (`negotiation.catalogIds`). Иначе — no-op (агент даёт текст/другой каталог).
     const emitA2ui = (component: A2uiComponent): void => {
-      if (!negotiation.catalogId) return
+      const catalogId = component.catalogId ?? negotiation.catalogId
+      if (!catalogId || !negotiation.catalogIds.includes(catalogId)) return
       const surfaceId = `surf-${uuidv4()}`
       emitEvent({
         type: EventType.ACTIVITY_SNAPSHOT,
         messageId: uuidv4(),
         activityType: 'a2ui-surface',
         content: {
-          a2ui_operations: componentToA2uiOperations(component, {
-            surfaceId,
-            catalogId: negotiation.catalogId,
-          }),
+          a2ui_operations: componentToA2uiOperations(component, { surfaceId, catalogId }),
         },
         replace: true,
       })

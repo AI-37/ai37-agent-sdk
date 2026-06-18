@@ -1,4 +1,5 @@
-import type { AgentContext, Claims, OutputNegotiation } from '@ai37/agent-sdk'
+import type { AgentContext, Claims } from '@ai37/agent-sdk'
+import type { OutputNegotiation } from './output-modes'
 
 export type { OutputNegotiation }
 
@@ -33,10 +34,29 @@ export interface Ai37Metadata {
   acceptedOutputModes?: string[]
 }
 
-/** Декларативный UI-компонент (ai37-a2ui-catalog). */
+/**
+ * Декларативный UI-компонент A2UI — УЗЕЛ ДЕРЕВА. Хост уплощает его в плоский список операций
+ * (`componentToA2uiOperations`): протокол v0.9 не допускает inline-вложенность, дети — по id-ссылкам.
+ */
 export interface A2uiComponent {
   component: string
+  /** Скалярные props компонента (без слотов детей — они в `children`). */
   props: Record<string, unknown>
+  /** Опциональный id узла; если не задан — генерируется при уплощении (корень → `'root'`). */
+  id?: string
+  /**
+   * Каталог surface этого компонента (роутинг A: соседние сообщения из разных каталогов,
+   * деградация на base). Имеет смысл только для ВЕРХНЕГО компонента — surface привязан к одному
+   * каталогу; `undefined` → первичный согласованный каталог. У детей игнорируется (тот же каталог).
+   */
+  catalogId?: string
+  /**
+   * Дочерние компоненты по СЛОТАМ. Ключ — prop, в который уплощатель кладёт id-ссылку:
+   *  - одиночный компонент → `ComponentIdSchema` (строка id), напр. `Card.child`;
+   *  - массив → `ChildListSchema` (`string[]` id), напр. `Column.children`.
+   * Сам prop в `props` задавать НЕ нужно — он вычисляется из этого слота.
+   */
+  children?: Record<string, A2uiComponent | A2uiComponent[]>
 }
 
 export type AgentStatus = 'completed' | 'input-required' | 'failed'

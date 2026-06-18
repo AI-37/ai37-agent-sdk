@@ -6,7 +6,7 @@ import {
   type AgentContextOverrides,
   type AgentContextSettings,
 } from '@ai37/agent-sdk'
-import { readClientCapabilities } from '@ai37/agent-sdk'
+import { readClientCapabilities } from './output-modes'
 import { requestScope } from './als'
 
 /**

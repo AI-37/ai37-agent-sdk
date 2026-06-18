@@ -17,6 +17,23 @@ export { HostExecutor } from './a2a-executor'
 export { aguiRouter } from './agui'
 export { componentToA2uiOperations } from './a2ui'
 export type { A2uiMessage } from './a2ui'
+// content-negotiation вывода (host-only): негоциация каталогов/текста + enforcement.
+export {
+  negotiateText,
+  negotiateCatalog,
+  negotiateCatalogs,
+  negotiateOutput,
+  readClientCapabilities,
+  clientSupportsCatalog,
+  filterA2uiComponents,
+  filterA2uiByCatalog,
+  A2UI_CAPABILITIES_VERSION,
+} from './output-modes'
+export type {
+  OutputNegotiation,
+  NegotiateOutputArgs,
+  A2uiClientCapabilities,
+} from './output-modes'
 export type {
   AgentChannel,
   IntentEnvelope,
@@ -28,5 +45,4 @@ export type {
   AgentResult,
   AgentRequest,
   AgentHandler,
-  OutputNegotiation,
 } from './types'
