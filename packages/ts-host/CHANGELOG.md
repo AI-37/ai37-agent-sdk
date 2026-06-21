@@ -3,7 +3,7 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
-## [0.1.0-alpha.8] - 2026-06-21
+## [0.1.0-alpha.9] - 2026-06-21
 
 ### Added
 - HITL frontend-tools (канон AG-UI TOOL_CALL): `AgentEvent` вариант
@@ -12,6 +12,10 @@
   `RunAgentInput.tools`) и `AgentInput.toolResult` (ответ `role=tool` →
   `{toolCallId, result}`, JSON-парсинг content). Тип `ToolResult`. Замыкает цикл
   «агент шлёт форму → юзер жмёт → значения возвращаются агенту».
+
+## [0.1.0-alpha.8] - 2026-06-21
+
+### Added
 - `ChatAttachmentsStoreBackend` / `ProjectAttachmentsStoreBackend` — StoreBackend'ы вложений
   (файлы → markdown) поверх REST chat-backend (`/api/chat-attachments`, `/api/project-attachments`).
   Монтируются в deepagents `CompositeBackend` на `/chat-attachments/` и `/project-attachments/`;
