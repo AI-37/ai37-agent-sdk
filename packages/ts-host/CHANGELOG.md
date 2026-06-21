@@ -6,6 +6,12 @@
 ## [0.1.0-alpha.8] - 2026-06-21
 
 ### Added
+- HITL frontend-tools (канон AG-UI TOOL_CALL): `AgentEvent` вариант
+  `{type:'tool-call', toolName, args, toolCallId?}` → host эмитит
+  `TOOL_CALL_START/ARGS/END`. Вход: `AgentInput.tools` (frontend-tools клиента из
+  `RunAgentInput.tools`) и `AgentInput.toolResult` (ответ `role=tool` →
+  `{toolCallId, result}`, JSON-парсинг content). Тип `ToolResult`. Замыкает цикл
+  «агент шлёт форму → юзер жмёт → значения возвращаются агенту».
 - `ChatAttachmentsStoreBackend` / `ProjectAttachmentsStoreBackend` — StoreBackend'ы вложений
   (файлы → markdown) поверх REST chat-backend (`/api/chat-attachments`, `/api/project-attachments`).
   Монтируются в deepagents `CompositeBackend` на `/chat-attachments/` и `/project-attachments/`;
