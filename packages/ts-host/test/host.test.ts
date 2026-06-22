@@ -448,3 +448,75 @@ describe('dev-режим (insecure-dev + fake billing) через env', () => {
     expect(data.llmKey).toBe('sk-dev-777')
   })
 })
+
+describe('A2A a2uiAction (симметрия с AG-UI: оркестратор форвардит action вниз)', () => {
+  // Тот же контракт, что AG-UI: action приходит метаданными сообщения → input.action.
+  const actionHandler: AgentHandler = {
+    async run({ input }) {
+      return {
+        status: 'completed',
+        message: `action:${JSON.stringify(input.action ?? null)}`,
+        result: { action: input.action ?? null, data: input.data },
+      }
+    },
+  }
+
+  function actionApp() {
+    return createAgentHost({
+      card,
+      handler: actionHandler,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+  }
+
+  function send(metadata?: object) {
+    return request(actionApp())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'hi' }],
+            ...(metadata ? { metadata } : {}),
+          },
+        },
+      })
+  }
+
+  it('message.metadata.a2uiAction.userAction → input.action {name, context}', async () => {
+    const r = await send({
+      a2uiAction: {
+        userAction: { name: 'apply', context: { N: '15' }, surfaceId: 'surf-1' },
+      },
+    })
+    expect(r.status).toBe(200)
+    const action = r.body.result.artifacts[0].parts[0].data.result.action
+    expect(action.name).toBe('apply')
+    expect(action.context.N).toBe('15')
+    expect(action.surfaceId).toBe('surf-1')
+  })
+
+  it('nav:* действие с пустым context', async () => {
+    const r = await send({ a2uiAction: { userAction: { name: 'nav:building', context: {} } } })
+    expect(r.status).toBe(200)
+    const action = r.body.result.artifacts[0].parts[0].data.result.action
+    expect(action.name).toBe('nav:building')
+    expect(action.context).toEqual({})
+  })
+
+  it('без a2uiAction → input.action undefined', async () => {
+    const r = await send()
+    expect(r.status).toBe(200)
+    expect(r.body.result.artifacts[0].parts[0].data.result.action).toBeNull()
+  })
+})
