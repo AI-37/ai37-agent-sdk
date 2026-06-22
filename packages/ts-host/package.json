@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.1.0-alpha.11",
+  "version": "0.1.0-alpha.12",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -23,6 +23,13 @@
       "types": "./dist/relay/index.d.ts",
       "import": "./dist/relay/index.js",
       "require": "./dist/relay/index.cjs"
+    }
+  },
+  "typesVersions": {
+    "*": {
+      "relay": [
+        "./dist/relay/index.d.ts"
+      ]
     }
   },
   "packageManager": "npm@10.9.8",
