@@ -3,6 +3,25 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.10] - 2026-06-22
+
+### Removed
+- Удалена TOOL_CALL-механика (alpha.9): канон UI-интерактива — ACTIVITY_SNAPSHOT
+  (`input.action`, alpha.10), TOOL_CALL был мёртвым кодом. Убрано: вариант
+  `AgentEvent` `{type:'tool-call'}` и его эмит `TOOL_CALL_START/ARGS/END`;
+  `AgentInput.tools` / `AgentInput.toolResult`; тип `ToolResult`; AG-UI-приёмник
+  (`RunAgentInput.tools`, `role=tool` → `toolResult`). **Breaking**, но потребителей
+  не было (агент и spai-ui перешли на `input.action` до удаления).
+
+### Added
+- Приём A2UI-действия (канон ACTIVITY_SNAPSHOT, не TOOL_CALL): host читает
+  `forwardedProps.a2uiAction.userAction` (клик кнопки/submit формы от
+  `createA2UIMessageRenderer`) → `AgentInput.action = {name, context, surfaceId?,
+  sourceComponentId?}`. Новый тип `A2uiAction`. `name` — что нажато
+  (`apply`/`nav:building`/...), `context` — значения полей (submit) или `{}`.
+  Чтение `forwardedProps.data` → `input.data` не затронуто; нет `a2uiAction` →
+  `input.action` undefined. TOOL_CALL-механика (alpha.9) остаётся (отдельный clean-up).
+
 ## [0.1.0-alpha.9] - 2026-06-21
 
 ### Added

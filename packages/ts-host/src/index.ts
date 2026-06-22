@@ -62,6 +62,7 @@ export type {
   IntentEnvelope,
   Ai37Metadata,
   A2uiComponent,
+  A2uiAction,
   AgentStatus,
   AgentInput,
   AgentEvent,

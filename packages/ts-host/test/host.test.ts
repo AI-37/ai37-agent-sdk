@@ -274,29 +274,22 @@ describe('AG-UI (/agui) канон + content-negotiation', () => {
   })
 })
 
-describe('AG-UI TOOL_CALL (HITL frontend-tools)', () => {
-  // Handler, который: видит input.tools → эмитит tool-call; видит input.toolResult → эхо.
-  const hitlHandler: AgentHandler = {
-    async run({ input, emit }) {
-      if (input.toolResult) {
-        return {
-          status: 'completed',
-          message: `got:${JSON.stringify(input.toolResult.result)}`,
-          result: { toolResult: input.toolResult },
-        }
+describe('AG-UI a2uiAction (ACTIVITY_SNAPSHOT клик/submit)', () => {
+  // Handler эхает input.action и input.data в текст → проверяем приём действия.
+  const actionHandler: AgentHandler = {
+    async run({ input }) {
+      return {
+        status: 'completed',
+        message: `action:${JSON.stringify(input.action ?? null)} data:${JSON.stringify(input.data)}`,
+        result: { action: input.action ?? null, data: input.data },
       }
-      const hasRenderForm = (input.tools ?? []).some((t) => t.name === 'render_form')
-      if (hasRenderForm) {
-        emit({ type: 'tool-call', toolName: 'render_form', args: { title: 'T', fields: [] } })
-      }
-      return { status: 'completed', message: 'ok', result: { tools: input.tools } }
     },
   }
 
-  function hitlApp() {
+  function actionApp() {
     return createAgentHost({
       card,
-      handler: hitlHandler,
+      handler: actionHandler,
       catalogId: CATALOG,
       agentContext: {
         auth: { issuer: 'https://issuer', audience: 'aud', required: false },
@@ -306,50 +299,62 @@ describe('AG-UI TOOL_CALL (HITL frontend-tools)', () => {
     })
   }
 
-  it('input.tools (frontend-tools) доходит до handler', async () => {
-    const r = await request(hitlApp())
+  it('a2uiAction.userAction{name:apply, context:{N:15}} → input.action.name=apply, context.N=15', async () => {
+    const r = await request(actionApp())
       .post('/agui')
       .send({
         threadId: 't1',
         runId: 'r1',
         messages: [{ role: 'user', content: 'hi' }],
-        tools: [{ name: 'render_form', description: 'd', parameters: { type: 'object' } }],
+        forwardedProps: {
+          a2uiAction: {
+            userAction: {
+              name: 'apply',
+              context: { N: '15' },
+              surfaceId: 'surf-1',
+              sourceComponentId: 'root.children.0',
+            },
+          },
+        },
       })
 
     expect(r.status).toBe(200)
-    // handler увидел render_form → эмитнул tool-call → host транслировал TOOL_CALL_*
-    expect(r.text).toContain('TOOL_CALL_START')
-    expect(r.text).toContain('TOOL_CALL_ARGS')
-    expect(r.text).toContain('TOOL_CALL_END')
-    expect(r.text).toContain('render_form')
+    // SSE-стрим эскейпит JSON в delta (\"name\":\"apply\") — матчим экранированную форму.
+    expect(r.text).toContain('action:{\\"name\\":\\"apply\\"')
+    expect(r.text).toContain('\\"N\\":\\"15\\"')
+    expect(r.text).toContain('\\"surfaceId\\":\\"surf-1\\"')
+    expect(r.text).toContain('\\"sourceComponentId\\":\\"root.children.0\\"')
   })
 
-  it('без tools — tool-call НЕ эмитится', async () => {
-    const r = await request(hitlApp())
-      .post('/agui')
-      .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
-
-    expect(r.status).toBe(200)
-    expect(r.text).not.toContain('TOOL_CALL_START')
-  })
-
-  it('role=tool сообщение → input.toolResult с распарсенным JSON', async () => {
-    const r = await request(hitlApp())
+  it('a2uiAction.userAction{name:nav:building, context:{}} → input.action.name=nav:building', async () => {
+    const r = await request(actionApp())
       .post('/agui')
       .send({
         threadId: 't1',
         runId: 'r1',
-        messages: [
-          { role: 'user', content: 'hi' },
-          { role: 'tool', toolCallId: 'call-1', content: '{"floors":"13"}' },
-        ],
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { a2uiAction: { userAction: { name: 'nav:building', context: {} } } },
       })
 
     expect(r.status).toBe(200)
-    // handler получил toolResult, распарсил content → эхо значений
-    expect(r.text).toContain('got:')
-    expect(r.text).toContain('floors')
-    expect(r.text).toContain('13')
+    expect(r.text).toContain('action:{\\"name\\":\\"nav:building\\"')
+    expect(r.text).toContain('\\"context\\":{}')
+  })
+
+  it('без a2uiAction → input.action undefined, input.data работает', async () => {
+    const r = await request(actionApp())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { data: { foo: 'bar' } },
+      })
+
+    expect(r.status).toBe(200)
+    // action отсутствует (handler эхает null), а forwardedProps.data доходит как input.data
+    expect(r.text).toContain('action:null')
+    expect(r.text).toContain('\\"foo\\":\\"bar\\"')
   })
 })
 

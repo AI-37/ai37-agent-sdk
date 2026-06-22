@@ -62,14 +62,16 @@ export interface A2uiComponent {
 export type AgentStatus = 'completed' | 'input-required' | 'failed'
 
 /**
- * Результат frontend-tool, который клиент вернул после рендера UI (HITL, канон AG-UI):
- * пользователь заполнил форму/нажал кнопку → CopilotKit прислал ToolMessage (role=tool).
- * `toolCallId` связывает с исходным TOOL_CALL, `result` — значения (обычно JSON формы).
+ * A2UI-действие пользователя (канон ACTIVITY_SNAPSHOT, не TOOL_CALL): юзер нажал кнопку/submit
+ * A2UI-компонента → CopilotKit (`createA2UIMessageRenderer`) кладёт его в
+ * `forwardedProps.a2uiAction.userAction` и дёргает агента. `name` — что нажато
+ * (`apply`/`nav:building`/...), `context` — значения полей (для submit) или `{}`.
  */
-export interface ToolResult {
-  toolCallId: string
-  toolName?: string
-  result: unknown
+export interface A2uiAction {
+  name: string
+  context: Record<string, unknown>
+  surfaceId?: string
+  sourceComponentId?: string
 }
 
 /** Нормализованный вход (из A2A-сообщения или AG-UI-тела). */
@@ -77,15 +79,11 @@ export interface AgentInput {
   text?: string
   data: Record<string, unknown>
   /**
-   * Frontend-tools, заявленные клиентом в этом запросе (AG-UI `RunAgentInput.tools`).
-   * Агент решает, какой вызвать (программно, без LLM), эмитя `{type:'tool-call'}`.
+   * A2UI-действие пользователя на этом ходу (канон ACTIVITY_SNAPSHOT): клик кнопки/submit
+   * формы из `forwardedProps.a2uiAction.userAction`. Handler различает «нажал кнопку/submit»
+   * (`input.action`) и обычные данные (`input.data`). undefined на обычном текстовом ходу.
    */
-  tools?: Array<{ name: string; description?: string; parameters?: unknown }>
-  /**
-   * Результат ранее вызванного frontend-tool, если клиент его вернул на этом ходу
-   * (role=tool в messages). Так замыкается HITL-цикл «форма → значения → агент».
-   */
-  toolResult?: ToolResult
+  action?: A2uiAction
   metadata: Ai37Metadata
   claims?: Claims
   billingOrgId?: string
@@ -116,13 +114,6 @@ export type AgentEvent =
   | { type: 'node'; node: string }
   | { type: 'text'; delta: string }
   | { type: 'a2ui'; component: A2uiComponent }
-  /**
-   * Вызов frontend-tool (HITL, канон AG-UI): host эмитит TOOL_CALL_START/ARGS/END,
-   * CopilotKit находит зарегистрированный `useFrontendTool` по `toolName`, рендерит его
-   * `renderAndWaitForResponse` и по `respond()` возвращает значения как ToolResult.
-   * `toolCallId` — корреляция (host генерирует, если не задан).
-   */
-  | { type: 'tool-call'; toolName: string; args: Record<string, unknown>; toolCallId?: string }
 
 export interface AgentResult {
   status: AgentStatus
