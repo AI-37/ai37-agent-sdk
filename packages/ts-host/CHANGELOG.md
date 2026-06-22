@@ -3,6 +3,24 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.11] - 2026-06-22
+
+### Added
+- **A2A-путь читает A2UI-действие (симметрия с AG-UI).** `parse.ts` достаёт
+  `message.metadata.a2uiAction.userAction` → `AgentInput.action` (как `agui.ts`
+  читает `forwardedProps.a2uiAction.userAction`). Так оркестратор форвардит
+  клик/submit формы вниз конечному агенту по A2A. Аддитивно; обычный ход без
+  действия не затронут.
+- **Subpath `@ai37/agent-host/relay`** — переносимая A2A-relay-механика, чтобы
+  любой агент мог быть relay (вызывать другого агента), не дублируя код:
+  `executeRemoteA2a(client, req)` (сборка Message + `sendMessage` + stale-resume
+  retry + разбор Task → `{text, a2ui, taskId, state}`), форвардит вниз
+  `action`/негоциацию/`context_refs`; чистые хелперы `extractText`/`extractA2ui`/
+  `isStaleTaskError`; интерфейс `RemoteTaskStore` + `InMemoryRemoteTaskStore`
+  (durable-реализацию инжектит потребитель). Транспорт-агностично (без
+  LangChain/deepagents/NestJS); листы, не импортирующие subpath, не тянут
+  `@a2a-js/sdk/client` в бандл.
+
 ## [0.1.0-alpha.10] - 2026-06-22
 
 ### Removed

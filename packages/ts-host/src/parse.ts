@@ -1,13 +1,15 @@
 import type { RequestContext } from '@a2a-js/sdk/server'
-import type { Ai37Metadata } from './types'
+import type { Ai37Metadata, A2uiAction } from './types'
 
 export interface ParsedMessage {
   text?: string
   data: Record<string, unknown>
   metadata: Ai37Metadata
+  /** A2UI-действие (клик/submit), если оркестратор форварднул его в `message.metadata.a2uiAction`. */
+  action?: A2uiAction
 }
 
-/** Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37. */
+/** Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37 + A2UI-действие. */
 export function parseA2AMessage(rc: RequestContext): ParsedMessage {
   const parts = rc.userMessage.parts
   const textPart = parts.find((p) => p.kind === 'text')
@@ -17,7 +19,35 @@ export function parseA2AMessage(rc: RequestContext): ParsedMessage {
     string,
     unknown
   >
-  return { text, data, metadata: readAi37Metadata(rc, data) }
+  const action = readA2uiAction(rc)
+  return {
+    text,
+    data,
+    metadata: readAi37Metadata(rc, data),
+    ...(action ? { action } : {}),
+  }
+}
+
+/**
+ * A2UI-действие из `message.metadata.a2uiAction.userAction` — зеркало AG-UI-пути
+ * (`agui.ts readA2uiAction` читает `forwardedProps.a2uiAction.userAction`). Так оркестратор
+ * форвардит клик/submit формы вниз конечному агенту по A2A. `name:string` обязателен,
+ * `context` → `{}` по умолчанию. Нет действия (обычный текстовый ход) → undefined.
+ */
+function readA2uiAction(rc: RequestContext): A2uiAction | undefined {
+  const ua = (
+    rc.userMessage.metadata as { a2uiAction?: { userAction?: unknown } } | undefined
+  )?.a2uiAction?.userAction as
+    | { name?: unknown; context?: unknown; surfaceId?: unknown; sourceComponentId?: unknown }
+    | undefined
+  if (!ua || typeof ua.name !== 'string') return undefined
+  const action: A2uiAction = {
+    name: ua.name,
+    context: (ua.context as Record<string, unknown> | undefined) ?? {},
+  }
+  if (typeof ua.surfaceId === 'string') action.surfaceId = ua.surfaceId
+  if (typeof ua.sourceComponentId === 'string') action.sourceComponentId = ua.sourceComponentId
+  return action
 }
 
 /** metadata.ai37 может прийти в message.metadata, data.ai37 или data.metadata.ai37. */

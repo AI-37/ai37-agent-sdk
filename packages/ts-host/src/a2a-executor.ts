@@ -57,6 +57,8 @@ export class HostExecutor implements AgentExecutor {
       taskId: rc.taskId,
       contextId: rc.contextId,
       negotiation,
+      // A2UI-действие (клик/submit), форварднутое оркестратором — симметрия с AG-UI-путём.
+      ...(parsed.action ? { action: parsed.action } : {}),
       ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
       ...(supportedCatalogIds !== undefined ? { supportedCatalogIds } : {}),
       ...(priorState !== undefined ? { taskState: priorState } : {}),
