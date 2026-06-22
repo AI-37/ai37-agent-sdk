@@ -21,9 +21,7 @@ import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction 
 type RunAgentInputLike = {
   threadId?: string
   runId?: string
-  messages?: Array<{ role?: string; content?: unknown; toolCallId?: string; toolName?: string }>
-  /** Frontend-tools, заявленные клиентом (useFrontendTool → RunAgentInput.tools). */
-  tools?: Array<{ name?: string; description?: string; parameters?: unknown }>
+  messages?: Array<{ role?: string; content?: unknown }>
   /**
    * Прочее из клиента (`data`, `ai37`, `a2uiClientCapabilities`) + A2UI-действие
    * (`a2uiAction.userAction` — клик кнопки/submit, канон ACTIVITY_SNAPSHOT).
@@ -55,32 +53,6 @@ function readA2uiAction(forwardedProps?: RunAgentInputLike['forwardedProps']): A
   if (typeof ua.surfaceId === 'string') action.surfaceId = ua.surfaceId
   if (typeof ua.sourceComponentId === 'string') action.sourceComponentId = ua.sourceComponentId
   return action
-}
-
-/**
- * Последний tool-результат из messages (role=tool) — клиент вернул значения формы
- * после respond() (HITL, канон AG-UI). Замыкает цикл «форма → значения → агент».
- */
-function lastToolResult(
-  messages?: Array<{ role?: string; content?: unknown; toolCallId?: string; toolName?: string }>,
-): { toolCallId: string; toolName?: string; result: unknown } | undefined {
-  if (!Array.isArray(messages)) return undefined
-  for (let i = messages.length - 1; i >= 0; i -= 1) {
-    const m = messages[i]
-    if (!m || m.role !== 'tool') continue
-    const toolCallId = typeof m.toolCallId === 'string' ? m.toolCallId : ''
-    // content обычно строка (JSON значений формы); пробуем распарсить, иначе — как есть.
-    let result: unknown = m.content
-    if (typeof m.content === 'string') {
-      try {
-        result = JSON.parse(m.content)
-      } catch {
-        result = m.content
-      }
-    }
-    return { toolCallId, toolName: m.toolName, result }
-  }
-  return undefined
 }
 
 /** Текст последнего сообщения пользователя (content = string | [{type:'text', text}]). */
@@ -162,16 +134,8 @@ export function aguiRouter(
       | Record<string, unknown>
       | undefined
 
-    const toolResult = lastToolResult(body.messages)
     // A2UI-действие (клик/submit) из forwardedProps.a2uiAction — канон ACTIVITY_SNAPSHOT.
     const action = readA2uiAction(body.forwardedProps)
-    const tools = Array.isArray(body.tools)
-      ? body.tools
-          .filter((t): t is { name: string; description?: string; parameters?: unknown } =>
-            typeof t?.name === 'string',
-          )
-          .map((t) => ({ name: t.name, description: t.description, parameters: t.parameters }))
-      : undefined
 
     const input: AgentInput = {
       text: lastUserText(body.messages),
@@ -182,8 +146,6 @@ export function aguiRouter(
       taskId: threadId,
       contextId: threadId,
       negotiation,
-      ...(tools && tools.length > 0 ? { tools } : {}),
-      ...(toolResult ? { toolResult } : {}),
       ...(action ? { action } : {}),
       ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
       ...(supportedCatalogIds.length > 0 ? { supportedCatalogIds } : {}),
@@ -208,19 +170,6 @@ export function aguiRouter(
       })
     }
 
-    /**
-     * Вызов frontend-tool (HITL, канон AG-UI). Эмитит TOOL_CALL_START → TOOL_CALL_ARGS →
-     * TOOL_CALL_END; CopilotKit находит `useFrontendTool` по имени, рендерит UI и по respond()
-     * вернёт ToolResult (role=tool) на следующем ходу. Возвращает toolCallId для корреляции.
-     */
-    const emitToolCall = (toolName: string, args: Record<string, unknown>, id?: string): string => {
-      const toolCallId = id ?? `call-${uuidv4()}`
-      emitEvent({ type: EventType.TOOL_CALL_START, toolCallId, toolCallName: toolName })
-      emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId, delta: JSON.stringify(args) })
-      emitEvent({ type: EventType.TOOL_CALL_END, toolCallId })
-      return toolCallId
-    }
-
     let textMessageId: string | undefined
     const ensureTextStart = (): string => {
       if (!textMessageId) {
@@ -242,8 +191,6 @@ export function aguiRouter(
             emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
           } else if (e.type === 'a2ui') {
             emitA2ui(e.component)
-          } else if (e.type === 'tool-call') {
-            emitToolCall(e.toolName, e.args, e.toolCallId)
           }
           // 'node' — внутренняя телеметрия агента; в AG-UI не пробрасываем.
         },

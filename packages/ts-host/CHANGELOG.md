@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.11] - 2026-06-22
+
+### Removed
+- Удалена TOOL_CALL-механика (alpha.9): канон UI-интерактива — ACTIVITY_SNAPSHOT
+  (`input.action`, alpha.10), TOOL_CALL был мёртвым кодом. Убрано: вариант
+  `AgentEvent` `{type:'tool-call'}` и его эмит `TOOL_CALL_START/ARGS/END`;
+  `AgentInput.tools` / `AgentInput.toolResult`; тип `ToolResult`; AG-UI-приёмник
+  (`RunAgentInput.tools`, `role=tool` → `toolResult`). **Breaking**, но потребителей
+  не было (агент и spai-ui перешли на `input.action` до удаления).
+
 ## [0.1.0-alpha.10] - 2026-06-22
 
 ### Added
