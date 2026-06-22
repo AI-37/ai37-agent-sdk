@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.12] - 2026-06-22
+
+### Fixed
+- `typesVersions` для subpath `./relay` — чтобы потребители с `moduleResolution: node`
+  (node10; напр. NestJS chat-backend) резолвили типы `@ai37/agent-host/relay`
+  (иначе TS2307, хотя рантайм Node читает `exports`). Зеркалит подход `@a2a-js/sdk`.
+  Только упаковка; код `/relay` без изменений.
+
 ## [0.1.0-alpha.11] - 2026-06-22
 
 ### Added
