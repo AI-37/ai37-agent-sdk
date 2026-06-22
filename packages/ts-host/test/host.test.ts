@@ -353,6 +353,90 @@ describe('AG-UI TOOL_CALL (HITL frontend-tools)', () => {
   })
 })
 
+describe('AG-UI a2uiAction (ACTIVITY_SNAPSHOT клик/submit)', () => {
+  // Handler эхает input.action и input.data в текст → проверяем приём действия.
+  const actionHandler: AgentHandler = {
+    async run({ input }) {
+      return {
+        status: 'completed',
+        message: `action:${JSON.stringify(input.action ?? null)} data:${JSON.stringify(input.data)}`,
+        result: { action: input.action ?? null, data: input.data },
+      }
+    },
+  }
+
+  function actionApp() {
+    return createAgentHost({
+      card,
+      handler: actionHandler,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+  }
+
+  it('a2uiAction.userAction{name:apply, context:{N:15}} → input.action.name=apply, context.N=15', async () => {
+    const r = await request(actionApp())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: {
+          a2uiAction: {
+            userAction: {
+              name: 'apply',
+              context: { N: '15' },
+              surfaceId: 'surf-1',
+              sourceComponentId: 'root.children.0',
+            },
+          },
+        },
+      })
+
+    expect(r.status).toBe(200)
+    // SSE-стрим эскейпит JSON в delta (\"name\":\"apply\") — матчим экранированную форму.
+    expect(r.text).toContain('action:{\\"name\\":\\"apply\\"')
+    expect(r.text).toContain('\\"N\\":\\"15\\"')
+    expect(r.text).toContain('\\"surfaceId\\":\\"surf-1\\"')
+    expect(r.text).toContain('\\"sourceComponentId\\":\\"root.children.0\\"')
+  })
+
+  it('a2uiAction.userAction{name:nav:building, context:{}} → input.action.name=nav:building', async () => {
+    const r = await request(actionApp())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { a2uiAction: { userAction: { name: 'nav:building', context: {} } } },
+      })
+
+    expect(r.status).toBe(200)
+    expect(r.text).toContain('action:{\\"name\\":\\"nav:building\\"')
+    expect(r.text).toContain('\\"context\\":{}')
+  })
+
+  it('без a2uiAction → input.action undefined, input.data работает', async () => {
+    const r = await request(actionApp())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { data: { foo: 'bar' } },
+      })
+
+    expect(r.status).toBe(200)
+    // action отсутствует (handler эхает null), а forwardedProps.data доходит как input.data
+    expect(r.text).toContain('action:null')
+    expect(r.text).toContain('\\"foo\\":\\"bar\\"')
+  })
+})
+
 describe('dev-режим (insecure-dev + fake billing) через env', () => {
   const tmp: string[] = []
   function writeTmp(name: string, data: unknown): string {

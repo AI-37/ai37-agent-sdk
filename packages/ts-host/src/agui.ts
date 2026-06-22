@@ -7,7 +7,7 @@ import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import { toTask } from './build-task'
-import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent } from './types'
+import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
 
 /**
  * AG-UI SSE-адаптер (канон). Эмитит каноничные AG-UI-события через `@ag-ui/encoder`,
@@ -24,7 +24,37 @@ type RunAgentInputLike = {
   messages?: Array<{ role?: string; content?: unknown; toolCallId?: string; toolName?: string }>
   /** Frontend-tools, заявленные клиентом (useFrontendTool → RunAgentInput.tools). */
   tools?: Array<{ name?: string; description?: string; parameters?: unknown }>
-  forwardedProps?: Record<string, unknown>
+  /**
+   * Прочее из клиента (`data`, `ai37`, `a2uiClientCapabilities`) + A2UI-действие
+   * (`a2uiAction.userAction` — клик кнопки/submit, канон ACTIVITY_SNAPSHOT).
+   */
+  forwardedProps?: Record<string, unknown> & {
+    a2uiAction?: {
+      userAction?: {
+        name?: unknown
+        context?: unknown
+        surfaceId?: unknown
+        sourceComponentId?: unknown
+      }
+    }
+  }
+}
+
+/**
+ * A2UI-действие из `forwardedProps.a2uiAction.userAction` (канон ACTIVITY_SNAPSHOT):
+ * юзер нажал кнопку/submit → `{name, context, surfaceId?, sourceComponentId?}`.
+ * undefined, если действия нет (обычный текстовый ход) или `name` не строка.
+ */
+function readA2uiAction(forwardedProps?: RunAgentInputLike['forwardedProps']): A2uiAction | undefined {
+  const ua = forwardedProps?.a2uiAction?.userAction
+  if (!ua || typeof ua.name !== 'string') return undefined
+  const action: A2uiAction = {
+    name: ua.name,
+    context: (ua.context as Record<string, unknown> | undefined) ?? {},
+  }
+  if (typeof ua.surfaceId === 'string') action.surfaceId = ua.surfaceId
+  if (typeof ua.sourceComponentId === 'string') action.sourceComponentId = ua.sourceComponentId
+  return action
 }
 
 /**
@@ -133,6 +163,8 @@ export function aguiRouter(
       | undefined
 
     const toolResult = lastToolResult(body.messages)
+    // A2UI-действие (клик/submit) из forwardedProps.a2uiAction — канон ACTIVITY_SNAPSHOT.
+    const action = readA2uiAction(body.forwardedProps)
     const tools = Array.isArray(body.tools)
       ? body.tools
           .filter((t): t is { name: string; description?: string; parameters?: unknown } =>
@@ -152,6 +184,7 @@ export function aguiRouter(
       negotiation,
       ...(tools && tools.length > 0 ? { tools } : {}),
       ...(toolResult ? { toolResult } : {}),
+      ...(action ? { action } : {}),
       ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
       ...(supportedCatalogIds.length > 0 ? { supportedCatalogIds } : {}),
       ...(priorState !== undefined ? { taskState: priorState } : {}),

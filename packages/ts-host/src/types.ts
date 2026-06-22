@@ -72,6 +72,19 @@ export interface ToolResult {
   result: unknown
 }
 
+/**
+ * A2UI-действие пользователя (канон ACTIVITY_SNAPSHOT, не TOOL_CALL): юзер нажал кнопку/submit
+ * A2UI-компонента → CopilotKit (`createA2UIMessageRenderer`) кладёт его в
+ * `forwardedProps.a2uiAction.userAction` и дёргает агента. `name` — что нажато
+ * (`apply`/`nav:building`/...), `context` — значения полей (для submit) или `{}`.
+ */
+export interface A2uiAction {
+  name: string
+  context: Record<string, unknown>
+  surfaceId?: string
+  sourceComponentId?: string
+}
+
 /** Нормализованный вход (из A2A-сообщения или AG-UI-тела). */
 export interface AgentInput {
   text?: string
@@ -86,6 +99,12 @@ export interface AgentInput {
    * (role=tool в messages). Так замыкается HITL-цикл «форма → значения → агент».
    */
   toolResult?: ToolResult
+  /**
+   * A2UI-действие пользователя на этом ходу (канон ACTIVITY_SNAPSHOT): клик кнопки/submit
+   * формы из `forwardedProps.a2uiAction.userAction`. Handler различает «нажал кнопку/submit»
+   * (`input.action`) и обычные данные (`input.data`). undefined на обычном текстовом ходу.
+   */
+  action?: A2uiAction
   metadata: Ai37Metadata
   claims?: Claims
   billingOrgId?: string
