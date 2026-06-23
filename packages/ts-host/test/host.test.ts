@@ -274,6 +274,54 @@ describe('AG-UI (/agui) канон + content-negotiation', () => {
   })
 })
 
+describe('AG-UI reasoning/COT → нативные REASONING_* (CopilotKit thinking-карточка)', () => {
+  // Handler, который стримит reasoning-дельты и node-вехи через emit, затем даёт финальный текст.
+  const cotHandler: AgentHandler = {
+    async run({ emit }) {
+      emit({ type: 'reasoning', delta: 'анализирую запрос…' })
+      emit({ type: 'node', node: 'intent' })
+      emit({ type: 'reasoning', delta: 'считаю по ГОСТ' })
+      return { status: 'completed', message: 'готово' }
+    },
+  }
+
+  function cotApp() {
+    return createAgentHost({
+      card,
+      handler: cotHandler,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+    })
+  }
+
+  it('emit reasoning/node → REASONING_START..CONTENT..END, node влит строкой, текст после reasoning', async () => {
+    const r = await request(cotApp())
+      .post('/agui')
+      .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
+
+    expect(r.status).toBe(200)
+    const body = r.text
+    // открытие/закрытие reasoning-блока + дельты (CopilotKit рисует встроенную thinking-карточку)
+    expect(body).toContain('REASONING_START')
+    expect(body).toContain('REASONING_MESSAGE_START')
+    expect(body).toContain('REASONING_MESSAGE_CONTENT')
+    expect(body).toContain('анализирую запрос')
+    expect(body).toContain('считаю по ГОСТ')
+    // node влит строкой-дельтой в ту же карточку
+    expect(body).toContain('intent')
+    expect(body).toContain('REASONING_END')
+    // финальный текст идёт ПОСЛЕ закрытия reasoning
+    const reasoningEnd = body.indexOf('REASONING_END')
+    const textStart = body.indexOf('TEXT_MESSAGE_START')
+    expect(reasoningEnd).toBeGreaterThan(-1)
+    expect(textStart).toBeGreaterThan(reasoningEnd)
+    expect(body).toContain('готово')
+    expect(body).toContain('RUN_FINISHED')
+  })
+})
+
 describe('AG-UI a2uiAction (ACTIVITY_SNAPSHOT клик/submit)', () => {
   // Handler эхает input.action и input.data в текст → проверяем приём действия.
   const actionHandler: AgentHandler = {

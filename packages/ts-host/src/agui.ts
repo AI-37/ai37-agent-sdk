@@ -12,7 +12,7 @@ import {
   finishTurnObservability,
   flushTurnObservability,
 } from './observability/langfuse'
-import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
+import type { AgentEvent, AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
 
 /**
  * AG-UI SSE-адаптер (канон). Эмитит каноничные AG-UI-события через `@ag-ui/encoder`,
@@ -184,6 +184,51 @@ export function aguiRouter(
       return textMessageId
     }
 
+    // Reasoning/COT → нативные AG-UI `REASONING_*` (CopilotKit рисует встроенную сворачивающуюся
+    // карточку «Thinking…» → «Thought for Ns»). Ленивое открытие блока (как ensureTextStart):
+    // REASONING_START (id блока) + REASONING_MESSAGE_START (id текста, role:'reasoning'), затем дельты.
+    let reasoningBlockId: string | undefined
+    let reasoningMessageId: string | undefined
+    const ensureReasoningStart = (): string => {
+      if (!reasoningMessageId) {
+        reasoningBlockId = uuidv4()
+        reasoningMessageId = uuidv4()
+        emitEvent({ type: EventType.REASONING_START, messageId: reasoningBlockId })
+        emitEvent({ type: EventType.REASONING_MESSAGE_START, messageId: reasoningMessageId, role: 'reasoning' })
+      }
+      return reasoningMessageId
+    }
+    const emitReasoning = (delta: string): void => {
+      const id = ensureReasoningStart()
+      emitEvent({ type: EventType.REASONING_MESSAGE_CONTENT, messageId: id, delta })
+    }
+    /** Закрыть открытый reasoning-блок (перед финальным текстом / RUN_FINISHED). Идемпотентно. */
+    const endReasoning = (): void => {
+      if (reasoningMessageId) {
+        emitEvent({ type: EventType.REASONING_MESSAGE_END, messageId: reasoningMessageId })
+        emitEvent({ type: EventType.REASONING_END, messageId: reasoningBlockId })
+        reasoningMessageId = undefined
+        reasoningBlockId = undefined
+      }
+    }
+
+    // Tool-call → нативные `TOOL_CALL_*` (CopilotKit рисует статус-карточку через DefaultToolCallRenderer).
+    const emitTool = (e: Extract<AgentEvent, { type: 'tool' }>): void => {
+      const id = e.id ?? `tc-${uuidv4()}`
+      if (e.phase === 'start') {
+        emitEvent({ type: EventType.TOOL_CALL_START, toolCallId: id, toolCallName: e.name })
+        if (e.args !== undefined) {
+          emitEvent({ type: EventType.TOOL_CALL_ARGS, toolCallId: id, delta: JSON.stringify(e.args) })
+        }
+      } else {
+        emitEvent({ type: EventType.TOOL_CALL_END, toolCallId: id })
+        if (e.result !== undefined) {
+          const content = typeof e.result === 'string' ? e.result : JSON.stringify(e.result)
+          emitEvent({ type: EventType.TOOL_CALL_RESULT, messageId: uuidv4(), toolCallId: id, content, role: 'tool' })
+        }
+      }
+    }
+
     // Langfuse: открываем трейс хода (sessionId=contextId=threadId, userId=claims.sub) ДО когниции.
     // No-op, если трассировка выключена. Хендлер берёт его через `currentLangfuseCallbacks()`.
     await beginTurnObservability({
@@ -204,14 +249,25 @@ export function aguiRouter(
         ctx,
         emit: (e) => {
           if (e.type === 'text') {
+            // Финальный текст не должен попасть внутрь reasoning-блока — закрываем его.
+            endReasoning()
             const id = ensureTextStart()
             emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
           } else if (e.type === 'a2ui') {
             emitA2ui(e.component)
+          } else if (e.type === 'reasoning') {
+            emitReasoning(e.delta)
+          } else if (e.type === 'node') {
+            // back-compat: имя ноды агента вливаем строкой в reasoning-карточку.
+            emitReasoning(`▸ ${e.node}\n`)
+          } else if (e.type === 'tool') {
+            emitTool(e)
           }
-          // 'node' — внутренняя телеметрия агента; в AG-UI не пробрасываем.
         },
       })
+
+      // Закрываем reasoning-блок до финального текста/завершения хода (если ещё открыт).
+      endReasoning()
 
       // Langfuse: выход хода в корневой трейс (LLM-спаны уже собрал CallbackHandler).
       finishTurnObservability({ status: result.status, message: result.message })
@@ -241,6 +297,7 @@ export function aguiRouter(
         emitEvent({ type: EventType.RUN_FINISHED, threadId, runId })
       }
     } catch (e) {
+      endReasoning()
       emitEvent({ type: EventType.RUN_ERROR, message: String(e) })
     } finally {
       // Досылаем батч Langfuse до закрытия соединения (no-op, если трассировка выключена).

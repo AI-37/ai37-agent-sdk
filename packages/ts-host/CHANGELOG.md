@@ -3,6 +3,25 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.14] - 2026-06-23
+
+### Added
+- **Трансляция прогресса/COT в UI (chain-of-thought).** `AgentEvent` расширен вариантами
+  `{type:'reasoning', delta}` и `{type:'tool', phase, name, args?, result?}` (в дополнение к
+  `node`/`text`/`a2ui`).
+  - `agui.ts`: `reasoning` → нативные `REASONING_*` (CopilotKit рисует встроенную сворачивающуюся
+    карточку «Thinking…» → «Thought for Ns»); `node` вливается строкой в ту же карточку; `tool` →
+    `TOOL_CALL_*` (встроенный `DefaultToolCallRenderer`). reasoning-блок закрывается до финального
+    текста/`RUN_FINISHED`.
+  - `a2a-executor.ts`: на A2A-пути `emit({type:'node'|'reasoning'})` публикует `status-update` с
+    `metadata['ai37/node'|'ai37/reasoning']` (лениво, после первого emit — initial working-Task).
+    Для блокирующего `message/send` сворачивается `ResultManager`'ом в финальный Task —
+    **поведение прежнее**; агенты без emit ничего лишнего не публикуют.
+  - `relay`: новый `executeRemoteA2aStreaming(client, req, onEvent)` — вызов сабагента по
+    `message/stream`, форвардит node/reasoning через `onEvent`, накапливает финальный `Message|Task`
+    (контракт результата идентичен `executeRemoteA2a`). Экспортирован `RemoteA2aProgressEvent`.
+  - Аддитивно и обратно совместимо.
+
 ## [0.1.0-alpha.12] - 2026-06-22
 
 ### Fixed

@@ -99,3 +99,97 @@ export async function executeRemoteA2a(
     raw,
   }
 }
+
+/** Промежуточное событие прогресса/COT удалённого агента (из A2A `status-update` метаданных). */
+export interface RemoteA2aProgressEvent {
+  type: 'node' | 'reasoning'
+  /** Имя ноды (для `node`) или reasoning-дельта (для `reasoning`). */
+  value: string
+}
+
+type A2aStreamItem =
+  | Message
+  | Task
+  | { kind: 'status-update'; taskId: string; contextId: string; status: Task['status']; final: boolean; metadata?: Record<string, unknown> }
+  | { kind: 'artifact-update'; taskId: string; contextId: string; artifact: NonNullable<Task['artifacts']>[number]; append?: boolean; lastChunk?: boolean }
+
+/** Накапливает финальный `Message | Task` из потока и форвардит node/reasoning через onEvent. */
+async function drainStream(
+  stream: AsyncGenerator<A2aStreamItem, void, undefined>,
+  onEvent: (e: RemoteA2aProgressEvent) => void,
+): Promise<Message | Task | undefined> {
+  let task: Task | undefined
+  let message: Message | undefined
+  for await (const ev of stream) {
+    if (ev.kind === 'message') {
+      message = ev
+    } else if (ev.kind === 'task') {
+      task = ev
+    } else if (ev.kind === 'status-update') {
+      const meta = ev.metadata as Record<string, unknown> | undefined
+      const node = meta?.['ai37/node']
+      const reasoning = meta?.['ai37/reasoning']
+      if (typeof node === 'string') onEvent({ type: 'node', value: node })
+      if (typeof reasoning === 'string') onEvent({ type: 'reasoning', value: reasoning })
+      if (task && ev.taskId === task.id) task = { ...task, status: ev.status }
+    } else if (ev.kind === 'artifact-update') {
+      if (task && ev.taskId === task.id) {
+        const artifacts = [...(task.artifacts ?? [])]
+        const idx = artifacts.findIndex((a) => a.artifactId === ev.artifact.artifactId)
+        if (idx >= 0 && ev.append) {
+          artifacts[idx] = { ...artifacts[idx], parts: [...artifacts[idx].parts, ...ev.artifact.parts] }
+        } else if (idx >= 0) {
+          artifacts[idx] = ev.artifact
+        } else {
+          artifacts.push(ev.artifact)
+        }
+        task = { ...task, artifacts }
+      }
+    }
+  }
+  // Финальный результат: message главнее (как в ResultManager.getFinalResult), иначе накопленный task.
+  return message ?? task
+}
+
+/**
+ * Стрим-вариант `executeRemoteA2a`: вызывает агента по `message/stream` и форвардит промежуточный
+ * прогресс/COT (node/reasoning из `status-update.metadata`) через `onEvent`, попутно накапливая
+ * финальный `Message | Task`. Контракт результата идентичен `executeRemoteA2a`. Требует у агента
+ * `capabilities.streaming: true`. Stale-resume обрабатывается как и в блокирующем варианте.
+ */
+export async function executeRemoteA2aStreaming(
+  client: Client,
+  req: RemoteA2aRequest,
+  onEvent: (e: RemoteA2aProgressEvent) => void,
+): Promise<RemoteA2aResult> {
+  let staleResumeDropped = false
+  let raw: Message | Task | undefined
+  try {
+    raw = await drainStream(
+      client.sendMessageStream(buildParams(req, true)) as AsyncGenerator<A2aStreamItem, void, undefined>,
+      onEvent,
+    )
+  } catch (e) {
+    if (req.resumeTaskId && isStaleTaskError(e)) {
+      staleResumeDropped = true
+      raw = await drainStream(
+        client.sendMessageStream(buildParams(req, false)) as AsyncGenerator<A2aStreamItem, void, undefined>,
+        onEvent,
+      )
+    } else {
+      throw e
+    }
+  }
+  if (!raw) {
+    throw new Error('executeRemoteA2aStreaming: поток не дал финального Message/Task')
+  }
+
+  return {
+    text: extractText(raw),
+    a2ui: extractA2ui(raw),
+    ...(raw.kind === 'task' ? { taskId: raw.id } : {}),
+    state: toState(raw),
+    staleResumeDropped,
+    raw,
+  }
+}
