@@ -7,6 +7,11 @@ import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import { toTask } from './build-task'
+import {
+  beginTurnObservability,
+  finishTurnObservability,
+  flushTurnObservability,
+} from './observability/langfuse'
 import type { AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
 
 /**
@@ -179,6 +184,18 @@ export function aguiRouter(
       return textMessageId
     }
 
+    // Langfuse: открываем трейс хода (sessionId=contextId=threadId, userId=claims.sub) ДО когниции.
+    // No-op, если трассировка выключена. Хендлер берёт его через `currentLangfuseCallbacks()`.
+    await beginTurnObservability({
+      contextId: threadId,
+      taskId: threadId,
+      claims: ctx?.claims,
+      metadata,
+      text: input.text,
+      billingOrgId: ctx?.billingOrgId,
+      agentName: 'agui-turn',
+    })
+
     try {
       emitEvent({ type: EventType.RUN_STARTED, threadId, runId })
 
@@ -195,6 +212,9 @@ export function aguiRouter(
           // 'node' — внутренняя телеметрия агента; в AG-UI не пробрасываем.
         },
       })
+
+      // Langfuse: выход хода в корневой трейс (LLM-спаны уже собрал CallbackHandler).
+      finishTurnObservability({ status: result.status, message: result.message })
 
       // Персистим состояние хода в task-store (multi-turn/HITL). Тот же формат
       // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы.
@@ -223,6 +243,8 @@ export function aguiRouter(
     } catch (e) {
       emitEvent({ type: EventType.RUN_ERROR, message: String(e) })
     } finally {
+      // Досылаем батч Langfuse до закрытия соединения (no-op, если трассировка выключена).
+      await flushTurnObservability()
       res.end()
     }
   })
