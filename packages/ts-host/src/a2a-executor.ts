@@ -3,6 +3,7 @@ import type {
   ExecutionEventBus,
   RequestContext,
 } from '@a2a-js/sdk/server'
+import type { AgentEvent } from './types'
 import { negotiateOutput } from './output-modes'
 import {
   currentCtx,
@@ -81,9 +82,41 @@ export class HostExecutor implements AgentExecutor {
       agentName: 'a2a-turn',
     })
 
+    // Промежуточный прогресс/COT агента → A2A `status-update` события (стримятся клиенту на
+    // `message/stream`; на блокирующем `message/send` сворачиваются ResultManager'ом в финальный
+    // Task — поведение прежнее). Лениво публикуем initial working-Task на ПЕРВОМ emit, чтобы у
+    // status-update был совпадающий по id таск; агенты, которые ничего не эмитят, ничего лишнего
+    // не публикуют (нулевое изменение поведения). Форвардим только `node`/`reasoning`
+    // (text/a2ui едут в финальном Task; `tool` — событие оркестратора, не leaf-агента).
+    let workingTaskStarted = false
+    const emit = (e: AgentEvent): void => {
+      if (e.type !== 'node' && e.type !== 'reasoning') return
+      if (!workingTaskStarted) {
+        workingTaskStarted = true
+        bus.publish({
+          kind: 'task',
+          id: rc.taskId,
+          contextId: rc.contextId,
+          status: { state: 'working', timestamp: new Date().toISOString() },
+          history: [],
+          metadata: {},
+        })
+      }
+      const metadata =
+        e.type === 'node' ? { 'ai37/node': e.node } : { 'ai37/reasoning': e.delta }
+      bus.publish({
+        kind: 'status-update',
+        taskId: rc.taskId,
+        contextId: rc.contextId,
+        status: { state: 'working', timestamp: new Date().toISOString() },
+        final: false,
+        metadata,
+      })
+    }
+
     let result: AgentResult
     try {
-      result = await this.handler.run({ input, ctx, emit: () => {} })
+      result = await this.handler.run({ input, ctx, emit })
     } catch (e) {
       result = { status: 'failed', message: `INTERNAL: ${String(e)}` }
     }

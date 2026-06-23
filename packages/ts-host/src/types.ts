@@ -109,11 +109,24 @@ export interface AgentInput {
   taskState?: Record<string, unknown>
 }
 
-/** Событие для стрима (AG-UI). */
+/**
+ * Событие для стрима промежуточного прогресса/COT (AG-UI).
+ *
+ * Маппинг на AG-UI (`agui.ts`) — переиспользуем НАТИВНЫЙ рендеринг CopilotKit v2:
+ *  - `reasoning` → `REASONING_*` → встроенная сворачивающаяся карточка «Thinking…»/«Thought for Ns»;
+ *  - `node` (back-compat) → вливается строкой в ту же reasoning-карточку;
+ *  - `tool` → `TOOL_CALL_*` → встроенный `DefaultToolCallRenderer` (статус-карточка вызова);
+ *  - `text` → `TEXT_MESSAGE_CONTENT`; `a2ui` → `ACTIVITY_SNAPSHOT('a2ui-surface')`.
+ *
+ * На A2A-пути (`a2a-executor.ts`) `node`/`reasoning` форвардятся вверх как `status-update`
+ * с `metadata['ai37/node'|'ai37/reasoning']` (стрим-relay их поднимает в emit оркестратора).
+ */
 export type AgentEvent =
   | { type: 'node'; node: string }
   | { type: 'text'; delta: string }
   | { type: 'a2ui'; component: A2uiComponent }
+  | { type: 'reasoning'; delta: string }
+  | { type: 'tool'; phase: 'start' | 'end'; name: string; id?: string; args?: unknown; result?: unknown }
 
 export interface AgentResult {
   status: AgentStatus
