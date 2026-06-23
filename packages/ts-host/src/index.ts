@@ -6,9 +6,21 @@ export {
   currentBearer,
   currentAcceptedOutputModes,
   currentSupportedCatalogIds,
+  currentTraceId,
+  currentLangfuseTrace,
+  currentLangfuseHandler,
+  currentLangfuseCallbacks,
   requestScope,
 } from './als'
-export type { HostScope } from './als'
+export type { HostScope, HostLangfuseScope } from './als'
+// Langfuse-наблюдаемость: host открывает трейс хода сам; эти хелперы — для ручного контроля/тестов.
+export {
+  beginTurnObservability,
+  finishTurnObservability,
+  flushTurnObservability,
+  isLangfuseEnabled,
+} from './observability/langfuse'
+export type { TurnObservability, BeginTurnArgs } from './observability/langfuse'
 export { jwtGuard } from './auth-guard'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
