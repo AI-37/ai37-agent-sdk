@@ -51,6 +51,7 @@ describe('CLI dev-серверы (Уровень 2)', () => {
       const client = createBillingClient({
         baseUrl: billing.baseUrl,
         authToken: 'test-token',
+        usageIngestToken: 'test-token',
         runtimeStateCacheTtlMs: 0,
       })
       const state = await client.assertExecutionAllowed('org-1')
