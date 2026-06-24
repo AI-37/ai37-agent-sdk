@@ -7,11 +7,7 @@ import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import { toTask } from './build-task'
-import {
-  beginTurnObservability,
-  finishTurnObservability,
-  flushTurnObservability,
-} from './observability/langfuse'
+import { withTurnObservability } from './observability/langfuse'
 import type { AgentEvent, AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
 
 /**
@@ -229,48 +225,50 @@ export function aguiRouter(
       }
     }
 
-    // Langfuse: открываем трейс хода (sessionId=contextId=threadId, userId=claims.sub) ДО когниции.
-    // No-op, если трассировка выключена. Хендлер берёт его через `currentLangfuseCallbacks()`.
-    await beginTurnObservability({
-      contextId: threadId,
-      taskId: threadId,
-      claims: ctx?.claims,
-      metadata,
-      text: input.text,
-      billingOrgId: ctx?.billingOrgId,
-      agentName: 'agui-turn',
-    })
-
     try {
       emitEvent({ type: EventType.RUN_STARTED, threadId, runId })
 
-      const result = await handler.run({
-        input,
-        ctx,
-        emit: (e) => {
-          if (e.type === 'text') {
-            // Финальный текст не должен попасть внутрь reasoning-блока — закрываем его.
-            endReasoning()
-            const id = ensureTextStart()
-            emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
-          } else if (e.type === 'a2ui') {
-            emitA2ui(e.component)
-          } else if (e.type === 'reasoning') {
-            emitReasoning(e.delta)
-          } else if (e.type === 'node') {
-            // back-compat: имя ноды агента вливаем строкой в reasoning-карточку.
-            emitReasoning(`▸ ${e.node}\n`)
-          } else if (e.type === 'tool') {
-            emitTool(e)
-          }
+      // Langfuse v4: открываем turn-спан `agui-turn` (sessionId=contextId=threadId) и делаем его
+      // активным OTel-контекстом на время когниции → LangChain-спаны нестятся под него, исходящие
+      // A2A-вызовы форвардят его traceparent. No-op, если трассировка выключена. trace_id фронта
+      // (input/forwardedProps.ai37.trace_id) наследуется как id трейса.
+      const result = await withTurnObservability(
+        {
+          contextId: threadId,
+          taskId: threadId,
+          claims: ctx?.claims,
+          metadata,
+          text: input.text,
+          billingOrgId: ctx?.billingOrgId,
+          agentName: 'agui-turn',
         },
-      })
+        () =>
+          handler.run({
+            input,
+            ctx,
+            emit: (e) => {
+              if (e.type === 'text') {
+                // Финальный текст не должен попасть внутрь reasoning-блока — закрываем его.
+                endReasoning()
+                const id = ensureTextStart()
+                emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
+              } else if (e.type === 'a2ui') {
+                emitA2ui(e.component)
+              } else if (e.type === 'reasoning') {
+                emitReasoning(e.delta)
+              } else if (e.type === 'node') {
+                // back-compat: имя ноды агента вливаем строкой в reasoning-карточку.
+                emitReasoning(`▸ ${e.node}\n`)
+              } else if (e.type === 'tool') {
+                emitTool(e)
+              }
+            },
+          }),
+        (r) => ({ status: r.status, message: r.message }),
+      )
 
       // Закрываем reasoning-блок до финального текста/завершения хода (если ещё открыт).
       endReasoning()
-
-      // Langfuse: выход хода в корневой трейс (LLM-спаны уже собрал CallbackHandler).
-      finishTurnObservability({ status: result.status, message: result.message })
 
       // Персистим состояние хода в task-store (multi-turn/HITL). Тот же формат
       // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы.
@@ -300,8 +298,7 @@ export function aguiRouter(
       endReasoning()
       emitEvent({ type: EventType.RUN_ERROR, message: String(e) })
     } finally {
-      // Досылаем батч Langfuse до закрытия соединения (no-op, если трассировка выключена).
-      await flushTurnObservability()
+      // Langfuse-батч уже досослан внутри `withTurnObservability` (forceFlush на закрытии turn-спана).
       res.end()
     }
   })

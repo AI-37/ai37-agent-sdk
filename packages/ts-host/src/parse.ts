@@ -7,6 +7,11 @@ export interface ParsedMessage {
   metadata: Ai37Metadata
   /** A2UI-действие (клик/submit), если оркестратор форварднул его в `message.metadata.a2uiAction`. */
   action?: A2uiAction
+  /**
+   * W3C trace-context из `message.metadata` (`{ traceparent, tracestate? }`), который оркестратор
+   * прокинул через `injectTraceContext`. Host продолжает по нему распределённый трейс (Langfuse v4).
+   */
+  traceCarrier?: Record<string, string>
 }
 
 /** Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37 + A2UI-действие. */
@@ -20,12 +25,27 @@ export function parseA2AMessage(rc: RequestContext): ParsedMessage {
     unknown
   >
   const action = readA2uiAction(rc)
+  const traceCarrier = readTraceCarrier(rc)
   return {
     text,
     data,
     metadata: readAi37Metadata(rc, data),
     ...(action ? { action } : {}),
+    ...(traceCarrier ? { traceCarrier } : {}),
   }
+}
+
+/**
+ * W3C trace-context из `message.metadata` (`traceparent`/`tracestate`), который оркестратор положил
+ * туда через `injectTraceContext` при исходящем A2A-вызове. undefined, если оркестратор не трассирует.
+ */
+function readTraceCarrier(rc: RequestContext): Record<string, string> | undefined {
+  const md = rc.userMessage.metadata as Record<string, unknown> | undefined
+  const traceparent = md?.traceparent
+  if (typeof traceparent !== 'string' || traceparent.length === 0) return undefined
+  const carrier: Record<string, string> = { traceparent }
+  if (typeof md?.tracestate === 'string') carrier.tracestate = md.tracestate
+  return carrier
 }
 
 /**

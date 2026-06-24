@@ -22,8 +22,8 @@ export interface HostScope {
    */
   supportedCatalogIds?: string[]
   /**
-   * Per-turn Langfuse-наблюдаемость (трейс хода + LangChain `CallbackHandler`). Заполняется
-   * executor'ом/AG-UI-роутером через `beginTurnObservability` ДО вызова handler'а, поэтому
+   * Per-turn Langfuse-наблюдаемость (turn-спан + LangChain `CallbackHandler`). Заполняется
+   * executor'ом/AG-UI-роутером внутри `withTurnObservability` ДО вызова handler'а, поэтому
    * когниция агента может прокинуть `currentLangfuseCallbacks()` в LangChain `invoke`, не зная
    * про Langfuse. Типы намеренно `unknown` — чтобы ts-host не тянул @langchain/core в сборку.
    */
@@ -32,11 +32,11 @@ export interface HostScope {
 
 /** Срез Langfuse одного хода (см. observability/langfuse.ts). */
 export interface HostLangfuseScope {
-  /** Стабильный id трейса (из `metadata.ai37.trace_id` клиента либо сгенерированный). */
-  traceId: string
-  /** `LangfuseTraceClient` (типизирован `unknown` — фактический тип в langfuse.ts). */
-  trace: unknown
-  /** LangChain `CallbackHandler` (langfuse-langchain), привязанный к корневому трейсу. */
+  /** Id трейса текущего хода (== `metadata.ai37.trace_id` фронта, либо унаследованный/новый). */
+  traceId?: string
+  /** Активный turn-спан (`LangfuseSpan` v4, типизирован `unknown`) — для ручных под-спанов/score. */
+  span?: unknown
+  /** LangChain `CallbackHandler` (@langfuse/langchain) — нестится под активный turn-спан. */
   handler?: unknown
 }
 
@@ -62,9 +62,9 @@ export const currentSupportedCatalogIds = (): string[] | undefined =>
 export const currentTraceId = (): string | undefined =>
   requestScope.getStore()?.langfuse?.traceId
 
-/** `LangfuseTraceClient` текущего хода (типизирован `unknown`) — для ручных span'ов/score из агента. */
+/** Активный turn-спан текущего хода (`LangfuseSpan` v4, типизирован `unknown`) — для ручных под-спанов/score. */
 export const currentLangfuseTrace = (): unknown =>
-  requestScope.getStore()?.langfuse?.trace
+  requestScope.getStore()?.langfuse?.span
 
 /**
  * LangChain `CallbackHandler` (langfuse-langchain) текущего хода или undefined. Прокидывается

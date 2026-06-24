@@ -3,6 +3,7 @@ import type { Client } from '@a2a-js/sdk/client'
 import type { Message, Task } from '@a2a-js/sdk'
 import type { A2uiComponent, A2uiAction } from '../types'
 import { extractText, extractA2ui, isStaleTaskError } from './extract'
+import { injectTraceContext } from '../observability/langfuse'
 
 /**
  * Транспорт-агностичный вызов удалённого A2A-агента (relay). НЕ знает про LangChain/deepagents/NestJS
@@ -50,6 +51,10 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   if (req.contextRefs?.length) metadata.ai37 = { context_refs: req.contextRefs }
   if (req.action) metadata.a2uiAction = { userAction: req.action }
   if (req.extraMetadata) Object.assign(metadata, req.extraMetadata)
+  // Langfuse v4 distributed tracing: кладём W3C trace-context активного turn-спана оркестратора
+  // (`traceparent`/`tracestate`) в metadata → суб-агент продолжит ТОТ ЖЕ трейс. {} (no-op), если
+  // трассировка выключена.
+  Object.assign(metadata, injectTraceContext())
 
   const message = {
     kind: 'message' as const,
