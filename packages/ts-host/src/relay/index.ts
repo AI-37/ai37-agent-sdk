@@ -14,4 +14,4 @@ export {
 } from './task-store'
 export type { RemoteTaskStore, RemoteTaskRef } from './task-store'
 // Типы ядра реэкспортируем, чтобы потребитель брал их из одного места.
-export type { A2uiComponent, A2uiAction } from '../types'
+export type { A2uiComponent, A2uiAction, ContextFile } from '../types'

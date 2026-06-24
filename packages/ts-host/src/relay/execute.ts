@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Client } from '@a2a-js/sdk/client'
 import type { Message, Task } from '@a2a-js/sdk'
-import type { A2uiComponent, A2uiAction } from '../types'
+import type { A2uiComponent, A2uiAction, ContextFile } from '../types'
 import { extractText, extractA2ui, isStaleTaskError } from './extract'
 import { injectTraceContext } from '../observability/langfuse'
 
@@ -26,6 +26,8 @@ export interface RemoteA2aRequest {
   supportedCatalogIds?: string[]
   /** Вложения/контекст → `message.metadata.ai37.context_refs`. */
   contextRefs?: string[]
+  /** Манифест приложенных файлов (имена/summary) → `message.metadata.ai37.context_files`. */
+  contextFiles?: ContextFile[]
   /** Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. */
   extraMetadata?: Record<string, unknown>
 }
@@ -48,7 +50,12 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   if (req.supportedCatalogIds?.length) {
     metadata.a2uiClientCapabilities = { 'v0.9': { supportedCatalogIds: req.supportedCatalogIds } }
   }
-  if (req.contextRefs?.length) metadata.ai37 = { context_refs: req.contextRefs }
+  // ai37-конверт собираем единым объектом (НЕ перезаписываем по одному полю): context_refs (указатели)
+  // + context_files (манифест имён) едут вместе.
+  const ai37: Record<string, unknown> = {}
+  if (req.contextRefs?.length) ai37.context_refs = req.contextRefs
+  if (req.contextFiles?.length) ai37.context_files = req.contextFiles
+  if (Object.keys(ai37).length > 0) metadata.ai37 = ai37
   if (req.action) metadata.a2uiAction = { userAction: req.action }
   if (req.extraMetadata) Object.assign(metadata, req.extraMetadata)
   // Langfuse v4 distributed tracing: кладём W3C trace-context активного turn-спана оркестратора
