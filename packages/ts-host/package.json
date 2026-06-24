@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.1.0-alpha.14",
+  "version": "0.1.0-alpha.15",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -54,16 +54,19 @@
     "@ag-ui/core": "^0.0.57",
     "@ag-ui/encoder": "^0.0.57",
     "@ai37/a2ui-catalog-schemas": "^0.4.0",
+    "@langfuse/otel": "^5.6.0",
+    "@langfuse/tracing": "^5.6.0",
+    "@opentelemetry/api": "^1.9.0",
+    "@opentelemetry/sdk-node": "^0.219.0",
     "express": "^4.21.2",
-    "langfuse": "^3.38.0",
     "uuid": "^14.0.0"
   },
   "optionalDependencies": {
-    "langfuse-langchain": "^3.38.0"
+    "@langfuse/langchain": "^5.6.0"
   },
   "peerDependencies": {
     "@ai37/agent-sdk": ">=0.1.0-alpha.5",
-    "@langchain/core": ">=0.3.0"
+    "@langchain/core": ">=0.3.8"
   },
   "peerDependenciesMeta": {
     "@langchain/core": {
@@ -78,7 +81,6 @@
     "@types/node": "^24.11.0",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
-    "langfuse-langchain": "^3.38.0",
     "supertest": "^7.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",

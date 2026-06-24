@@ -12,11 +12,7 @@ import {
 } from './als'
 import { parseA2AMessage } from './parse'
 import { toTask } from './build-task'
-import {
-  beginTurnObservability,
-  finishTurnObservability,
-  flushTurnObservability,
-} from './observability/langfuse'
+import { withTurnObservability } from './observability/langfuse'
 import type { AgentHandler, AgentInput, AgentResult } from './types'
 
 /**
@@ -70,18 +66,6 @@ export class HostExecutor implements AgentExecutor {
       ...(priorState !== undefined ? { taskState: priorState } : {}),
     }
 
-    // Langfuse: открываем трейс хода (sessionId=contextId, userId=claims.sub) ДО когниции,
-    // чтобы handler мог прокинуть `currentLangfuseCallbacks()` в LangChain. No-op, если выключено.
-    await beginTurnObservability({
-      contextId: rc.contextId,
-      taskId: rc.taskId,
-      claims: ctx?.claims,
-      metadata: parsed.metadata,
-      text: parsed.text,
-      billingOrgId: ctx?.billingOrgId,
-      agentName: 'a2a-turn',
-    })
-
     // Промежуточный прогресс/COT агента → A2A `status-update` события (стримятся клиенту на
     // `message/stream`; на блокирующем `message/send` сворачиваются ResultManager'ом в финальный
     // Task — поведение прежнее). Лениво публикуем initial working-Task на ПЕРВОМ emit, чтобы у
@@ -114,15 +98,30 @@ export class HostExecutor implements AgentExecutor {
       })
     }
 
-    let result: AgentResult
-    try {
-      result = await this.handler.run({ input, ctx, emit })
-    } catch (e) {
-      result = { status: 'failed', message: `INTERNAL: ${String(e)}` }
-    }
-    // Langfuse: дописываем выход хода в трейс и досылаем батч (handler.run ошибок не пробрасывает).
-    finishTurnObservability({ status: result.status, message: result.message })
-    await flushTurnObservability()
+    // Langfuse v4: turn-спан `a2a-turn` активен на время когниции (LangChain-спаны нестятся под него).
+    // `parentCarrier` из входящего сообщения → спан продолжает распределённый трейс оркестратора
+    // (один трейс на всю цепочку UI→оркестратор→суб-агент). forceFlush — внутри обёртки.
+    const result = await withTurnObservability<AgentResult>(
+      {
+        contextId: rc.contextId,
+        taskId: rc.taskId,
+        claims: ctx?.claims,
+        metadata: parsed.metadata,
+        text: parsed.text,
+        billingOrgId: ctx?.billingOrgId,
+        agentName: 'a2a-turn',
+        ...(parsed.traceCarrier ? { parentCarrier: parsed.traceCarrier } : {}),
+      },
+      async () => {
+        try {
+          return await this.handler.run({ input, ctx, emit })
+        } catch (e) {
+          // handler.run ошибок не пробрасывает наружу хода — сворачиваем в failed-результат.
+          return { status: 'failed', message: `INTERNAL: ${String(e)}` } satisfies AgentResult
+        }
+      },
+      (r) => ({ status: r.status, message: r.message }),
+    )
 
     // Enforcement: A2UI в Task только если клиент запросил A2UI-mode (иначе — только текст).
     bus.publish(toTask(result, rc.taskId, rc.contextId, negotiation))

@@ -13,14 +13,14 @@ export {
   requestScope,
 } from './als'
 export type { HostScope, HostLangfuseScope } from './als'
-// Langfuse-наблюдаемость: host открывает трейс хода сам; эти хелперы — для ручного контроля/тестов.
+// Langfuse-наблюдаемость (v4/OTel): host сам открывает turn-спан хода; эти хелперы — для ручного
+// контроля/тестов. `injectTraceContext` форвардит W3C trace-context вниз по A2A.
 export {
-  beginTurnObservability,
-  finishTurnObservability,
-  flushTurnObservability,
+  withTurnObservability,
+  injectTraceContext,
   isLangfuseEnabled,
 } from './observability/langfuse'
-export type { TurnObservability, BeginTurnArgs } from './observability/langfuse'
+export type { BeginTurnArgs } from './observability/langfuse'
 export { jwtGuard } from './auth-guard'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
