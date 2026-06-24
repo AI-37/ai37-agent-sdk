@@ -171,6 +171,70 @@ describe('createAgentHost', () => {
   })
 })
 
+describe('A2A: emit(node/reasoning) → status-update метаданные (форвард COT сабагента)', () => {
+  // Handler, который эмитит COT и возвращает финал — как elevator-calc (node-вехи пайплайна).
+  const emittingHandler: AgentHandler = {
+    async run({ emit }) {
+      emit({ type: 'node', node: 'intent' })
+      emit({ type: 'reasoning', delta: 'считаю…' })
+      emit({ type: 'node', node: 'respond' })
+      return { status: 'completed', message: 'готово', result: { ok: true } }
+    },
+  }
+
+  function emittingApp() {
+    return createAgentHost({
+      card,
+      handler: emittingHandler,
+      agentContext: {
+        auth: { issuer: 'i', audience: 'a', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+    })
+  }
+
+  it('message/send: финальный Task не меняется (промежуточные status-update свёрнуты)', async () => {
+    const r = await request(emittingApp())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: { kind: 'message', messageId: 'm1', role: 'user', parts: [{ kind: 'text', text: 'hi' }] },
+        },
+      })
+    expect(r.status).toBe(200)
+    expect(r.body.result.kind).toBe('task')
+    expect(r.body.result.status.state).toBe('completed')
+    expect(r.body.result.status.message.parts[0].text).toBe('готово')
+  })
+
+  it('message/stream: SSE несёт status-update с metadata ai37/node и ai37/reasoning', async () => {
+    const r = await request(emittingApp())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/stream',
+        params: {
+          message: { kind: 'message', messageId: 'm1', role: 'user', parts: [{ kind: 'text', text: 'hi' }] },
+        },
+      })
+    expect(r.status).toBe(200)
+    const body = r.text
+    expect(body).toContain('status-update')
+    expect(body).toContain('ai37/node')
+    expect(body).toContain('intent')
+    expect(body).toContain('respond')
+    expect(body).toContain('ai37/reasoning')
+    expect(body).toContain('считаю')
+    // финал тоже на месте
+    expect(body).toContain('completed')
+    expect(body).toContain('готово')
+  })
+})
+
 describe('multi-turn state (HITL)', () => {
   // Мастер: 1-й ход → input-required + state{step:1}; 2-й ход (тот же taskId) →
   // handler видит prior state в input.taskState → completed.
