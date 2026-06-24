@@ -52,7 +52,19 @@ interface LangfuseSpanLike {
 }
 
 // undefined = ещё не инициализировали; null = инициализировали и трассировка выключена.
-let otelHandle: OtelHandle | null | undefined
+//
+// ВАЖНО: храним хэндл на globalThis, а НЕ в module-local `let`. Причина — tsup собирает два entry
+// (`index` и `relay`) независимыми бандлами, поэтому этот файл дублируется в обоих, и module-local
+// singleton получил бы ДВЕ копии. `withTurnObservability` (бандл index) инициализирует OTel, а
+// `injectTraceContext` зовётся из relay/execute.ts (бандл relay) — без общего состояния он видел бы
+// свою пустую копию и всегда возвращал `{}` (traceparent не уходил бы вниз → трейсы не склеивались).
+const OTEL_SLOT = Symbol.for('ai37.agent-host.langfuse.otelHandle')
+type OtelSlot = OtelHandle | null | undefined
+const globalSlots = globalThis as unknown as Record<symbol, OtelSlot>
+const getOtelHandle = (): OtelSlot => globalSlots[OTEL_SLOT]
+const setOtelHandle = (v: OtelHandle | null): void => {
+  globalSlots[OTEL_SLOT] = v
+}
 
 function envBool(v: string | undefined, dflt: boolean): boolean {
   if (v === undefined || v === '') return dflt
@@ -61,7 +73,7 @@ function envBool(v: string | undefined, dflt: boolean): boolean {
 
 /** Включена ли трассировка прямо сейчас (после первой инициализации). */
 export function isLangfuseEnabled(): boolean {
-  return !!otelHandle
+  return !!getOtelHandle()
 }
 
 /**
@@ -69,12 +81,13 @@ export function isLangfuseEnabled(): boolean {
  * Стартует NodeSDK ОДИН раз на процесс (регистрирует AsyncHooks-контекст и W3C-пропагатор).
  */
 async function ensureOtel(): Promise<OtelHandle | null> {
-  if (otelHandle !== undefined) return otelHandle
+  const cached = getOtelHandle()
+  if (cached !== undefined) return cached
   const enabled = envBool(process.env.LANGFUSE_TRACING_ENABLED, true)
   const publicKey = process.env.LANGFUSE_PUBLIC_KEY
   const secretKey = process.env.LANGFUSE_SECRET_KEY
   if (!enabled || !publicKey || !secretKey) {
-    otelHandle = null
+    setOtelHandle(null)
     return null
   }
   try {
@@ -113,7 +126,7 @@ async function ensureOtel(): Promise<OtelHandle | null> {
       CallbackHandler = undefined
     }
 
-    otelHandle = {
+    const handle: OtelHandle = {
       startActiveObservation: tracing.startActiveObservation as OtelHandle['startActiveObservation'],
       createTraceId: tracing.createTraceId as OtelHandle['createTraceId'],
       CallbackHandler,
@@ -122,14 +135,16 @@ async function ensureOtel(): Promise<OtelHandle | null> {
       trace: otelApi.trace as OtelHandle['trace'],
       forceFlush: () => processor.forceFlush(),
     }
-    console.info('[ai37-agent-host] Langfuse v4 (OTel) трассировка включена')
+    setOtelHandle(handle)
+    console.info('[ai37-agent-host] Langfuse v5 (OTel) трассировка включена')
+    return handle
   } catch (e) {
     console.warn(
       `[ai37-agent-host] Langfuse отключён: OTel/langfuse-пакеты не загрузились (${String(e)})`,
     )
-    otelHandle = null
+    setOtelHandle(null)
+    return null
   }
-  return otelHandle
 }
 
 /** Аргументы открытия turn-спана. */
@@ -236,7 +251,7 @@ export async function withTurnObservability<T>(
  * выключена или ещё не инициализирована. Вызывается из relay при сборке исходящего сообщения.
  */
 export function injectTraceContext(): Record<string, string> {
-  const otel = otelHandle
+  const otel = getOtelHandle()
   if (!otel) return {}
   const carrier: Record<string, string> = {}
   try {
