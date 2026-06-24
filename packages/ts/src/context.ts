@@ -110,12 +110,15 @@ export class AgentContext {
       throw new AuthError('AgentContext: missing bearer token')
     }
 
+    // /state форвардит user-JWT (anti-IDOR по billing_org_id); usage-ingest
+    // (/events) — строго apps-token, т.к. этот эндпоинт user-JWT не принимает.
     const forwardToken = token ?? settings.billing.appsAuthToken
     const billing =
       overrides.billingClient ??
       createBillingClient({
         baseUrl: settings.billing.baseUrl,
         authToken: forwardToken ?? '',
+        usageIngestToken: settings.billing.appsAuthToken ?? '',
         timeoutMs: settings.billing.timeoutMs,
         runtimeStateCacheTtlMs: settings.billing.runtimeStateCacheTtlMs,
       })

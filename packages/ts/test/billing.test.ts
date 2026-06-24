@@ -55,6 +55,18 @@ describe('createBillingAppsClient', () => {
       createBillingAppsClient({
         baseUrl: '',
         authToken: 'secret',
+        usageIngestToken: 'secret',
+        fetch: vi.fn() as typeof fetch,
+      }),
+    ).toThrow(BillingConfigurationError)
+  })
+
+  it('throws when usageIngestToken is empty', () => {
+    expect(() =>
+      createBillingAppsClient({
+        baseUrl: 'https://billing.example.com',
+        authToken: 'secret',
+        usageIngestToken: '',
         fetch: vi.fn() as typeof fetch,
       }),
     ).toThrow(BillingConfigurationError)
@@ -65,6 +77,7 @@ describe('createBillingAppsClient', () => {
       createBillingAppsClient({
         baseUrl: 'https://billing.example.com',
         authToken: 'secret',
+        usageIngestToken: 'secret',
         fetch: vi.fn() as typeof fetch,
         runtimeStateCacheTtlMs: -1,
       }),
@@ -85,6 +98,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com/api/v1/',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
       timeoutMs: 1234,
     })
@@ -116,6 +130,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
       runtimeStateCacheTtlMs: 10_000,
     })
@@ -138,6 +153,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
       runtimeStateCacheTtlMs: 10_000,
     })
@@ -177,6 +193,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
       runtimeStateCacheTtlMs: 10_000,
     })
@@ -201,6 +218,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -226,6 +244,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -241,6 +260,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -260,6 +280,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -280,6 +301,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -316,6 +338,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -371,6 +394,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -395,7 +419,10 @@ describe('createBillingAppsClient', () => {
       )
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com/',
-      authToken: 'apps-token',
+      // authToken (форвард user-JWT) и usageIngestToken (apps-token) различны:
+      // usage-ingest обязан идти под apps-token, а не под форварднутым JWT.
+      authToken: 'user-jwt',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 
@@ -442,6 +469,7 @@ describe('createBillingAppsClient', () => {
     const client = createBillingAppsClient({
       baseUrl: 'https://billing.example.com',
       authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
       fetch: fetchMock as typeof fetch,
     })
 

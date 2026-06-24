@@ -3,6 +3,19 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.6] - 2026-06-24
+
+### Fixed
+- Billing usage-ingest (`POST /api/v1/events`) уходил под форварднутым user-JWT и получал
+  `HTTP 401 "invalid app auth token"`: эндпоинт принимает только apps-token. Токены разведены
+  по эндпоинтам — `/state` под `authToken` (форвард JWT, anti-IDOR по `billing_org_id`),
+  usage-ingest под новым обязательным `usageIngestToken` (apps-token). `AgentContext.fromRequest`
+  прокидывает `settings.billing.appsAuthToken` в `usageIngestToken`.
+
+### Changed
+- `BillingClientOptions`: добавлено обязательное поле `usageIngestToken` (breaking для прямых
+  потребителей `createBillingClient`). `validateOptions` требует непустое значение.
+
 ## [0.1.0-alpha.3] - 2026-06-17
 
 ### Added

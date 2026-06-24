@@ -57,7 +57,17 @@ export type BillingFetch = typeof fetch
 
 export interface BillingClientOptions {
   baseUrl: string
+  /**
+   * Токен для runtime-state запросов (`GET /state`). Сюда форвардится user-JWT —
+   * billing валидирует его dual-mode и делает anti-IDOR по claim `billing_org_id`.
+   */
   authToken: string
+  /**
+   * Токен для usage-ingest (`POST /api/v1/events`). Этот эндпоинт принимает
+   * ТОЛЬКО apps-token (server-to-server), не user-JWT, — поэтому токен задаётся
+   * отдельно от {@link authToken} и обязателен.
+   */
+  usageIngestToken: string
   timeoutMs?: number
   runtimeStateCacheTtlMs?: number
   fetch?: BillingFetch

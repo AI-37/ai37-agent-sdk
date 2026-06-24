@@ -29,6 +29,12 @@ export function validateOptions(options: BillingClientOptions): void {
     throw new BillingConfigurationError('Billing client authToken is required')
   }
 
+  if (!options.usageIngestToken.trim()) {
+    throw new BillingConfigurationError(
+      'Billing client usageIngestToken is required',
+    )
+  }
+
   if (
     options.runtimeStateCacheTtlMs !== undefined &&
     (!Number.isFinite(options.runtimeStateCacheTtlMs) ||

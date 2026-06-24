@@ -23,7 +23,10 @@ export function createBillingClient(
   validateOptions(options)
 
   const baseUrl = normalizeBillingBaseUrl(options.baseUrl)
+  // /state — под authToken (форвард user-JWT, anti-IDOR по billing_org_id);
+  // usage-ingest — под apps-token (этот эндпоинт user-JWT не принимает).
   const authToken = options.authToken
+  const usageIngestToken = options.usageIngestToken
   const timeoutMs = options.timeoutMs ?? 5000
   const runtimeStateCacheTtlMs = options.runtimeStateCacheTtlMs ?? 5000
   const fetchImpl = resolveFetch(options.fetch)
@@ -95,7 +98,7 @@ export function createBillingClient(
     const response = await fetchImpl(`${baseUrl}/api/v1/events`, {
       method: 'POST',
       headers: {
-        Authorization: `Bearer ${authToken}`,
+        Authorization: `Bearer ${usageIngestToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(payload),
