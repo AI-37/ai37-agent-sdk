@@ -16,6 +16,25 @@ export interface IntentEnvelope {
   params?: Record<string, unknown>
 }
 
+/**
+ * Манифест-хинт одного приложенного файла. Едет в `metadata.ai37.context_files` РЯДОМ с `context_refs`
+ * (12-context-and-state.md): даёт агенту ИМЯ файла (+ краткое summary) без отдельного manifest-round-trip
+ * к store, чтобы LLM решала по имени, читать ли тело (`read` по `ref`→path, см. `contextFilePath`). Тела
+ * файлов сюда НЕ кладутся — только метаданные. Generic: не привязан к домену конкретного агента.
+ */
+export interface ContextFile {
+  /** Указатель на файл — тот же формат, что элементы `context_refs`: `project-attachment:<id>` | `chat-attachment:<id>`. */
+  ref: string
+  /** Имя файла (sourceName) — по нему LLM принимает решение, читать ли. */
+  name: string
+  /** Краткая выжимка содержимого для дисамбигуации (опционально). */
+  summary?: string
+  /** Откуда файл: durable-полка проекта или эфемерное вложение текущего чата. */
+  scope: 'project' | 'chat'
+  /** Большой файл — читать грепом/окнами, не целиком. */
+  isLarge?: boolean
+}
+
 /** Конверт metadata.ai37 (04-a2a-conventions.md). */
 export interface Ai37Metadata {
   tenant?: string
@@ -24,6 +43,12 @@ export interface Ai37Metadata {
   thread_id?: string
   session_id?: string
   context_refs?: string[]
+  /**
+   * Манифест приложенных файлов (имена/summary, БЕЗ тел) — ОПЦИОНАЛЬНЫЙ хинт рядом с `context_refs`,
+   * чтобы агент не ходил за манифестом в store. Резолв тел — по-прежнему через store по `ref`.
+   * См. `ContextFile` / `renderContextFilesManifest` / `contextFilePath`.
+   */
+  context_files?: ContextFile[]
   intent?: IntentEnvelope
   trace_id?: string
   /**

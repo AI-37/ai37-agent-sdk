@@ -41,6 +41,8 @@ export type {
   ChatAttachmentsStoreBackendOptions,
   ProjectAttachmentsStoreBackendOptions,
 } from './store-backend/attachments-store-backend'
+// File-aware примитив: манифест context_files в промпт + маппинг ref→путь (read/grep). Generic.
+export { renderContextFilesManifest, contextFilePath } from './store-backend/file-context'
 export type {
   StoreBackend,
   FileInfo,
@@ -73,6 +75,7 @@ export type {
   AgentChannel,
   IntentEnvelope,
   Ai37Metadata,
+  ContextFile,
   A2uiComponent,
   A2uiAction,
   AgentStatus,
