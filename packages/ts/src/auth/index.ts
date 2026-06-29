@@ -6,6 +6,12 @@ export {
   MultiIssuerJwtVerifier,
   createMultiIssuerVerifier,
 } from './verifier'
+export {
+  OpaqueTokenVerifier,
+  CompositeVerifier,
+  createCompositeVerifier,
+  looksLikeJwt,
+} from './introspection'
 export type {
   Claims,
   JwtVerifier,
@@ -13,3 +19,8 @@ export type {
   IssuerConfig,
   MultiIssuerVerifierOptions,
 } from './types'
+export type {
+  IntrospectionVerifierOptions,
+  CompositeVerifierOptions,
+  CreateCompositeVerifierOptions,
+} from './introspection'

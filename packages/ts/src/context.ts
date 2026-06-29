@@ -1,6 +1,11 @@
 // AgentContext — высокоуровневый sugar для агентов: verify JWT → billing → preflight/usage.
 // Принимает инъекцию verifier/billingClient (шов для тестов).
 import { JwksJwtVerifier, MultiIssuerJwtVerifier } from './auth/verifier'
+import {
+  CompositeVerifier,
+  OpaqueTokenVerifier,
+  looksLikeJwt,
+} from './auth/introspection'
 import { extractBearer } from './auth/headers'
 import { AuthError } from './auth/errors'
 import { createBillingClient } from './billing/client'
@@ -19,6 +24,15 @@ export interface AgentContextSettings {
     jwksUrl?: string
     /** Multi-issuer config (preferred). Routes by `iss`; e.g. product + widget channel. */
     issuers?: IssuerConfig[]
+    /**
+     * Долгоживущие opaque API-ключи: их валидирует introspection-эндпоинт billing-microservice.
+     * Если задан вместе с issuer(s) — собирается CompositeVerifier (JWT → JWKS, иначе → introspect).
+     */
+    introspection?: {
+      url: string
+      appsToken: string
+      cacheTtlMs?: number
+    }
     /** JWT обязателен (true) или допускается отсутствие на миграции (false). */
     required?: boolean
     leeway?: number
@@ -44,11 +58,10 @@ export interface ReportUsageInput {
 }
 
 /**
- * Build a verifier from auth settings: multi-issuer when `issuers` is set, otherwise the
- * legacy single-issuer config (requires issuer + audience + jwksUrl). Returns undefined
- * when no verification source is configured (migration mode handles a missing verifier).
+ * JWT-канал: multi-issuer when `issuers` is set, otherwise the legacy single-issuer config
+ * (requires issuer + audience + jwksUrl). Returns undefined when no JWT source is configured.
  */
-function buildVerifier(
+function buildJwtVerifier(
   auth: AgentContextSettings['auth'],
 ): JwtVerifier | undefined {
   if (auth.issuers?.length) {
@@ -66,6 +79,29 @@ function buildVerifier(
     })
   }
   return undefined
+}
+
+/**
+ * Build a verifier from auth settings. Combines the JWT channel (JWKS) and the opaque-key channel
+ * (introspection) into a CompositeVerifier when both are configured; returns whichever single one is
+ * configured otherwise, or undefined (migration mode handles a missing verifier).
+ */
+function buildVerifier(
+  auth: AgentContextSettings['auth'],
+): JwtVerifier | undefined {
+  const jwt = buildJwtVerifier(auth)
+  const opaque = auth.introspection?.url
+    ? new OpaqueTokenVerifier({
+        url: auth.introspection.url,
+        appsToken: auth.introspection.appsToken,
+        cacheTtlMs: auth.introspection.cacheTtlMs,
+      })
+    : undefined
+
+  if (jwt && opaque) {
+    return new CompositeVerifier({ jwt, opaque })
+  }
+  return jwt ?? opaque
 }
 
 export class AgentContext {
@@ -110,9 +146,12 @@ export class AgentContext {
       throw new AuthError('AgentContext: missing bearer token')
     }
 
-    // /state форвардит user-JWT (anti-IDOR по billing_org_id); usage-ingest
-    // (/events) — строго apps-token, т.к. этот эндпоинт user-JWT не принимает.
-    const forwardToken = token ?? settings.billing.appsAuthToken
+    // /state форвардит user-JWT (anti-IDOR по billing_org_id). Для opaque API-ключей (не-JWT)
+    // форвардим apps-token: billing /state не принимает opaque-ключ, а billingOrgId всё равно
+    // берётся из верифицированных claims, поэтому anti-IDOR сохраняется. usage-ingest (/events) —
+    // всегда apps-token.
+    const forwardToken =
+      token && looksLikeJwt(token) ? token : settings.billing.appsAuthToken
     const billing =
       overrides.billingClient ??
       createBillingClient({
