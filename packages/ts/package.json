@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-sdk",
-  "version": "0.1.0-alpha.6",
+  "version": "0.1.0-alpha.7",
   "description": "AI37 agent SDK: JWKS auth + billing + A2A forward for ecosystem agents",
   "type": "module",
   "license": "Apache-2.0",

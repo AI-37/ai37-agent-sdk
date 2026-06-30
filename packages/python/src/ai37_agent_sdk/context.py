@@ -5,6 +5,7 @@ from typing import Any
 
 from .auth.errors import AuthError
 from .auth.headers import extract_bearer
+from .auth.introspection import create_composite_verifier, looks_like_jwt
 from .auth.types import Claims, JwtVerifier
 from .auth.verifier import JwksJwtVerifier
 from .billing.client import create_billing_client
@@ -23,6 +24,11 @@ class AuthSettings:
     jwks_url: str | None = None
     required: bool = True
     leeway: int | None = None
+    # Долгоживущие opaque API-ключи: валидируются introspection-эндпоинтом billing-microservice.
+    # Если задан вместе с jwks_url — собирается CompositeVerifier (JWT → JWKS, иначе → introspect).
+    introspection_url: str | None = None
+    introspection_token: str | None = None
+    introspection_cache_ttl_ms: int | None = None
 
 
 @dataclass
@@ -70,26 +76,42 @@ class AgentContext:
         required = settings.auth.required
 
         active_verifier = verifier
-        if active_verifier is None and settings.auth.jwks_url:
-            active_verifier = JwksJwtVerifier(
-                issuer=settings.auth.issuer,
-                audience=settings.auth.audience,
-                jwks_url=settings.auth.jwks_url,
-                leeway=settings.auth.leeway if settings.auth.leeway is not None else 60,
-            )
+        if active_verifier is None:
+            jwt_verifier: JwtVerifier | None = None
+            if settings.auth.jwks_url:
+                jwt_verifier = JwksJwtVerifier(
+                    issuer=settings.auth.issuer,
+                    audience=settings.auth.audience,
+                    jwks_url=settings.auth.jwks_url,
+                    leeway=settings.auth.leeway if settings.auth.leeway is not None else 60,
+                )
+            if jwt_verifier is not None or settings.auth.introspection_url:
+                active_verifier = create_composite_verifier(
+                    jwt=jwt_verifier,
+                    introspection_url=settings.auth.introspection_url,
+                    introspection_token=settings.auth.introspection_token,
+                    introspection_cache_ttl_ms=settings.auth.introspection_cache_ttl_ms,
+                )
 
         claims: Claims | None = None
         if token:
             if active_verifier is None:
                 raise AuthError(
-                    "AgentContext: no JWT verifier configured (set auth.jwks_url)",
+                    "AgentContext: no JWT verifier configured (set auth.jwks_url or introspection)",
                     "config",
                 )
             claims = active_verifier.verify(token)
         elif required:
             raise AuthError("AgentContext: missing bearer token")
 
-        forward_token = token or settings.billing.apps_auth_token
+        # /state форвардит user-JWT (anti-IDOR). Для opaque API-ключей (не-JWT) форвардим
+        # apps-token: billing /state не принимает opaque-ключ, а billing_org_id берётся из
+        # верифицированных claims.
+        forward_token = (
+            token
+            if token and looks_like_jwt(token)
+            else settings.billing.apps_auth_token
+        )
         billing = billing_client or create_billing_client(
             base_url=settings.billing.base_url,
             auth_token=forward_token or "",

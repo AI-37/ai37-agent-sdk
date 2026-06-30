@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai37-agent-sdk"
-version = "0.1.0a0"
+version = "0.1.0a1"
 description = "AI37 agent SDK (Python): JWKS auth + billing + A2A forward for ecosystem agents"
 authors = ["AI37"]
 license = "Apache-2.0"
