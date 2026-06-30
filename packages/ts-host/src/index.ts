@@ -21,6 +21,9 @@ export {
   isLangfuseEnabled,
 } from './observability/langfuse'
 export type { BeginTurnArgs } from './observability/langfuse'
+// LLM-модель без локального tiktoken-подсчёта токенов (см. ai37-chat-completions). Требует
+// @langchain/openai у консьюмера (optional peer).
+export { Ai37ChatCompletions } from './ai37-chat-completions'
 export { jwtGuard } from './auth-guard'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
