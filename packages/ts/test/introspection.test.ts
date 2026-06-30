@@ -38,7 +38,11 @@ describe('looksLikeJwt', () => {
 
 describe('OpaqueTokenVerifier', () => {
   it('returns normalized claims for an active key', async () => {
-    const fetchMock = vi.fn(async () => jsonResponse({ active: true, claims: ACTIVE_CLAIMS }))
+    // Типизируем параметры мока под сигнатуру fetch, чтобы mock.calls[0] был типизирован.
+    const fetchMock = vi.fn(
+      async (_input: string | URL | Request, _init?: RequestInit) =>
+        jsonResponse({ active: true, claims: ACTIVE_CLAIMS }),
+    )
     const verifier = new OpaqueTokenVerifier({ url: URL, appsToken: APPS_TOKEN, fetch: fetchMock })
 
     const claims = await verifier.verify(OPAQUE_KEY)
@@ -48,10 +52,10 @@ describe('OpaqueTokenVerifier', () => {
     expect(claims.billing_org_id).toBe('billing-1')
     expect(claims.email).toBe('u@example.com')
     expect(fetchMock).toHaveBeenCalledTimes(1)
-    const [calledUrl, init] = fetchMock.mock.calls[0] as [string, RequestInit]
+    const [calledUrl, init] = fetchMock.mock.calls[0]
     expect(calledUrl).toBe(URL)
-    expect((init.headers as Record<string, string>).Authorization).toBe(`Bearer ${APPS_TOKEN}`)
-    expect(JSON.parse(init.body as string)).toEqual({ key: OPAQUE_KEY })
+    expect((init?.headers as Record<string, string>).Authorization).toBe(`Bearer ${APPS_TOKEN}`)
+    expect(JSON.parse(init?.body as string)).toEqual({ key: OPAQUE_KEY })
   })
 
   it('caches positive results by key (no second fetch)', async () => {
