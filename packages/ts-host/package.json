@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.1.0-alpha.17",
+  "version": "0.1.0-alpha.18",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -66,16 +66,21 @@
   },
   "peerDependencies": {
     "@ai37/agent-sdk": ">=0.1.0-alpha.5",
-    "@langchain/core": ">=0.3.8"
+    "@langchain/core": ">=0.3.8",
+    "@langchain/openai": ">=1.0.0"
   },
   "peerDependenciesMeta": {
     "@langchain/core": {
+      "optional": true
+    },
+    "@langchain/openai": {
       "optional": true
     }
   },
   "devDependencies": {
     "@ai37/agent-sdk": "file:../ts",
-    "@langchain/core": "^0.3.0",
+    "@langchain/core": "^1.1.0",
+    "@langchain/openai": "^1.4.7",
     "deepagents": "^1.10.2",
     "@types/express": "^4.17.21",
     "@types/node": "^24.11.0",
