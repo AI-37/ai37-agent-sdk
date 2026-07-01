@@ -261,3 +261,28 @@ export function injectTraceContext(): Record<string, string> {
   }
   return carrier
 }
+
+/**
+ * Оборачивает исходящий remote-A2A вызов в активный OTel-спан `remote-a2a:<agentId>`, чтобы
+ * `injectTraceContext` (внутри relay buildMessage) захватил ИМЕННО его. Без этого активен turn-спан
+ * (`agui-turn`), и суб-агент вешается в КОРЕНЬ трейса — параллельно callback-спану инструмента
+ * (`agent_<id>` от @langfuse/langchain, которого нет в OTel-active-цепочке), а не под свой вызов.
+ * С обёрткой дерево: turn → remote-a2a:<id> → turn-спан суб-агента → его планнер/поиск.
+ * No-op при выключенной трассировке; ошибки `run()` НЕ глотает (span закрывается, трейс уходит с ходом).
+ */
+export async function withRemoteA2aObservability<T>(
+  agentId: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const otel = await ensureOtel()
+  if (!otel) return run()
+  let result!: T
+  await otel.startActiveObservation(
+    `remote-a2a:${agentId}`,
+    async (span: LangfuseSpanLike) => {
+      span.update({ metadata: { agentId, kind: 'remote-a2a' } })
+      result = await run()
+    },
+  )
+  return result
+}
