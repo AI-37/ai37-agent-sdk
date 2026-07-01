@@ -18,6 +18,7 @@ export type { HostScope, HostLangfuseScope } from './als'
 export {
   withTurnObservability,
   injectTraceContext,
+  withRemoteA2aObservability,
   isLangfuseEnabled,
 } from './observability/langfuse'
 export type { BeginTurnArgs } from './observability/langfuse'
