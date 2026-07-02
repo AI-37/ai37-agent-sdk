@@ -56,8 +56,11 @@ export function mcpHttpHandler(
 ) {
   return async (req: Request, res: Response): Promise<void> => {
     const ctx = currentCtx()
-    const tools =
+    const resolved =
       typeof opts.tools === 'function' ? await opts.tools(ctx) : opts.tools
+    // Резолвер мог вернуть либо список, либо { tools, release } (занял ресурсы на запрос).
+    const tools = Array.isArray(resolved) ? resolved : resolved.tools
+    const release = Array.isArray(resolved) ? undefined : resolved.release
 
     const server = await buildMcpServer(serverInfo, tools, ctx)
     const { StreamableHTTPServerTransport } = await import(
@@ -70,6 +73,7 @@ export function mcpHttpHandler(
     res.on('close', () => {
       void transport.close()
       void server.close()
+      if (release) void release()
     })
     await server.connect(transport)
     // express.json() уже распарсил тело → передаём его третьим аргументом.

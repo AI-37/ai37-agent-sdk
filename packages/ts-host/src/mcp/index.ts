@@ -4,6 +4,7 @@ export type {
   McpOptions,
   McpToolDef,
   McpToolResult,
+  McpToolSet,
   McpToolsResolver,
 } from './types'
 export {

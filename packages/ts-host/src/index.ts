@@ -44,6 +44,7 @@ export type {
   McpOptions,
   McpToolDef,
   McpToolResult,
+  McpToolSet,
   McpToolsResolver,
   MountMcpOptions,
   ProtectedResourceMetadataOptions,

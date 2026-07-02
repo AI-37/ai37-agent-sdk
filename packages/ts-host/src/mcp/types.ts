@@ -28,15 +28,26 @@ export interface McpToolDef {
 }
 
 /**
+ * Набор tools + опциональное освобождение ресурсов ПОСЛЕ запроса (ref-count кэша, закрытие
+ * per-user коннектов и т.п.). Резолвер, который что-то «занимает» на запрос (напр.
+ * `IntegrationToolsCache.getTools`), возвращает `release` — хост вызовет его на закрытии ответа.
+ */
+export interface McpToolSet {
+  tools: McpToolDef[]
+  release?: () => void | Promise<void>
+}
+
+/**
  * Резолвер набора tools. Либо статический список (elevator/rag — набор известен на старте),
  * либо функция per-request, получающая verified `AgentContext` — так chat-backend строит
- * НАБОР ПО ПОЛЬЗОВАТЕЛЮ из токена запроса (агрегатор его интеграций).
+ * НАБОР ПО ПОЛЬЗОВАТЕЛЮ из токена запроса (агрегатор его интеграций). Функция может вернуть
+ * просто список ИЛИ `{ tools, release }` (если набор занимает ресурсы на время запроса).
  */
 export type McpToolsResolver =
   | McpToolDef[]
   | ((
       ctx: AgentContext | undefined,
-    ) => Promise<McpToolDef[]> | McpToolDef[])
+    ) => Promise<McpToolDef[] | McpToolSet> | McpToolDef[] | McpToolSet)
 
 /** Опция `mcp` для `createAgentHost`: превращает агента в MCP Resource Server. */
 export interface McpOptions {

@@ -153,6 +153,45 @@ describe('mcp resource server — tools через in-memory клиент', () =
   })
 })
 
+describe('mcp resource server — lifecycle резолвера', () => {
+  it('резолвер {tools, release}: release вызывается по завершении запроса', async () => {
+    let released = false
+    const relApp = createAgentHost({
+      card,
+      handler,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      mcp: {
+        tools: async () => ({
+          tools: [calcTool],
+          release: () => {
+            released = true
+          },
+        }),
+      },
+      buildInfo: { name: 'test', version: '9.9.9' },
+    })
+    await request(relApp)
+      .post('/mcp')
+      .set('Accept', 'application/json, text/event-stream')
+      .send({
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: {
+          protocolVersion: '2025-06-18',
+          capabilities: {},
+          clientInfo: { name: 't', version: '1' },
+        },
+      })
+    // release навешен на res 'close' — дождёмся микро-паузы после ответа.
+    await new Promise((r) => setTimeout(r, 50))
+    expect(released).toBe(true)
+  })
+})
+
 describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () => {
   it('строит AgentInput из query, зовёт handler.run, возвращает message', async () => {
     let seen: string | undefined
