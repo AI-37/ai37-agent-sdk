@@ -6,6 +6,7 @@ import { InMemoryTransport } from '@modelcontextprotocol/sdk/inMemory.js'
 import {
   createAgentHost,
   buildMcpServer,
+  bridgeHandlerToMcpTool,
   protectedResourceMetadataUrl,
   deriveAuthorizationServers,
   type AgentHandler,
@@ -131,5 +132,46 @@ describe('mcp resource server — tools через in-memory клиент', () =
 
     await client.close()
     await server.close()
+  })
+})
+
+describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () => {
+  it('строит AgentInput из query, зовёт handler.run, возвращает message', async () => {
+    let seen: string | undefined
+    const dialogHandler: AgentHandler = {
+      async run({ input, ctx }) {
+        seen = input.text
+        return {
+          status: 'input-required',
+          message: `эхо:${input.text}:org=${ctx?.billingOrgId ?? 'none'}`,
+        }
+      },
+    }
+    const tool = bridgeHandlerToMcpTool(dialogHandler, {
+      name: 'calc_lifts',
+      description: 'расчёт',
+      textModes: ['text/plain'],
+    })
+    const res = await tool.handler({ query: 'дом 12 этажей' }, undefined)
+    expect(seen).toBe('дом 12 этажей')
+    expect(res.content[0].text).toBe('эхо:дом 12 этажей:org=none')
+    // input-required — не ошибка (диалоговый агент не завершает задачу).
+    expect(res.isError).toBe(false)
+  })
+
+  it('renderResult переопределяет текст, failed → isError', async () => {
+    const failing: AgentHandler = {
+      async run() {
+        return { status: 'failed', result: { code: 42 } }
+      },
+    }
+    const tool = bridgeHandlerToMcpTool(failing, {
+      name: 't',
+      description: 'd',
+      renderResult: (r) => `status=${r.status}`,
+    })
+    const res = await tool.handler({ query: 'x' }, undefined)
+    expect(res.content[0].text).toBe('status=failed')
+    expect(res.isError).toBe(true)
   })
 })

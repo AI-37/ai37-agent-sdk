@@ -13,6 +13,7 @@ export {
 } from './resource-metadata'
 export { mcpChallengeGuard } from './challenge-guard'
 export { buildMcpServer, mcpHttpHandler } from './mcp-server'
+export { bridgeHandlerToMcpTool, type BridgeToolOptions } from './bridge'
 export {
   mountMcp,
   deriveAuthorizationServers,

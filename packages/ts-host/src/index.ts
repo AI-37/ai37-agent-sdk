@@ -38,6 +38,7 @@ export {
   mcpChallengeGuard,
   protectedResourceMetadataRouter,
   protectedResourceMetadataUrl,
+  bridgeHandlerToMcpTool,
 } from './mcp'
 export type {
   McpOptions,
@@ -46,6 +47,7 @@ export type {
   McpToolsResolver,
   MountMcpOptions,
   ProtectedResourceMetadataOptions,
+  BridgeToolOptions,
 } from './mcp'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
