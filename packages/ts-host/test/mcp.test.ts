@@ -96,6 +96,24 @@ describe('mcp resource server — discovery + challenge', () => {
     expect(r.body.resource).toBe('http://localhost/mcp')
   })
 
+  it('card.url относительный → MCP не монтируется, но хост жив', async () => {
+    const relApp = createAgentHost({
+      card: { ...card, url: '/a2a/v1' },
+      handler,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      mcp: { tools: [calcTool] },
+      buildInfo: { name: 'test' },
+    })
+    expect((await request(relApp).get('/api/v1/health')).status).toBe(200)
+    expect(
+      (await request(relApp).get('/.well-known/oauth-protected-resource'))
+        .status,
+    ).toBe(404)
+  })
+
   it('POST /mcp без токена (required) → 401 + WWW-Authenticate с resource_metadata', async () => {
     const r = await request(app(true))
       .post('/mcp')

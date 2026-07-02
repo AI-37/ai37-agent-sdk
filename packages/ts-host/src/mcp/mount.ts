@@ -43,7 +43,20 @@ export interface MountMcpOptions {
  * MCP-URL — из `card.url` (тот же origin, что A2A-эндпоинт).
  */
 export function mountMcp(app: Express, opts: MountMcpOptions): void {
-  const origin = new URL(opts.card.url).origin
+  // MCP-экспорту нужен публичный АБСОЛЮТНЫЙ http(s)-URL (из `card.url`). Если он не задан/относителен
+  // (напр. BASE_URL пуст в dev/тестах) — не монтируем MCP и НЕ роняем хост (A2A/AG-UI работают).
+  let origin: string
+  try {
+    const u = new URL(opts.card.url)
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('non-http')
+    origin = u.origin
+  } catch {
+    console.warn(
+      '[ai37-agent-host] mcp: card.url не является абсолютным http(s)-URL — ' +
+        'MCP-эндпоинт не смонтирован (задайте публичный BASE_URL/A2A_HOST_BASE_URL).',
+    )
+    return
+  }
   const mcpUrl = `${origin}${MCP_PATH}`
   const resourceMetadataUrl = protectedResourceMetadataUrl(mcpUrl)
   const authorizationServers = deriveAuthorizationServers(
