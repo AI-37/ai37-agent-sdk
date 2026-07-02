@@ -3,6 +3,27 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.20] - 2026-07-02
+
+### Added
+- **«Экспорт» агента как MCP Resource Server.** Новая опция `mcp` в `createAgentHost` монтирует
+  `/mcp` (StreamableHTTP) + OAuth-discovery (`.well-known/oauth-protected-resource`, RFC 9728) за
+  тем же verified auth, что A2A/AG-UI. Внешние MCP-клиенты (Claude/Cursor/…) подключают агента как
+  набор tool'ов.
+  - `mcp: { tools, scopes?, serverName? }` — `tools` это статический список `McpToolDef[]` ИЛИ
+    per-request резолвер `(ctx) => McpToolDef[]` (для НАБОРА ПО ПОЛЬЗОВАТЕЛЮ из токена, напр.
+    агрегатор оркестратора).
+  - `mcpChallengeGuard`: на 401 отдаёт `WWW-Authenticate: Bearer resource_metadata="…"` (MCP-спека),
+    проверку токена делает тот же `AgentContext.fromRequest`/`CompositeVerifier` (JWT→JWKS Authentik
+    или API-ключ→introspection billing), открывает ALS-scope → tool handler видит `currentCtx()`.
+  - `authorization_servers` в protected-resource-metadata деривятся из `agentContext.auth.issuers`
+    (Authentik). Публичный MCP-URL — из `card.url` (тот же origin, что A2A).
+  - `@modelcontextprotocol/sdk` и `zod` — **optional-peer** (грузятся динамически внутри MCP-пути),
+    поэтому не-MCP потребители agent-host их не тянут.
+  - Экспортированы низкоуровневые примитивы (`buildMcpServer`, `protectedResourceMetadataRouter`,
+    `mcpHttpHandler`, …) — для потребителей вне agent-host (напр. NestJS rag-factory со своим guard'ом).
+  - Аддитивно и обратно совместимо: без опции `mcp` поведение хоста не меняется.
+
 ## [0.1.0-alpha.14] - 2026-06-23
 
 ### Added

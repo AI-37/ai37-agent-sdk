@@ -18,6 +18,8 @@ import {
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
+import { mountMcp } from './mcp/mount'
+import type { McpOptions } from './mcp/types'
 import type { AgentHandler } from './types'
 
 export interface AgentHostOptions {
@@ -44,6 +46,13 @@ export interface AgentHostOptions {
    * (per-process, не переживает рестарт/реплики) — для durable передайте свой стор.
    */
   taskStore?: TaskStore
+  /**
+   * «Экспорт» агента как MCP Resource Server: монтирует `/mcp` (StreamableHTTP) +
+   * protected-resource-metadata (OAuth-discovery на Authentik) за тем же токен-guard'ом,
+   * что A2A/AG-UI. `tools` — статический список ИЛИ per-request резолвер (для per-user
+   * наборов). Не задан → MCP-эндпоинт не монтируется (поведение агента не меняется).
+   */
+  mcp?: McpOptions
 }
 
 /**
@@ -109,6 +118,19 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   )
 
   app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds, taskStore))
+
+  // «Экспорт» MCP (опционально): /mcp + protected-resource-metadata за тем же verified auth.
+  // Отдельный challenge-guard (RFC 9728: 401 + WWW-Authenticate), а не общий jwtGuard.
+  if (opts.mcp) {
+    mountMcp(app, {
+      card: opts.card,
+      mcp: opts.mcp,
+      agentContext: opts.agentContext,
+      required,
+      overrides: devOverrides,
+      buildInfo: info,
+    })
+  }
 
   return app
 }

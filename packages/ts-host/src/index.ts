@@ -26,6 +26,30 @@ export type { BeginTurnArgs } from './observability/langfuse'
 // @langchain/openai у консьюмера (optional peer).
 export { Ai37ChatCompletions } from './ai37-chat-completions'
 export { jwtGuard } from './auth-guard'
+// MCP «экспорт»: агент как MCP Resource Server (StreamableHTTP + OAuth-discovery). Низкоуровневые
+// примитивы (buildMcpServer/protectedResourceMetadataRouter) — для потребителей вне agent-host
+// (напр. NestJS rag-factory со своим guard'ом).
+export {
+  mountMcp,
+  deriveAuthorizationServers,
+  MCP_PATH,
+  buildMcpServer,
+  mcpHttpHandler,
+  mcpChallengeGuard,
+  protectedResourceMetadataRouter,
+  protectedResourceMetadataUrl,
+  bridgeHandlerToMcpTool,
+} from './mcp'
+export type {
+  McpOptions,
+  McpToolDef,
+  McpToolResult,
+  McpToolSet,
+  McpToolsResolver,
+  MountMcpOptions,
+  ProtectedResourceMetadataOptions,
+  BridgeToolOptions,
+} from './mcp'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
 export { toTask, agentMessage } from './build-task'
