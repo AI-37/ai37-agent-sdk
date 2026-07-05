@@ -14,6 +14,12 @@ import { injectTraceContext } from '../observability/langfuse'
 export interface RemoteA2aRequest {
   /** Текст запроса/задачи (на естественном языке) сабагенту. */
   query: string
+  /**
+   * Структурный payload → A2A `data`-part (`message.parts[{kind:'data'}]`). Для schema-aware вызова
+   * (structured-tool из `skillsIo`): агент-сервер читает его как `AgentInput.data` и считает без
+   * NL-парсинга/диалога. Пусто/отсутствует → обычный текстовый вызов.
+   */
+  data?: Record<string, unknown>
   /** Стабильный A2A contextId диалога (обычно contextId хода оркестратора). */
   contextId?: string
   /** Resume: childTaskId, если на прошлом ходу сабагент был `input-required` (HITL/wizard). */
@@ -63,11 +69,16 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   // трассировка выключена.
   Object.assign(metadata, injectTraceContext())
 
+  const parts: Message['parts'] = [{ kind: 'text' as const, text: req.query }]
+  // Структурный вход: A2A data-part рядом с текстом → сервер прочитает как AgentInput.data.
+  if (req.data && Object.keys(req.data).length > 0) {
+    parts.push({ kind: 'data' as const, data: req.data })
+  }
   const message = {
     kind: 'message' as const,
     role: 'user' as const,
     messageId: uuidv4(),
-    parts: [{ kind: 'text' as const, text: req.query }],
+    parts,
     ...(req.contextId ? { contextId: req.contextId } : {}),
     ...(withResume && req.resumeTaskId ? { taskId: req.resumeTaskId } : {}),
     ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
