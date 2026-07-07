@@ -34,6 +34,12 @@ export interface RemoteA2aRequest {
   contextRefs?: string[]
   /** Манифест приложенных файлов (имена/summary) → `message.metadata.ai37.context_files`. */
   contextFiles?: ContextFile[]
+  /**
+   * Человеко-гейт → `message.metadata.ai37.confirm_mode`. `auto` → сабагент выполняет oneshot без
+   * подтверждения (машинный вызов: MCP-агрегатор); `ask`/отсутствие → диалог+confirm (ход человека).
+   * Ставит доверенная граница (агрегатор/оркестратор). НЕ путать с `configuration.blocking` (транспорт).
+   */
+  confirmMode?: 'ask' | 'auto'
   /** Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. */
   extraMetadata?: Record<string, unknown>
 }
@@ -61,6 +67,8 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   const ai37: Record<string, unknown> = {}
   if (req.contextRefs?.length) ai37.context_refs = req.contextRefs
   if (req.contextFiles?.length) ai37.context_files = req.contextFiles
+  // Человеко-гейт: форвардим вниз, чтобы сабагент знал, можно ли считать без confirm (машинный вызов).
+  if (req.confirmMode) ai37.confirm_mode = req.confirmMode
   if (Object.keys(ai37).length > 0) metadata.ai37 = ai37
   if (req.action) metadata.a2uiAction = { userAction: req.action }
   if (req.extraMetadata) Object.assign(metadata, req.extraMetadata)

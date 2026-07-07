@@ -52,6 +52,14 @@ export interface Ai37Metadata {
   intent?: IntentEnvelope
   trace_id?: string
   /**
+   * Человеко-гейт (confirm_mode): согласие выполнить задачу без интерактивного подтверждения.
+   * `auto` — сабагент МОЖЕТ посчитать oneshot без confirm (машинный вызов: MCP-агрегатор/structured);
+   * `ask`/отсутствие — обязателен диалог+confirm (ход человека). Ставит доверенная граница
+   * (агрегатор/оркестратор), цепочка форвардит. НЕ путать с A2A `configuration.blocking` (транспорт:
+   * ждать ли синхронно). Дефолт-политику (`ask` при отсутствии) применяет агент-потребитель.
+   */
+  confirm_mode?: 'ask' | 'auto'
+  /**
    * Принимаемые клиентом форматы вывода (content-negotiation, РЕШЕНИЕ 10).
    * Носитель ТОЛЬКО для AG-UI (`forwardedProps.ai37`), где нет нативного A2A-поля.
    * Для A2A носитель — нативный `params.configuration.acceptedOutputModes` (НЕ этот конверт).
