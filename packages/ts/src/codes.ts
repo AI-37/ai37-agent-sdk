@@ -2,8 +2,10 @@
 
 export enum BillingFeatureCode {
   ElevatorCalcAgent = 'elevator-calc-agent',
+  ThermalCalcAgent = 'thermal-calc-agent',
 }
 
 export enum BillingPrivilegeCode {
   ElevatorCalcAllowed = 'elevator-calc-allowed',
+  ThermalCalcAllowed = 'thermal-calc-allowed',
 }

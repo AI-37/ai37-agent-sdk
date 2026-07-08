@@ -5,6 +5,11 @@
       "code": "elevator-calc-agent",
       "constant": "ElevatorCalcAgent",
       "name": "Elevator Calculation Agent"
+    },
+    {
+      "code": "thermal-calc-agent",
+      "constant": "ThermalCalcAgent",
+      "name": "Thermal Calculation Agent"
     }
   ],
   "privileges": [
@@ -12,6 +17,11 @@
       "code": "elevator-calc-allowed",
       "constant": "ElevatorCalcAllowed",
       "name": "Elevator Calculation Allowed"
+    },
+    {
+      "code": "thermal-calc-allowed",
+      "constant": "ThermalCalcAllowed",
+      "name": "Thermal Calculation Allowed"
     }
   ]
 }
