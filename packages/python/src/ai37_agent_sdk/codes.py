@@ -3,7 +3,9 @@ from enum import Enum
 
 class BillingFeatureCode(str, Enum):
     ElevatorCalcAgent = "elevator-calc-agent"
+    MinstroyAgent = "minstroy-agent"
 
 
 class BillingPrivilegeCode(str, Enum):
     ElevatorCalcAllowed = "elevator-calc-allowed"
+    MinstroyCheckInn = "minstroy-check-inn"

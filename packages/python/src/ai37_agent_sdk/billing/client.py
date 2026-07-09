@@ -29,6 +29,7 @@ class HttpBillingClient:
         *,
         base_url: str,
         auth_token: str,
+        usage_ingest_token: str,
         timeout_ms: int = 5000,
         runtime_state_cache_ttl_ms: int = 5000,
         http_client: httpx.Client | None = None,
@@ -36,10 +37,13 @@ class HttpBillingClient:
         validate_options(
             base_url=base_url,
             auth_token=auth_token,
+            usage_ingest_token=usage_ingest_token,
             runtime_state_cache_ttl_ms=runtime_state_cache_ttl_ms,
         )
         self._base = normalize_billing_base_url(base_url)
         self._token = auth_token
+        # /events (usage-ingest) — под apps-token: этот эндпоинт user-JWT не принимает.
+        self._usage_token = usage_ingest_token
         self._ttl = runtime_state_cache_ttl_ms / 1000
         self._client = http_client or httpx.Client(timeout=timeout_ms / 1000)
         self._cache: dict[str, tuple[float, BillingRuntimeState]] = {}
@@ -84,7 +88,10 @@ class HttpBillingClient:
         payload = _build_usage_payload(event)
         response = self._client.post(
             f"{self._base}/api/v1/events",
-            headers={**self._auth_headers(), "Content-Type": "application/json"},
+            headers={
+                "Authorization": f"Bearer {self._usage_token}",
+                "Content-Type": "application/json",
+            },
             json=payload,
         )
         ensure_ok(response, "Billing usage event rejected")
@@ -94,6 +101,7 @@ def create_billing_client(
     *,
     base_url: str,
     auth_token: str,
+    usage_ingest_token: str,
     timeout_ms: int = 5000,
     runtime_state_cache_ttl_ms: int = 5000,
     http_client: httpx.Client | None = None,
@@ -101,6 +109,7 @@ def create_billing_client(
     return HttpBillingClient(
         base_url=base_url,
         auth_token=auth_token,
+        usage_ingest_token=usage_ingest_token,
         timeout_ms=timeout_ms,
         runtime_state_cache_ttl_ms=runtime_state_cache_ttl_ms,
         http_client=http_client,

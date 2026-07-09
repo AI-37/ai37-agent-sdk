@@ -115,6 +115,7 @@ class AgentContext:
         billing = billing_client or create_billing_client(
             base_url=settings.billing.base_url,
             auth_token=forward_token or "",
+            usage_ingest_token=settings.billing.apps_auth_token or "",
             timeout_ms=settings.billing.timeout_ms or 5000,
             runtime_state_cache_ttl_ms=(
                 settings.billing.runtime_state_cache_ttl_ms

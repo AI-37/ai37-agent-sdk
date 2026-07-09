@@ -34,6 +34,13 @@ from .context import (
     AuthSettings,
     BillingSettings,
 )
+from .output_modes import (
+    OUTPUT_MODE_MARKDOWN,
+    OUTPUT_MODE_MARKDOWN_SPAI,
+    OUTPUT_MODE_TEXT,
+    TEXT_OUTPUT_MODES,
+    is_text_output_mode,
+)
 
 __all__ = [
     # auth
@@ -67,4 +74,10 @@ __all__ = [
     # codes
     "BillingFeatureCode",
     "BillingPrivilegeCode",
+    # output-modes
+    "OUTPUT_MODE_TEXT",
+    "OUTPUT_MODE_MARKDOWN",
+    "OUTPUT_MODE_MARKDOWN_SPAI",
+    "TEXT_OUTPUT_MODES",
+    "is_text_output_mode",
 ]
