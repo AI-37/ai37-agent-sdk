@@ -5,6 +5,7 @@ from .attachments_store_backend import (
     ChatAttachmentsStoreBackend,
     ProjectAttachmentsStoreBackend,
 )
+from .chat_store_backend import ChatStoreBackend
 from .file_context import context_file_path, render_context_files_manifest
 from .types import (
     EditResult,
@@ -26,6 +27,7 @@ __all__ = [
     "AttachmentsStoreBackendBase",
     "ChatAttachmentsStoreBackend",
     "ProjectAttachmentsStoreBackend",
+    "ChatStoreBackend",
     "FileInfo",
     "GrepMatch",
     "LsResult",

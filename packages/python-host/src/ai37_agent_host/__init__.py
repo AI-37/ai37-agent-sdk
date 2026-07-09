@@ -37,6 +37,7 @@ from .output_modes import (
 from .store_backend import (
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
+    ChatStoreBackend,
     ProjectAttachmentsStoreBackend,
     StoreBackend,
     context_file_path,
@@ -120,6 +121,7 @@ __all__ = [
     "AttachmentsStoreBackendBase",
     "ChatAttachmentsStoreBackend",
     "ProjectAttachmentsStoreBackend",
+    "ChatStoreBackend",
     "context_file_path",
     "render_context_files_manifest",
 ]
