@@ -5,6 +5,7 @@
 
 from .a2a_executor import HostExecutor
 from .a2ui import A2uiMessage, component_to_a2ui_operations
+from .agui import agui_routes
 from .als import (
     HostLangfuseScope,
     HostScope,
@@ -129,6 +130,8 @@ __all__ = [
     "create_agent_host",
     "HostExecutor",
     "AuthGuardMiddleware",
+    # agui (AG-UI SSE adapter)
+    "agui_routes",
     # store-backend (file-aware)
     "StoreBackend",
     "AttachmentsStoreBackendBase",
