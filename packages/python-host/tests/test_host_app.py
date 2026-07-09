@@ -16,6 +16,13 @@ CARD = {
     "defaultOutputModes": ["text/markdown", "text/plain"],
     "capabilities": {"streaming": True},
     "skills": [{"id": "s", "name": "S", "description": "d"}],
+    "x-ai37": {
+        "billing": {
+            "metered": True,
+            "feature": "minstroy-agent",
+            "privilege": "minstroy-check-inn",
+        },
+    },
 }
 
 
@@ -43,6 +50,9 @@ def test_health_and_agent_card():
     body = client.get("/.well-known/agent-card.json").json()
     assert body["name"] == "Test Agent"
     assert body["defaultOutputModes"] == ["text/markdown", "text/plain"]
+    # x-ai37-расширение переживает protobuf-нормализацию (нужно orchestrator-фильтру Ф9).
+    assert body["x-ai37"]["billing"]["feature"] == "minstroy-agent"
+    assert body["x-ai37"]["billing"]["privilege"] == "minstroy-check-inn"
 
 
 def test_guard_401_when_required_and_no_token():

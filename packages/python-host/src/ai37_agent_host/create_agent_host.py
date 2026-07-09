@@ -50,6 +50,13 @@ def create_agent_host(
     info = dict(build_info or {})
     agent_card = _as_agent_card(card)
     card_dict = agent_card_to_dict(agent_card)
+    # protobuf AgentCard не имеет слота под расширения (x-ai37) и top-level url/protocolVersion —
+    # ParseDict их отбрасывает. Возвращаем их из исходного dict в ОТДАВАЕМЫЙ card-JSON (иначе
+    # orchestrator-фильтр по x-ai37.billing.{feature,privilege} и клиентский url потерялись бы).
+    if isinstance(card, dict):
+        for key, value in card.items():
+            if key.startswith("x-") or (key in ("url", "protocolVersion") and key not in card_dict):
+                card_dict[key] = value
     # Content-negotiation: текст = card.defaultOutputModes; каталог(и) = catalog_id.
     agent_text_modes = [
         m for m in (card_dict.get("defaultOutputModes") or []) if isinstance(m, str)
