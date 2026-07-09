@@ -23,6 +23,13 @@ from .als import (
 )
 from .auth_guard import AuthGuardMiddleware
 from .create_agent_host import create_agent_host
+from .llm import (
+    LITELLM_BASE_URL_ENV,
+    LlmConfig,
+    LlmConfigurationError,
+    create_openai_client,
+    resolve_llm_config,
+)
 from .output_modes import (
     A2UI_CAPABILITIES_VERSION,
     client_supports_catalog,
@@ -112,6 +119,12 @@ __all__ = [
     # a2ui
     "A2uiMessage",
     "component_to_a2ui_operations",
+    # llm (client from ctx.llm_key + LITELLM_BASE_URL)
+    "LITELLM_BASE_URL_ENV",
+    "LlmConfig",
+    "LlmConfigurationError",
+    "resolve_llm_config",
+    "create_openai_client",
     # host app
     "create_agent_host",
     "HostExecutor",
