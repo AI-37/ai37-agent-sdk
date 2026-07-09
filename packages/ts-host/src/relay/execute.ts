@@ -112,10 +112,16 @@ export async function executeRemoteA2a(
   }
 }
 
-/** Промежуточное событие прогресса/COT удалённого агента (из A2A `status-update` метаданных). */
+/** Промежуточное событие прогресса удалённого агента (из A2A-потока). */
 export interface RemoteA2aProgressEvent {
-  type: 'node' | 'reasoning'
-  /** Имя ноды (для `node`) или reasoning-дельта (для `reasoning`). */
+  /**
+   * `node`/`reasoning` — из `status-update.metadata` (`ai37/node` / `ai37/reasoning`, COT);
+   * `text` — дельта ФИНАЛЬНОГО текста ответа из канонических `artifact-update`(append) text-частей
+   * (A2A-нативный стрим артефакта, без кастомных каналов). Потребитель льёт её в AG-UI
+   * `TEXT_MESSAGE_CONTENT` вместо ожидания готового текста в конце.
+   */
+  type: 'node' | 'reasoning' | 'text'
+  /** Имя ноды (`node`), reasoning-дельта (`reasoning`) или дельта текста ответа (`text`). */
   value: string
 }
 
@@ -145,6 +151,14 @@ async function drainStream(
       if (typeof reasoning === 'string') onEvent({ type: 'reasoning', value: reasoning })
       if (task && ev.taskId === task.id) task = { ...task, status: ev.status }
     } else if (ev.kind === 'artifact-update') {
+      // Канон A2A: `artifact-update`(append) с text-частями — стрим финального текста. Поднимаем
+      // каждую text-часть как дельту (append → part.text уже дельта); data-части (a2ui) не трогаем —
+      // они уедут потребителю через `extractA2ui` из накопленного task.
+      for (const part of ev.artifact.parts ?? []) {
+        if (part.kind === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+          onEvent({ type: 'text', value: part.text })
+        }
+      }
       if (task && ev.taskId === task.id) {
         const artifacts = [...(task.artifacts ?? [])]
         const idx = artifacts.findIndex((a) => a.artifactId === ev.artifact.artifactId)
