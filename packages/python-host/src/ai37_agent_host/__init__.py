@@ -35,6 +35,9 @@ from .output_modes import (
     read_client_capabilities,
 )
 from .store_backend import (
+    AttachmentsStoreBackendBase,
+    ChatAttachmentsStoreBackend,
+    ProjectAttachmentsStoreBackend,
     StoreBackend,
     context_file_path,
     render_context_files_manifest,
@@ -114,6 +117,9 @@ __all__ = [
     "AuthGuardMiddleware",
     # store-backend (file-aware)
     "StoreBackend",
+    "AttachmentsStoreBackendBase",
+    "ChatAttachmentsStoreBackend",
+    "ProjectAttachmentsStoreBackend",
     "context_file_path",
     "render_context_files_manifest",
 ]
