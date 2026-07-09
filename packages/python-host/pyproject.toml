@@ -1,0 +1,49 @@
+[tool.poetry]
+name = "ai37-agent-host"
+version = "0.1.0a1"
+description = "AI37 agent host (Python): A2A + AG-UI + MCP + file-aware store backends поверх a2a-sdk и ai37-agent-sdk. Порт @ai37/agent-host."
+authors = ["AI37"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{ include = "ai37_agent_host", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+# Базовый SDK (auth/billing/a2a/context/output-modes) — локальный peer в монорепо.
+ai37-agent-sdk = { path = "../python", develop = true }
+# Несущий A2A-протокол (Starlette-сервер, AgentExecutor, TaskUpdater, TaskStore).
+a2a-sdk = ">=1.0.0"
+starlette = ">=0.37"
+httpx = ">=0.27,<0.29"
+anyio = ">=4.4"
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = ">=0.24,<0.26"
+ruff = ">=0.6,<0.13"
+mypy = "^1.11"
+
+# Опциональные группы подключаются по мере реализации модулей:
+#   mcp (python mcp SDK), observability (langfuse + opentelemetry),
+#   agui (ag-ui protocol / самописный SSE), files (deepagents CompositeBackend).
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

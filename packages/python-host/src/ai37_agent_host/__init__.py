@@ -1,0 +1,78 @@
+"""ai37-agent-host (Python): A2A + AG-UI + MCP + file-aware store backends поверх a2a-sdk.
+
+Порт ``@ai37/agent-host``. Публичный API расширяется по мере реализации модулей (Фаза 2).
+"""
+
+from .als import (
+    HostLangfuseScope,
+    HostScope,
+    current_accepted_output_modes,
+    current_bearer,
+    current_ctx,
+    current_langfuse_callbacks,
+    current_langfuse_handler,
+    current_langfuse_trace,
+    current_scope,
+    current_supported_catalog_ids,
+    current_trace_id,
+    reset_scope,
+    scope_context,
+    set_scope,
+)
+from .types import (
+    A2uiAction,
+    A2uiComponent,
+    A2uiEvent,
+    AgentChannel,
+    AgentEvent,
+    AgentHandler,
+    AgentInput,
+    AgentRequest,
+    AgentResult,
+    AgentStatus,
+    Ai37Metadata,
+    ContextFile,
+    IntentEnvelope,
+    NodeEvent,
+    OutputNegotiation,
+    ReasoningEvent,
+    TextEvent,
+    ToolEvent,
+)
+
+__all__ = [
+    # types
+    "AgentChannel",
+    "OutputNegotiation",
+    "IntentEnvelope",
+    "ContextFile",
+    "Ai37Metadata",
+    "A2uiComponent",
+    "AgentStatus",
+    "A2uiAction",
+    "AgentInput",
+    "AgentEvent",
+    "NodeEvent",
+    "TextEvent",
+    "A2uiEvent",
+    "ReasoningEvent",
+    "ToolEvent",
+    "AgentResult",
+    "AgentRequest",
+    "AgentHandler",
+    # als
+    "HostScope",
+    "HostLangfuseScope",
+    "set_scope",
+    "reset_scope",
+    "scope_context",
+    "current_scope",
+    "current_ctx",
+    "current_bearer",
+    "current_accepted_output_modes",
+    "current_supported_catalog_ids",
+    "current_trace_id",
+    "current_langfuse_trace",
+    "current_langfuse_handler",
+    "current_langfuse_callbacks",
+]
