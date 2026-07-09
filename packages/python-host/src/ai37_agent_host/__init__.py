@@ -3,6 +3,7 @@
 Порт ``@ai37/agent-host``. Публичный API расширяется по мере реализации модулей (Фаза 2).
 """
 
+from .a2a_executor import HostExecutor
 from .a2ui import A2uiMessage, component_to_a2ui_operations
 from .als import (
     HostLangfuseScope,
@@ -20,6 +21,8 @@ from .als import (
     scope_context,
     set_scope,
 )
+from .auth_guard import AuthGuardMiddleware
+from .create_agent_host import create_agent_host
 from .output_modes import (
     A2UI_CAPABILITIES_VERSION,
     client_supports_catalog,
@@ -100,4 +103,8 @@ __all__ = [
     # a2ui
     "A2uiMessage",
     "component_to_a2ui_operations",
+    # host app
+    "create_agent_host",
+    "HostExecutor",
+    "AuthGuardMiddleware",
 ]
