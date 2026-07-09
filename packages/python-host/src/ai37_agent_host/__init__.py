@@ -3,6 +3,7 @@
 Порт ``@ai37/agent-host``. Публичный API расширяется по мере реализации модулей (Фаза 2).
 """
 
+from .a2ui import A2uiMessage, component_to_a2ui_operations
 from .als import (
     HostLangfuseScope,
     HostScope,
@@ -18,6 +19,17 @@ from .als import (
     reset_scope,
     scope_context,
     set_scope,
+)
+from .output_modes import (
+    A2UI_CAPABILITIES_VERSION,
+    client_supports_catalog,
+    filter_a2ui_by_catalog,
+    filter_a2ui_components,
+    negotiate_catalog,
+    negotiate_catalogs,
+    negotiate_output,
+    negotiate_text,
+    read_client_capabilities,
 )
 from .types import (
     A2uiAction,
@@ -75,4 +87,17 @@ __all__ = [
     "current_langfuse_trace",
     "current_langfuse_handler",
     "current_langfuse_callbacks",
+    # output-modes (host negotiation)
+    "A2UI_CAPABILITIES_VERSION",
+    "negotiate_text",
+    "negotiate_catalog",
+    "negotiate_catalogs",
+    "negotiate_output",
+    "read_client_capabilities",
+    "client_supports_catalog",
+    "filter_a2ui_components",
+    "filter_a2ui_by_catalog",
+    # a2ui
+    "A2uiMessage",
+    "component_to_a2ui_operations",
 ]
