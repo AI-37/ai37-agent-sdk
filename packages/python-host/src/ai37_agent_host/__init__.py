@@ -34,6 +34,11 @@ from .output_modes import (
     negotiate_text,
     read_client_capabilities,
 )
+from .store_backend import (
+    StoreBackend,
+    context_file_path,
+    render_context_files_manifest,
+)
 from .types import (
     A2uiAction,
     A2uiComponent,
@@ -107,4 +112,8 @@ __all__ = [
     "create_agent_host",
     "HostExecutor",
     "AuthGuardMiddleware",
+    # store-backend (file-aware)
+    "StoreBackend",
+    "context_file_path",
+    "render_context_files_manifest",
 ]
