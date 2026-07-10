@@ -42,6 +42,7 @@ from .output_modes import (
     negotiate_text,
     read_client_capabilities,
 )
+from .redis_task_store import RedisTaskStore
 from .store_backend import (
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
@@ -130,6 +131,8 @@ __all__ = [
     "create_agent_host",
     "HostExecutor",
     "AuthGuardMiddleware",
+    # durable task store (A2A tasks/get/list reconcile)
+    "RedisTaskStore",
     # agui (AG-UI SSE adapter)
     "agui_routes",
     # store-backend (file-aware)
