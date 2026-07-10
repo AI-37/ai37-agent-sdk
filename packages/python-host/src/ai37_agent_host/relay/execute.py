@@ -66,11 +66,46 @@ class RemoteA2aResult:
 
 
 @dataclass
-class RemoteA2aProgressEvent:
-    """Промежуточное событие прогресса/COT удалённого агента (из A2A ``status-update``)."""
+class RemoteA2aToolCall:
+    """Структурный тул-колл сабагента (для ``type:'tool'``)."""
 
-    type: str  # 'node' | 'reasoning'
+    id: str
+    #: Человекочитаемое имя/лейбл для карточки.
+    name: str
+    tool_name: str | None = None
+    args: Any = None
+    result: Any = None
+    status: str | None = None
+    error: str | None = None
+
+
+@dataclass
+class RemoteA2aProgressEvent:
+    """Промежуточное событие прогресса/COT удалённого агента (из A2A-потока).
+
+    ``node``/``reasoning`` — из ``status-update.metadata`` (``ai37/node``/``ai37/reasoning``, COT);
+    ``text`` — дельта ФИНАЛЬНОГО текста из канонических ``artifact-update``(append) text-частей →
+    AG-UI ``TEXT_MESSAGE_CONTENT``; ``tool`` — тул-колл сабагента из ``metadata['ai37/tool']`` →
+    AG-UI ``TOOL_CALL_*`` (у A2A нет нативного тул-события; та же progress-конвенция, что node).
+    """
+
+    type: str  # 'node' | 'reasoning' | 'text' | 'tool'
+    #: Имя ноды/reasoning-дельта/дельта текста. Для ``tool`` — ''.
     value: str
+    #: Структура тул-колла — только для ``type:'tool'``.
+    tool: RemoteA2aToolCall | None = None
+
+
+def _tool_call(d: dict[str, Any]) -> RemoteA2aToolCall:
+    return RemoteA2aToolCall(
+        id=str(d.get("id", "")),
+        name=str(d.get("name", "")),
+        tool_name=d.get("toolName"),
+        args=d.get("args"),
+        result=d.get("result"),
+        status=d.get("status"),
+        error=d.get("error"),
+    )
 
 
 OnEvent = Callable[[RemoteA2aProgressEvent], None]
@@ -183,14 +218,29 @@ async def _drain(stream: Any, on_event: OnEvent | None) -> dict[str, Any] | None
             if on_event is not None:
                 node = meta.get("ai37/node")
                 reasoning = meta.get("ai37/reasoning")
+                tool = meta.get("ai37/tool")
                 if isinstance(node, str):
                     on_event(RemoteA2aProgressEvent("node", node))
                 if isinstance(reasoning, str):
                     on_event(RemoteA2aProgressEvent("reasoning", reasoning))
+                # ai37/tool → тул-колл сабагента (у A2A нет нативного тул-события).
+                if isinstance(tool, dict):
+                    on_event(RemoteA2aProgressEvent("tool", "", _tool_call(tool)))
             if task is not None and su.get("taskId") == task.get("id") and su.get("status"):
                 task["status"] = su["status"]
         elif which == "artifact_update":
             au = MessageToDict(sr.artifact_update, preserving_proto_field_name=False)
+            # Канон A2A: append=true → ИНКРЕМЕНТ (дельта), иначе снапшот (replace). Стрим текста
+            # поднимаем ТОЛЬКО при append (part.text = дельта); снапшот как дельту слать нельзя —
+            # потребитель конкатенирует и получит дубли. Финальный текст всё равно соберётся в task
+            # (extract_text); data-части (a2ui) не трогаем — уедут через extract_a2ui.
+            if on_event is not None and au.get("append"):
+                artifact = au.get("artifact")
+                if isinstance(artifact, dict):
+                    for part in artifact.get("parts") or []:
+                        text = part.get("text") if isinstance(part, dict) else None
+                        if isinstance(text, str) and text:
+                            on_event(RemoteA2aProgressEvent("text", text))
             if task is not None and au.get("taskId") == task.get("id"):
                 _apply_artifact(task, au)
     # Финальный результат: message главнее накопленного task (как ResultManager.getFinalResult).

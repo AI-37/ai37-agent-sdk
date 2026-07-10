@@ -13,6 +13,7 @@ from .execute import (
     RemoteA2aRequest,
     RemoteA2aResult,
     RemoteA2aState,
+    RemoteA2aToolCall,
     execute_remote_a2a,
 )
 from .extract import extract_a2ui, extract_text, is_stale_task_error
@@ -30,4 +31,5 @@ __all__ = [
     "RemoteA2aResult",
     "RemoteA2aState",
     "RemoteA2aProgressEvent",
+    "RemoteA2aToolCall",
 ]

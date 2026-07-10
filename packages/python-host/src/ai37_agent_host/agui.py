@@ -333,8 +333,12 @@ class _Emitter:
         return self._text_message_id
 
     def emit_text(self, delta: str) -> None:
-        # Финальный текст не должен попасть внутрь reasoning-блока — закрываем его.
-        self.end_reasoning()
+        # НЕ закрываем reasoning здесь: агенты (напр. rag-factory за sub-agent-релеем) могут
+        # перемежать reasoning/node с текстом в рамках ОДНОГО хода. Эагерное закрытие на первом
+        # text-тике заставляло ensure_reasoning_start() открыть ВТОРОЙ REASONING-блок при возврате
+        # reasoning — вторая «Thinking…»-карточка на один логический ход. Единственное закрытие —
+        # end_reasoning() при завершении run()/ошибке. На видимость не влияет: CopilotChatReasoning-
+        # Message сворачивает карточку по isLatest, а не по факту REASONING_END.
         if not delta:
             return
         message_id = self.ensure_text_start()

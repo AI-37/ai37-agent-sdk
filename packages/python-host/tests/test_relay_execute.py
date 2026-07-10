@@ -107,6 +107,69 @@ async def test_completed_with_a2ui_and_progress_and_forward():
     assert meta["a2uiClientCapabilities"]["v0.9"]["supportedCatalogIds"] == ["cat-v2"]
 
 
+def _tool_progress_sr() -> Any:
+    return _sr(
+        "status_update",
+        {
+            "taskId": "task-1",
+            "contextId": "ctx1",
+            "status": {"state": "TASK_STATE_WORKING"},
+            "metadata": {
+                "ai37/tool": {
+                    "id": "tc1",
+                    "name": "Поиск ЕГРЮЛ",
+                    "toolName": "egrul",
+                    "args": {"inn": "7707083893"},
+                }
+            },
+        },
+    )
+
+
+def _append_text_sr(text: str, *, append: bool) -> Any:
+    data: dict[str, Any] = {
+        "taskId": "task-1",
+        "contextId": "ctx1",
+        "artifact": {"artifactId": "a1", "parts": [{"text": text, "mediaType": "text/plain"}]},
+    }
+    if append:
+        data["append"] = True
+    return _sr("artifact_update", data)
+
+
+async def test_tool_call_forwarded_from_ai37_tool_metadata():
+    client = _FakeClient([_tool_progress_sr(), _completed_task_sr()])
+    events: list[Any] = []
+    res = await execute_remote_a2a(
+        client, RemoteA2aRequest(query="x", context_id="ctx1"), on_event=events.append
+    )
+    assert res.state == "completed"
+    tools = [e for e in events if e.type == "tool"]
+    assert len(tools) == 1
+    tc = tools[0].tool
+    assert tc is not None
+    assert (tc.id, tc.name, tc.tool_name) == ("tc1", "Поиск ЕГРЮЛ", "egrul")
+    assert tc.args == {"inn": "7707083893"}
+    assert tools[0].value == ""
+
+
+async def test_text_streamed_only_on_append():
+    # append=true → дельта стримится; снапшот(replace, без append) → НЕ стримится (иначе дубли).
+    client = _FakeClient(
+        [
+            _append_text_sr("Итог: ", append=True),
+            _append_text_sr("СНАПШОТ-ЦЕЛИКОМ", append=False),
+            _completed_task_sr(),
+        ]
+    )
+    events: list[Any] = []
+    await execute_remote_a2a(
+        client, RemoteA2aRequest(query="x", context_id="ctx1"), on_event=events.append
+    )
+    texts = [e.value for e in events if e.type == "text"]
+    assert texts == ["Итог: "]
+
+
 async def test_stale_resume_retries_without_task_id():
     client = _StaleThenOk([_completed_task_sr()])
     req = RemoteA2aRequest(query="продолжай", context_id="ctx1", resume_task_id="old-task")
