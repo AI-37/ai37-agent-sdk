@@ -112,11 +112,32 @@ export async function executeRemoteA2a(
   }
 }
 
-/** Промежуточное событие прогресса/COT удалённого агента (из A2A `status-update` метаданных). */
+/** Структурный тул-колл сабагента (для `type:'tool'`). */
+export interface RemoteA2aToolCall {
+  id: string
+  /** Человекочитаемое имя/лейбл для карточки. */
+  name: string
+  toolName?: string
+  args?: unknown
+  result?: unknown
+  status?: string
+  error?: string
+}
+
+/** Промежуточное событие прогресса удалённого агента (из A2A-потока). */
 export interface RemoteA2aProgressEvent {
-  type: 'node' | 'reasoning'
-  /** Имя ноды (для `node`) или reasoning-дельта (для `reasoning`). */
+  /**
+   * `node`/`reasoning` — из `status-update.metadata` (`ai37/node` / `ai37/reasoning`, COT);
+   * `text` — дельта ФИНАЛЬНОГО текста ответа из канонических `artifact-update`(append) text-частей
+   * (A2A-нативный стрим, без кастомных каналов) → AG-UI `TEXT_MESSAGE_CONTENT`;
+   * `tool` — тул-колл сабагента из `status-update.metadata['ai37/tool']` → AG-UI `TOOL_CALL_*`
+   * (у A2A нет нативного тул-события; ai37/tool — та же progress-конвенция, что node/reasoning).
+   */
+  type: 'node' | 'reasoning' | 'text' | 'tool'
+  /** Имя ноды (`node`), reasoning-дельта (`reasoning`) или дельта текста ответа (`text`). Для `tool` — ''. */
   value: string
+  /** Структура тул-колла — только для `type:'tool'`. */
+  tool?: RemoteA2aToolCall
 }
 
 type A2aStreamItem =
@@ -141,10 +162,25 @@ async function drainStream(
       const meta = ev.metadata as Record<string, unknown> | undefined
       const node = meta?.['ai37/node']
       const reasoning = meta?.['ai37/reasoning']
+      const tool = meta?.['ai37/tool']
       if (typeof node === 'string') onEvent({ type: 'node', value: node })
       if (typeof reasoning === 'string') onEvent({ type: 'reasoning', value: reasoning })
+      if (tool && typeof tool === 'object') {
+        onEvent({ type: 'tool', value: '', tool: tool as RemoteA2aToolCall })
+      }
       if (task && ev.taskId === task.id) task = { ...task, status: ev.status }
     } else if (ev.kind === 'artifact-update') {
+      // Канон A2A: `append:true` = ИНКРЕМЕНТ (дельта), иначе — ПОЛНЫЙ снапшот (replace). Стрим текста
+      // поднимаем ТОЛЬКО при append (part.text = дельта); снапшот-replace как дельту слать нельзя —
+      // потребитель их конкатенирует и получит дубли. Финальный текст всё равно соберётся в task и
+      // уедет через extractText. data-части (a2ui) не трогаем (уезжают через extractA2ui).
+      if (ev.append) {
+        for (const part of ev.artifact.parts ?? []) {
+          if (part.kind === 'text' && typeof part.text === 'string' && part.text.length > 0) {
+            onEvent({ type: 'text', value: part.text })
+          }
+        }
+      }
       if (task && ev.taskId === task.id) {
         const artifacts = [...(task.artifacts ?? [])]
         const idx = artifacts.findIndex((a) => a.artifactId === ev.artifact.artifactId)

@@ -384,6 +384,52 @@ describe('AG-UI reasoning/COT → нативные REASONING_* (CopilotKit think
     expect(body).toContain('готово')
     expect(body).toContain('RUN_FINISHED')
   })
+
+  // Регресс: rag-factory (за sub-agent-релеем) может стримить текст ответа ЧАСТЯМИ, перемежая его
+  // с reasoning (несколько раундов planner/search, ответ-генератор с interleaved cot/answer-чанками).
+  // Раньше первый text-тик закрывал reasoning-блок эагерли → следующая reasoning-дельта открывала
+  // ВТОРОЙ независимый REASONING-блок (id) → на клиенте две отдельные «Thinking…»-карточки на один
+  // логический ход вместо одной.
+  const interleavedHandler: AgentHandler = {
+    async run({ emit }) {
+      emit({ type: 'reasoning', delta: 'ищу документы…' })
+      emit({ type: 'text', delta: 'Нашлись ' })
+      emit({ type: 'reasoning', delta: 'уточняю пункт…' })
+      emit({ type: 'text', delta: 'требования.' })
+      return { status: 'completed' }
+    },
+  }
+
+  function interleavedApp() {
+    return createAgentHost({
+      card,
+      handler: interleavedHandler,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+    })
+  }
+
+  it('reasoning/text вперемешку в одном ходе → ОДИН REASONING-блок (не два), весь текст доставлен', async () => {
+    const r = await request(interleavedApp())
+      .post('/agui')
+      .send({ threadId: 't1', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
+
+    expect(r.status).toBe(200)
+    const body = r.text
+    const countOccurrences = (needle: string): number => body.split(needle).length - 1
+    // Ровно одна пара START — не два независимых reasoning-блока на один ход.
+    expect(countOccurrences('"type":"REASONING_START"')).toBe(1)
+    expect(countOccurrences('"type":"REASONING_MESSAGE_START"')).toBe(1)
+    expect(countOccurrences('"type":"REASONING_END"')).toBe(1)
+    expect(body).toContain('ищу документы')
+    expect(body).toContain('уточняю пункт')
+    // Текст из обоих text-тиков ушёл на ОДИН messageId (ensureTextStart переиспользует id).
+    expect(countOccurrences('"type":"TEXT_MESSAGE_START"')).toBe(1)
+    expect(body).toContain('Нашлись ')
+    expect(body).toContain('требования.')
+  })
 })
 
 describe('AG-UI a2uiAction (ACTIVITY_SNAPSHOT клик/submit)', () => {
