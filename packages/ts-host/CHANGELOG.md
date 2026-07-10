@@ -3,6 +3,27 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.23] - 2026-07-10
+
+### Added
+- **`relay`: финальный текст и тул-коллы сабагента как прогресс-события.** `RemoteA2aProgressEvent`
+  расширен вариантами `{type:'text', value}` и `{type:'tool', value, tool}` (в дополнение к
+  `node`/`reasoning`). `drainStream` поднимает `artifact-update` (append) text-части как `text` —
+  канонический потоковый ответ сабагента вместо готового блока в конце; `status-update` с metadata
+  `ai37/tool` — как `tool` (карточка тул-колла). Text-события гейтятся `ev.append` (канон A2A:
+  append=дельта, без append=снапшот/замена — не путать со стримом).
+
+### Fixed
+- **`agui.ts`: дублирование reasoning-карточки при чередовании reasoning/text в одном ходе.**
+  `endReasoning()` закрывал открытый REASONING-блок эагерли на ПЕРВОМ `type:'text'` событии —
+  расчёт был на паттерн «сначала reasoning, потом текст». Если агент возобновлял reasoning ПОСЛЕ
+  того, как текст уже начал стримиться (несколько раундов planner/search у sub-agent'а, ответ-
+  генератор с interleaved cot/answer-чанками), `ensureReasoningStart()` открывал ВТОРОЙ независимый
+  REASONING-блок с новым id — две отдельные карточки «Thinking…» на одно логическое сообщение.
+  Теперь reasoning закрывается только по факту завершения `run()`/ошибки — на визуал не влияет
+  (CopilotKit сворачивает карточку в «Thought for Ns» по признаку «это не последнее сообщение», а
+  не по факту `REASONING_END`).
+
 ## [0.1.0-alpha.20] - 2026-07-02
 
 ### Added

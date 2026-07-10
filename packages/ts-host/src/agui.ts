@@ -248,8 +248,16 @@ export function aguiRouter(
             ctx,
             emit: (e) => {
               if (e.type === 'text') {
-                // Финальный текст не должен попасть внутрь reasoning-блока — закрываем его.
-                endReasoning()
+                // НЕ закрываем reasoning здесь: агенты (напр. rag-factory за sub-agent-релеем) могут
+                // перемежать reasoning/node с текстом в рамках ОДНОГО хода (несколько раундов
+                // planner/search, ответ-генератор с interleaved cot/answer-чанками). Закрытие тут
+                // эагерли на первом text-тике заставляло ensureReasoningStart() открыть ВТОРОЙ,
+                // независимый REASONING-блок при возврате reasoning — вторая «Thinking…»-карточка
+                // на один логический ход. Единственное закрытие — endReasoning() ниже, по факту
+                // завершения run()/ошибки. На видимость это не влияет: CopilotChatReasoningMessage
+                // считает isStreaming по isLatest (последнее ли это сообщение), а не по факту
+                // REASONING_END — карточка сворачивается в «Thought for Ns», как только появляется
+                // более новое (текстовое) сообщение, независимо от момента формального закрытия.
                 const id = ensureTextStart()
                 emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
               } else if (e.type === 'a2ui') {
