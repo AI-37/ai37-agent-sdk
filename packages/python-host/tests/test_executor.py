@@ -83,6 +83,16 @@ class _Hitl:
         )
 
 
+class _Working:
+    async def run(self, req: AgentRequest) -> AgentResult:
+        return AgentResult(
+            status="working",
+            message="Проверка запущена, результат на email",
+            result={"bulkTaskId": "b1"},
+            state={"bulkTaskId": "b1", "phase": "processing"},
+        )
+
+
 async def test_completed_flow_with_a2ui_when_catalog_negotiated():
     events = await _run(_Completed(), caps=["cat"], catalog=["cat"])
     states, artifacts = _summarize(events)
@@ -122,3 +132,17 @@ async def test_input_required_with_followup():
     states, artifacts = _summarize(events)
     assert states[-1][0] == "TASK_STATE_INPUT_REQUIRED"
     assert artifacts[0]["parts"][0]["data"]["a2ui"][0]["component"] == "ChoiceCard"
+
+
+async def test_working_detached_leaves_task_non_terminal():
+    events = await _run(_Working())
+    states, artifacts = _summarize(events)
+    # НЕ финализируется: последний статус WORKING (не COMPLETED/FAILED/INPUT_REQUIRED).
+    assert states[-1][0] == "TASK_STATE_WORKING"
+    assert "TASK_STATE_COMPLETED" not in [s[0] for s in states]
+    # ack-сообщение в статусе.
+    assert states[-1][2]["parts"][0]["text"] == "Проверка запущена, результат на email"
+    # state + result персистнуты в артефакте (для resume/reconcile Ф9).
+    data = artifacts[0]["parts"][0]["data"]
+    assert data["state"] == {"bulkTaskId": "b1", "phase": "processing"}
+    assert data["result"] == {"bulkTaskId": "b1"}

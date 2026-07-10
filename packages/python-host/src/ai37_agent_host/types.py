@@ -92,7 +92,10 @@ class A2uiComponent:
     children: dict[str, A2uiComponent | list[A2uiComponent]] | None = None
 
 
-AgentStatus = Literal["completed", "input-required", "failed"]
+# "working" — detached long-running: host оставляет таск НЕ-терминальным (WORKING, durable в
+# task-store), не финализируя его. Async-работу продолжает внешний воркер (bulk/email), а
+# reconcile-on-reopen делает resume на тот же task_id (handler рефрешит из своей БД).
+AgentStatus = Literal["completed", "input-required", "failed", "working"]
 
 
 @dataclass

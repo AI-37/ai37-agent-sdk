@@ -152,6 +152,20 @@ class HostExecutor(AgentExecutor):
             )
             return
 
+        if result.status == "working":
+            # Detached: НЕ финализируем — оставляем таск WORKING (durable в task-store).
+            # state/result кладём в data-part артефакта, чтобы resume (Ф9) восстановил их
+            # (см. _read_prior_state). Поток A2A завершается закрытием event-queue.
+            working: dict[str, Any] = {"a2ui": a2ui, "result": result.result}
+            if result.state is not None:
+                working["state"] = result.state
+            await updater.add_artifact(parts=[data_part(working)], name="working")
+            await updater.update_status(
+                TaskState.TASK_STATE_WORKING,
+                message=self._agent_msg(updater, result.message) if result.message else None,
+            )
+            return
+
         # completed
         completed: dict[str, Any] = {"a2ui": a2ui, "result": result.result}
         if result.state is not None:
