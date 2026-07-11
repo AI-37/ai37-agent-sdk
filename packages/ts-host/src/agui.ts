@@ -8,7 +8,15 @@ import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations } from './a2ui'
 import { toTask } from './build-task'
 import { withTurnObservability } from './observability/langfuse'
-import type { AgentEvent, AgentHandler, AgentInput, Ai37Metadata, A2uiComponent, A2uiAction } from './types'
+import type {
+  AgentEvent,
+  AgentHandler,
+  AgentInput,
+  Ai37Metadata,
+  A2uiComponent,
+  A2uiAction,
+  A2uiDataPatch,
+} from './types'
 
 /**
  * AG-UI SSE-адаптер (канон). Эмитит каноничные AG-UI-события через `@ag-ui/encoder`,
@@ -156,16 +164,27 @@ export function aguiRouter(
     // Готовый A2UI -> activity `a2ui-surface`. Enforcement (РЕШЕНИЕ 10) + роутинг (A): каталог surface —
     // тег компонента (`component.catalogId`) либо первичный согласованный; эмитим ТОЛЬКО если он в
     // согласованном множестве (`negotiation.catalogIds`). Иначе — no-op (агент даёт текст/другой каталог).
-    const emitA2ui = (component: A2uiComponent): void => {
-      const catalogId = component.catalogId ?? negotiation.catalogId
+    // `messageId`/`surfaceId` из события — стабильные id (lookup-канал: клиент заменяет
+    // activity-сообщение по `messageId` на месте); не заданы → random, прежнее поведение.
+    const emitA2ui = (e: {
+      component: A2uiComponent
+      messageId?: string
+      surfaceId?: string
+      dataModel?: A2uiDataPatch[]
+    }): void => {
+      const catalogId = e.component.catalogId ?? negotiation.catalogId
       if (!catalogId || !negotiation.catalogIds.includes(catalogId)) return
-      const surfaceId = `surf-${uuidv4()}`
+      const surfaceId = e.surfaceId ?? `surf-${uuidv4()}`
       emitEvent({
         type: EventType.ACTIVITY_SNAPSHOT,
-        messageId: uuidv4(),
+        messageId: e.messageId ?? uuidv4(),
         activityType: 'a2ui-surface',
         content: {
-          a2ui_operations: componentToA2uiOperations(component, { surfaceId, catalogId }),
+          a2ui_operations: componentToA2uiOperations(e.component, {
+            surfaceId,
+            catalogId,
+            ...(e.dataModel ? { dataModel: e.dataModel } : {}),
+          }),
         },
         replace: true,
       })
@@ -261,7 +280,7 @@ export function aguiRouter(
                 const id = ensureTextStart()
                 emitEvent({ type: EventType.TEXT_MESSAGE_CONTENT, messageId: id, delta: e.delta })
               } else if (e.type === 'a2ui') {
-                emitA2ui(e.component)
+                emitA2ui(e)
               } else if (e.type === 'reasoning') {
                 emitReasoning(e.delta)
               } else if (e.type === 'node') {
@@ -294,8 +313,8 @@ export function aguiRouter(
         emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: id })
       }
 
-      for (const c of result.a2ui ?? []) emitA2ui(c)
-      if (result.followup) emitA2ui(result.followup)
+      for (const c of result.a2ui ?? []) emitA2ui({ component: c })
+      if (result.followup) emitA2ui({ component: result.followup })
 
       if (result.status === 'failed') {
         emitEvent({ type: EventType.RUN_ERROR, message: result.message ?? 'failed' })

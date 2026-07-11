@@ -1,5 +1,5 @@
 import { CATALOG_ID } from '@ai37/a2ui-catalog-schemas'
-import type { A2uiComponent } from './types'
+import type { A2uiComponent, A2uiDataPatch } from './types'
 
 /** Операция A2UI-поверхности (протокол v0.9: createSurface/updateComponents/updateDataModel/...). */
 export type A2uiMessage = Record<string, unknown>
@@ -44,7 +44,7 @@ function flatten(node: A2uiComponent, id: string, out: FlatComponent[]): void {
  */
 export function componentToA2uiOperations(
   component: A2uiComponent,
-  opts: { surfaceId: string; catalogId?: string },
+  opts: { surfaceId: string; catalogId?: string; dataModel?: A2uiDataPatch[] },
 ): A2uiMessage[] {
   const catalogId = opts.catalogId ?? component.catalogId ?? CATALOG_ID
   const components: FlatComponent[] = []
@@ -56,5 +56,12 @@ export function componentToA2uiOperations(
       version: 'v0.9',
       updateComponents: { surfaceId: opts.surfaceId, components },
     },
+    // Патчи dataModel (напр. опции lookup-канала FormCard) — после компонентов,
+    // чтобы подписчики читали значение с уже живого surface. `path` — точная
+    // строка (ведущий слэш значим для клиента).
+    ...(opts.dataModel ?? []).map((patch) => ({
+      version: 'v0.9',
+      updateDataModel: { surfaceId: opts.surfaceId, path: patch.path, value: patch.value },
+    })),
   ]
 }

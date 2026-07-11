@@ -106,6 +106,7 @@ export type {
   ContextFile,
   A2uiComponent,
   A2uiAction,
+  A2uiDataPatch,
   AgentStatus,
   AgentInput,
   AgentEvent,

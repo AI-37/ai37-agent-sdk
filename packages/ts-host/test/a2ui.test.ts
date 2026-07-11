@@ -60,4 +60,30 @@ describe('componentToA2uiOperations (уплощение дерева)', () => {
     const [cs] = componentToA2uiOperations(tagged, { surfaceId: 's1' })
     expect((cs as any).createSurface.catalogId).toBe(AI37)
   })
+
+  it('dataModel-патчи → updateDataModel-операции после компонентов (путь — точная строка)', () => {
+    const comp: A2uiComponent = { component: 'FormCard', props: { title: 't', fields: [], submit: {} } }
+    const ops = componentToA2uiOperations(comp, {
+      surfaceId: 's1',
+      catalogId: AI37,
+      dataModel: [
+        { path: '/lookup/city/options', value: { query: 'мос', options: [{ value: 'Москва', label: 'Москва' }] } },
+      ],
+    })
+
+    expect(ops).toHaveLength(3)
+    expect(ops[2]).toEqual({
+      version: 'v0.9',
+      updateDataModel: {
+        surfaceId: 's1',
+        path: '/lookup/city/options',
+        value: { query: 'мос', options: [{ value: 'Москва', label: 'Москва' }] },
+      },
+    })
+  })
+
+  it('без dataModel — прежние две операции (back-compat)', () => {
+    const comp: A2uiComponent = { component: 'Card', props: {} }
+    expect(componentToA2uiOperations(comp, { surfaceId: 's1', catalogId: AI37 })).toHaveLength(2)
+  })
 })

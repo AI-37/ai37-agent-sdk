@@ -84,6 +84,16 @@ export interface A2uiComponent {
   children?: Record<string, A2uiComponent | A2uiComponent[]>
 }
 
+/**
+ * Патч dataModel surface'а (`updateDataModel` v0.9). `path` — точная строка
+ * пути; ведущий слэш значим для клиента (DataModel ключует сигналы точной
+ * строкой), для канала lookup канон — `/lookup/{fieldName}/options`.
+ */
+export interface A2uiDataPatch {
+  path: string
+  value: unknown
+}
+
 export type AgentStatus = 'completed' | 'input-required' | 'failed'
 
 /**
@@ -149,7 +159,20 @@ export interface AgentInput {
 export type AgentEvent =
   | { type: 'node'; node: string }
   | { type: 'text'; delta: string }
-  | { type: 'a2ui'; component: A2uiComponent }
+  /**
+   * `messageId`/`surfaceId` — опциональные СТАБИЛЬНЫЕ id снапшота: клиент (CopilotKit v2)
+   * заменяет activity-сообщение по `messageId` на месте, поэтому повторный эмит с теми же id
+   * обновляет живую форму (канал lookup) вместо второго сообщения в треде. Агент минтит их
+   * сам и персистит через `AgentResult.state`. Не заданы → random (прежнее поведение).
+   * `dataModel` — патчи `updateDataModel` вдогонку к операциям компонентов.
+   */
+  | {
+      type: 'a2ui'
+      component: A2uiComponent
+      messageId?: string
+      surfaceId?: string
+      dataModel?: A2uiDataPatch[]
+    }
   | { type: 'reasoning'; delta: string }
   | { type: 'tool'; phase: 'start' | 'end'; name: string; id?: string; args?: unknown; result?: unknown }
 
