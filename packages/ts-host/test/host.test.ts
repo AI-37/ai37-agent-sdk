@@ -390,7 +390,7 @@ describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляе
     expect(body.indexOf('TEXT_MESSAGE_CONTENT')).toBeLessThan(body.indexOf('ACTIVITY_SNAPSHOT'))
   })
 
-  it('A2A: конверт развёрнут до сырого дерева (id/dataModel в metadata.a2ui не уезжают)', async () => {
+  it('A2A: конверт уезжает в metadata.a2ui ЦЕЛИКОМ (id/dataModel — сквозной контракт)', async () => {
     const r = await request(snapshotApp())
       .post('/a2a/v1')
       .send({
@@ -408,9 +408,10 @@ describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляе
         },
       })
     const [item] = r.body.result.metadata.a2ui
-    expect(item.component).toBe('FormCard')
-    expect(item.messageId).toBeUndefined()
-    expect(item.dataModel).toBeUndefined()
+    expect(item.component).toEqual({ component: 'FormCard', props: { title: 'т' } })
+    expect(item.messageId).toBe('msg-stable-1')
+    expect(item.surfaceId).toBe('surf-stable-1')
+    expect(item.dataModel).toEqual([{ path: '/lookup/city/options', value: { options: [] } }])
   })
 })
 

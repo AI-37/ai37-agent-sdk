@@ -100,8 +100,9 @@ export interface A2uiDataPatch {
  * `dataModel` — патчи `updateDataModel` вдогонку к операциям компонентов.
  * В `AgentResult.a2ui` кладётся вперемешку с сырыми деревьями (различение —
  * по типу поля `component`: у дерева это строка-тег, у конверта — объект).
- * На A2A-пути конверт разворачивается до дерева: id и патчи — понятия
- * AG-UI-снапшота, в `task.metadata.a2ui` уходят только компоненты.
+ * На A2A-пути конверт уезжает ЦЕЛИКОМ в `task.metadata.a2ui`/artifacts —
+ * сквозной контракт lookup через relay-оркестратора: тот кладёт конверты в
+ * свой `result.a2ui`, и его AG-UI-host эмитит снапшот с теми же id.
  */
 export interface A2uiSnapshot {
   component: A2uiComponent
