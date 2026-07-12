@@ -94,6 +94,22 @@ export interface A2uiDataPatch {
   value: unknown
 }
 
+/**
+ * Снапшот A2UI с управляемыми id (те же поля, что у стрим-события `{type:'a2ui'}`):
+ * `messageId`/`surfaceId` — стабильные id для replace на месте (канал lookup),
+ * `dataModel` — патчи `updateDataModel` вдогонку к операциям компонентов.
+ * В `AgentResult.a2ui` кладётся вперемешку с сырыми деревьями (различение —
+ * по типу поля `component`: у дерева это строка-тег, у конверта — объект).
+ * На A2A-пути конверт разворачивается до дерева: id и патчи — понятия
+ * AG-UI-снапшота, в `task.metadata.a2ui` уходят только компоненты.
+ */
+export interface A2uiSnapshot {
+  component: A2uiComponent
+  messageId?: string
+  surfaceId?: string
+  dataModel?: A2uiDataPatch[]
+}
+
 export type AgentStatus = 'completed' | 'input-required' | 'failed'
 
 /**
@@ -178,7 +194,12 @@ export type AgentEvent =
 
 export interface AgentResult {
   status: AgentStatus
-  a2ui?: A2uiComponent[]
+  /**
+   * A2UI финального хода: сырые деревья и/или конверты `A2uiSnapshot` (управляемые
+   * id + dataModel). На AG-UI эмитятся ПОСЛЕ текста (`message`) — порядок «текст →
+   * форма»; конверт передаёт свои id в ACTIVITY_SNAPSHOT (replace на месте).
+   */
+  a2ui?: (A2uiComponent | A2uiSnapshot)[]
   message?: string
   result?: unknown
   /** для input-required — карточка-вопрос пользователю (HITL). */

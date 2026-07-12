@@ -1,5 +1,5 @@
 import { CATALOG_ID } from '@ai37/a2ui-catalog-schemas'
-import type { A2uiComponent, A2uiDataPatch } from './types'
+import type { A2uiComponent, A2uiDataPatch, A2uiSnapshot } from './types'
 
 /** Операция A2UI-поверхности (протокол v0.9: createSurface/updateComponents/updateDataModel/...). */
 export type A2uiMessage = Record<string, unknown>
@@ -32,6 +32,14 @@ function flatten(node: A2uiComponent, id: string, out: FlatComponent[]): void {
       entry[slot] = childId
     }
   }
+}
+
+/**
+ * Нормализует элемент `AgentResult.a2ui` до конверта `A2uiSnapshot`: сырое дерево
+ * (`component` — строка-тег) заворачивается без id, конверт проходит как есть.
+ */
+export function toA2uiSnapshot(item: A2uiComponent | A2uiSnapshot): A2uiSnapshot {
+  return typeof item.component === 'string' ? { component: item as A2uiComponent } : (item as A2uiSnapshot)
 }
 
 /**

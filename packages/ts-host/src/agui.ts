@@ -5,7 +5,7 @@ import { EventType, type BaseEvent } from '@ag-ui/core'
 import type { TaskStore } from '@a2a-js/sdk/server'
 import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
-import { componentToA2uiOperations } from './a2ui'
+import { componentToA2uiOperations, toA2uiSnapshot } from './a2ui'
 import { toTask } from './build-task'
 import { withTurnObservability } from './observability/langfuse'
 import type {
@@ -313,7 +313,7 @@ export function aguiRouter(
         emitEvent({ type: EventType.TEXT_MESSAGE_END, messageId: id })
       }
 
-      for (const c of result.a2ui ?? []) emitA2ui({ component: c })
+      for (const item of result.a2ui ?? []) emitA2ui(toA2uiSnapshot(item))
       if (result.followup) emitA2ui({ component: result.followup })
 
       if (result.status === 'failed') {
