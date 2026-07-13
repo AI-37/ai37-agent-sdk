@@ -1,6 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Message, Task } from '@a2a-js/sdk'
 import { filterA2uiByCatalog, type OutputNegotiation } from './output-modes'
+import { toA2uiSnapshot } from './a2ui'
 import type { A2uiComponent, AgentResult } from './types'
 
 const now = (): string => new Date().toISOString()
@@ -38,7 +39,11 @@ export function toTask(
   // A2UI отдаётся только для согласованных каталогов (per-component роутинг); иначе пусто (агент даёт текст).
   // Компоненты остаются СЫРЫМИ деревьями (`{component, props, children?, catalogId?}`) — уплощение в
   // операции делает потребитель через `componentToA2uiOperations` (так оркестратор может пробросить их выше).
-  const a2ui = filterA2uiByCatalog<A2uiComponent>(result.a2ui, negotiation)
+  // Конверты `A2uiSnapshot` проходят ЦЕЛИКОМ (сквозной контракт lookup: relay-оркестратор кладёт их
+  // в свой result.a2ui, его host эмитит с теми же id); фильтр каталога — по вложенному компоненту.
+  const a2ui = (result.a2ui ?? []).filter(
+    (item) => filterA2uiByCatalog([toA2uiSnapshot(item).component], negotiation).length > 0,
+  )
   const followup =
     result.followup && negotiation.catalogIds.includes(result.followup.catalogId ?? negotiation.catalogId ?? '')
       ? result.followup

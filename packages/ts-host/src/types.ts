@@ -84,6 +84,33 @@ export interface A2uiComponent {
   children?: Record<string, A2uiComponent | A2uiComponent[]>
 }
 
+/**
+ * Патч dataModel surface'а (`updateDataModel` v0.9). `path` — точная строка
+ * пути; ведущий слэш значим для клиента (DataModel ключует сигналы точной
+ * строкой), для канала lookup канон — `/lookup/{fieldName}/options`.
+ */
+export interface A2uiDataPatch {
+  path: string
+  value: unknown
+}
+
+/**
+ * Снапшот A2UI с управляемыми id (те же поля, что у стрим-события `{type:'a2ui'}`):
+ * `messageId`/`surfaceId` — стабильные id для replace на месте (канал lookup),
+ * `dataModel` — патчи `updateDataModel` вдогонку к операциям компонентов.
+ * В `AgentResult.a2ui` кладётся вперемешку с сырыми деревьями (различение —
+ * по типу поля `component`: у дерева это строка-тег, у конверта — объект).
+ * На A2A-пути конверт уезжает ЦЕЛИКОМ в `task.metadata.a2ui`/artifacts —
+ * сквозной контракт lookup через relay-оркестратора: тот кладёт конверты в
+ * свой `result.a2ui`, и его AG-UI-host эмитит снапшот с теми же id.
+ */
+export interface A2uiSnapshot {
+  component: A2uiComponent
+  messageId?: string
+  surfaceId?: string
+  dataModel?: A2uiDataPatch[]
+}
+
 export type AgentStatus = 'completed' | 'input-required' | 'failed'
 
 /**
@@ -149,13 +176,31 @@ export interface AgentInput {
 export type AgentEvent =
   | { type: 'node'; node: string }
   | { type: 'text'; delta: string }
-  | { type: 'a2ui'; component: A2uiComponent }
+  /**
+   * `messageId`/`surfaceId` — опциональные СТАБИЛЬНЫЕ id снапшота: клиент (CopilotKit v2)
+   * заменяет activity-сообщение по `messageId` на месте, поэтому повторный эмит с теми же id
+   * обновляет живую форму (канал lookup) вместо второго сообщения в треде. Агент минтит их
+   * сам и персистит через `AgentResult.state`. Не заданы → random (прежнее поведение).
+   * `dataModel` — патчи `updateDataModel` вдогонку к операциям компонентов.
+   */
+  | {
+      type: 'a2ui'
+      component: A2uiComponent
+      messageId?: string
+      surfaceId?: string
+      dataModel?: A2uiDataPatch[]
+    }
   | { type: 'reasoning'; delta: string }
   | { type: 'tool'; phase: 'start' | 'end'; name: string; id?: string; args?: unknown; result?: unknown }
 
 export interface AgentResult {
   status: AgentStatus
-  a2ui?: A2uiComponent[]
+  /**
+   * A2UI финального хода: сырые деревья и/или конверты `A2uiSnapshot` (управляемые
+   * id + dataModel). На AG-UI эмитятся ПОСЛЕ текста (`message`) — порядок «текст →
+   * форма»; конверт передаёт свои id в ACTIVITY_SNAPSHOT (replace на месте).
+   */
+  a2ui?: (A2uiComponent | A2uiSnapshot)[]
   message?: string
   result?: unknown
   /** для input-required — карточка-вопрос пользователю (HITL). */

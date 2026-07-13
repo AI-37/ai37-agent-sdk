@@ -1,7 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Client } from '@a2a-js/sdk/client'
 import type { Message, Task } from '@a2a-js/sdk'
-import type { A2uiComponent, A2uiAction, ContextFile } from '../types'
+import type { A2uiComponent, A2uiAction, A2uiSnapshot, ContextFile } from '../types'
 import { extractText, extractA2ui, isStaleTaskError } from './extract'
 import { injectTraceContext } from '../observability/langfuse'
 
@@ -36,7 +36,8 @@ export type RemoteA2aState = 'completed' | 'input-required' | 'failed' | 'messag
 
 export interface RemoteA2aResult {
   text: string
-  a2ui: A2uiComponent[]
+  /** Сырые деревья и/или конверты `A2uiSnapshot` — как отдал сабагент (см. extractA2ui). */
+  a2ui: (A2uiComponent | A2uiSnapshot)[]
   /** childTaskId (если ответ — Task); потребитель персистит для resume. */
   taskId?: string
   state: RemoteA2aState

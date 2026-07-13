@@ -338,6 +338,83 @@ describe('AG-UI (/agui) канон + content-negotiation', () => {
   })
 })
 
+describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляемые id + dataModel)', () => {
+  // Handler возвращает форму КОНВЕРТОМ через result.a2ui (путь elevator'а):
+  // host сам эмитит текст ПЕРЕД формой и несёт стабильные id/dataModel в снапшот.
+  const snapshotHandler: AgentHandler = {
+    async run() {
+      return {
+        status: 'input-required' as const,
+        message: 'Заполните форму',
+        a2ui: [
+          {
+            component: { component: 'FormCard', props: { title: 'т' } },
+            messageId: 'msg-stable-1',
+            surfaceId: 'surf-stable-1',
+            dataModel: [{ path: '/lookup/city/options', value: { options: [] } }],
+          },
+        ],
+      }
+    },
+  }
+
+  function snapshotApp() {
+    return createAgentHost({
+      card,
+      handler: snapshotHandler,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+  }
+
+  it('AG-UI: текст ПЕРЕД формой; снапшот несёт заданные messageId/surfaceId и updateDataModel', async () => {
+    const r = await request(snapshotApp())
+      .post('/agui')
+      .send({
+        threadId: 't1',
+        runId: 'r1',
+        messages: [{ role: 'user', content: 'hi' }],
+        forwardedProps: { a2uiClientCapabilities: { 'v0.9': { supportedCatalogIds: [CATALOG] } } },
+      })
+
+    const body = r.text
+    expect(body).toContain('msg-stable-1')
+    expect(body).toContain('surf-stable-1')
+    expect(body).toContain('updateDataModel')
+    expect(body).toContain('/lookup/city/options')
+    // порядок «текст → форма»: финальный текст эмитится раньше ACTIVITY_SNAPSHOT
+    expect(body.indexOf('TEXT_MESSAGE_CONTENT')).toBeLessThan(body.indexOf('ACTIVITY_SNAPSHOT'))
+  })
+
+  it('A2A: конверт уезжает в metadata.a2ui ЦЕЛИКОМ (id/dataModel — сквозной контракт)', async () => {
+    const r = await request(snapshotApp())
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            parts: [{ kind: 'text', text: 'hi' }],
+            metadata: caps([CATALOG]),
+          },
+        },
+      })
+    const [item] = r.body.result.metadata.a2ui
+    expect(item.component).toEqual({ component: 'FormCard', props: { title: 'т' } })
+    expect(item.messageId).toBe('msg-stable-1')
+    expect(item.surfaceId).toBe('surf-stable-1')
+    expect(item.dataModel).toEqual([{ path: '/lookup/city/options', value: { options: [] } }])
+  })
+})
+
 describe('AG-UI reasoning/COT → нативные REASONING_* (CopilotKit thinking-карточка)', () => {
   // Handler, который стримит reasoning-дельты и node-вехи через emit, затем даёт финальный текст.
   const cotHandler: AgentHandler = {

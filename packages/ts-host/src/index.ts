@@ -55,7 +55,7 @@ export type { ParsedMessage } from './parse'
 export { toTask, agentMessage } from './build-task'
 export { HostExecutor } from './a2a-executor'
 export { aguiRouter } from './agui'
-export { componentToA2uiOperations } from './a2ui'
+export { componentToA2uiOperations, toA2uiSnapshot } from './a2ui'
 export type { A2uiMessage } from './a2ui'
 // StoreBackend для агентов: read-доступ к истории чатов/проектов через deepagents CompositeBackend.
 export { ChatStoreBackend } from './store-backend/chat-store-backend'
@@ -106,6 +106,8 @@ export type {
   ContextFile,
   A2uiComponent,
   A2uiAction,
+  A2uiDataPatch,
+  A2uiSnapshot,
   AgentStatus,
   AgentInput,
   AgentEvent,
