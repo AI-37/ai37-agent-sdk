@@ -21,7 +21,7 @@ from typing import Any
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
-from a2a.types import TaskState
+from a2a.types import Task, TaskState, TaskStatus
 from google.protobuf.json_format import MessageToDict
 
 from .als import current_accepted_output_modes, current_ctx
@@ -64,9 +64,20 @@ class HostExecutor(AgentExecutor):
         task_id = context.task_id
         context_id = context.context_id
         updater = TaskUpdater(event_queue, task_id, context_id)
-        # На первом ходу публикуем initial submitted-таск; на продолжении (current_task) — нет.
+        # На первом ходу публикуем initial submitted-таск САМИМ Task-событием, а не через
+        # updater.submit() (== update_status(SUBMITTED) → TaskStatusUpdateEvent). Потоковый
+        # консьюмер a2a-sdk (ActiveTask._run_consumer) требует, чтобы Task был заэнкьюен ДО
+        # любого TaskStatusUpdateEvent, иначе InvalidAgentResponseError. На продолжении
+        # (current_task) таск уже в store — setup ставит _task_created, ничего не публикуем.
         if getattr(context, "current_task", None) is None:
-            await updater.submit()
+            initial = Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=TaskState.TASK_STATE_SUBMITTED),
+            )
+            if context.message is not None:
+                initial.history.append(context.message)
+            await event_queue.enqueue_event(initial)
 
         agent_input = AgentInput(
             data=parsed.data,
