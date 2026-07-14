@@ -64,12 +64,15 @@ class HostExecutor(AgentExecutor):
         task_id = context.task_id
         context_id = context.context_id
         updater = TaskUpdater(event_queue, task_id, context_id)
-        # На первом ходу публикуем initial submitted-таск САМИМ Task-событием, а не через
-        # updater.submit() (== update_status(SUBMITTED) → TaskStatusUpdateEvent). Потоковый
-        # консьюмер a2a-sdk (ActiveTask._run_consumer) требует, чтобы Task был заэнкьюен ДО
-        # любого TaskStatusUpdateEvent, иначе InvalidAgentResponseError. На продолжении
-        # (current_task) таск уже в store — setup ставит _task_created, ничего не публикуем.
-        if getattr(context, "current_task", None) is None:
+        # Публикуем Task САМИМ Task-событием (а не через updater.submit() == update_status(SUBMITTED)
+        # → TaskStatusUpdateEvent). Инвариант «Task заэнкьюен ДО любого TaskStatusUpdateEvent» держат
+        # ДВА консьюмера: серверный (a2a-sdk ActiveTask._run_consumer — иначе InvalidAgentResponseError)
+        # и КЛИЕНТСКИЙ (оркестратор drainStream'ит свежий sendMessageStream). На resume серверу Task не
+        # нужен (setup уже поставил _task_created), НО клиентский стрим начинается заново и без Task-
+        # события не соберёт финал («поток не дал финального Message/Task»). Поэтому публикуем всегда:
+        # на первом ходу — submitted-снапшот, на resume — текущий снапшот задачи из store.
+        current = getattr(context, "current_task", None)
+        if current is None:
             initial = Task(
                 id=task_id,
                 context_id=context_id,
@@ -78,6 +81,8 @@ class HostExecutor(AgentExecutor):
             if context.message is not None:
                 initial.history.append(context.message)
             await event_queue.enqueue_event(initial)
+        else:
+            await event_queue.enqueue_event(current)
 
         agent_input = AgentInput(
             data=parsed.data,
