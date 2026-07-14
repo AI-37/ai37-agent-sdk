@@ -22,6 +22,12 @@ export interface HostScope {
    */
   supportedCatalogIds?: string[]
   /**
+   * Постоянная инструкция владельца/партнёра (`metadata.ai37.instructions`) — ЖЁСТКАЯ политика.
+   * Host кладёт её сюда из ai37 (A2A-guard + AG-UI-роутер), а `Ai37ChatCompletions` подмешивает
+   * как system-directive абсолютного приоритета в каждый LLM-вызов хода. Пусто → no-op.
+   */
+  instructions?: string
+  /**
    * Per-turn Langfuse-наблюдаемость (turn-спан + LangChain `CallbackHandler`). Заполняется
    * executor'ом/AG-UI-роутером внутри `withTurnObservability` ДО вызова handler'а, поэтому
    * когниция агента может прокинуть `currentLangfuseCallbacks()` в LangChain `invoke`, не зная
@@ -53,6 +59,14 @@ export const currentAcceptedOutputModes = (): string[] | undefined =>
 
 export const currentSupportedCatalogIds = (): string[] | undefined =>
   requestScope.getStore()?.supportedCatalogIds
+
+/**
+ * Постоянная инструкция владельца/партнёра текущего хода (`metadata.ai37.instructions`) или
+ * undefined. `Ai37ChatCompletions` читает её и подмешивает как system-directive абсолютного
+ * приоритета — поэтому агенту НЕ нужно прокидывать её вручную (работает на всех агентах).
+ */
+export const currentPartnerInstructions = (): string | undefined =>
+  requestScope.getStore()?.instructions
 
 /**
  * Стабильный id Langfuse-трейса текущего хода (или undefined, если трассировка выключена).

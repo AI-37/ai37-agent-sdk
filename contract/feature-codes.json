@@ -5,6 +5,11 @@
       "code": "elevator-calc-agent",
       "constant": "ElevatorCalcAgent",
       "name": "Elevator Calculation Agent"
+    },
+    {
+      "code": "minstroy-agent",
+      "constant": "MinstroyAgent",
+      "name": "Minstroy agent"
     }
   ],
   "privileges": [
@@ -12,6 +17,11 @@
       "code": "elevator-calc-allowed",
       "constant": "ElevatorCalcAllowed",
       "name": "Elevator Calculation Allowed"
+    },
+    {
+      "code": "minstroy-check-inn",
+      "constant": "MinstroyCheckInn",
+      "name": "Minstroy check INN"
     }
   ]
 }

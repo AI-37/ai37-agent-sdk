@@ -28,6 +28,7 @@ def _client(handler):
     return create_billing_client(
         base_url="http://billing.test",
         auth_token="tok",
+        usage_ingest_token="apps",
         http_client=http,
         runtime_state_cache_ttl_ms=0,
     )
@@ -87,6 +88,7 @@ def test_usage_event_payload():
 
     def handler(req: httpx.Request) -> httpx.Response:
         if req.url.path.endswith("/events"):
+            assert req.headers["authorization"] == "Bearer apps"
             captured["body"] = req.content
             return httpx.Response(200, json={})
         return httpx.Response(200, json=ACTIVE)

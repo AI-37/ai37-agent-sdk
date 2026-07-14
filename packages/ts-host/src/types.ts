@@ -57,6 +57,14 @@ export interface Ai37Metadata {
    * Для A2A носитель — нативный `params.configuration.acceptedOutputModes` (НЕ этот конверт).
    */
   acceptedOutputModes?: string[]
+  /**
+   * Постоянная инструкция владельца/партнёра, влияющая на ход диалога (напр. виджет: «считай
+   * лифты со скоростью 5 м/с») — ЖЁСТКАЯ политика. Host кладёт её в request-scope
+   * (`currentPartnerInstructions`), а общая модель `Ai37ChatCompletions` подмешивает как
+   * system-directive абсолютного приоритета в КАЖДЫЙ LLM-вызов хода → работает на всех агентах
+   * без их правок. Пусто/undefined (обычно вне widget-канала) → no-op.
+   */
+  instructions?: string
 }
 
 /**
