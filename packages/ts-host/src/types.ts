@@ -67,10 +67,10 @@ export interface Ai37Metadata {
   acceptedOutputModes?: string[]
   /**
    * Постоянная инструкция владельца/партнёра, влияющая на ход диалога (напр. виджет: «считай
-   * лифты со скоростью 5 м/с») — ЖЁСТКАЯ политика. Host кладёт её в request-scope
-   * (`currentPartnerInstructions`), а общая модель `Ai37ChatCompletions` подмешивает как
-   * system-directive абсолютного приоритета в КАЖДЫЙ LLM-вызов хода → работает на всех агентах
-   * без их правок. Пусто/undefined (обычно вне widget-канала) → no-op.
+   * лифты со скоростью 5 м/с»). Host кладёт её в request-scope (`currentPartnerInstructions`), а
+   * когниция агента ВИДИМО дописывает её отдельной секцией в конец system-промпта через
+   * `withPartnerInstructions(systemPrompt)` — так она попадает и в реальный LLM-запрос, и в
+   * Langfuse-трейс. Пусто/undefined (обычно вне widget-канала) → промпт не меняется.
    */
   instructions?: string
 }

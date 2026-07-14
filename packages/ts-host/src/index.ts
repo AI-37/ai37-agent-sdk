@@ -7,6 +7,7 @@ export {
   currentAcceptedOutputModes,
   currentSupportedCatalogIds,
   currentPartnerInstructions,
+  withPartnerInstructions,
   currentTraceId,
   currentLangfuseTrace,
   currentLangfuseHandler,
