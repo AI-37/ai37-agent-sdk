@@ -103,7 +103,12 @@ class _TwoStep:
     async def run(self, req: AgentRequest) -> AgentResult:
         self.calls += 1
         if self.calls == 1:
-            return AgentResult(status="input-required", message="уточните тип контрагента")
+            # input-required с A2UI-формой (ChoiceCard) — host кладёт её в артефакт задачи.
+            return AgentResult(
+                status="input-required",
+                message="уточните тип контрагента",
+                a2ui=[A2uiComponent(component="ChoiceCard", props={"title": "Тип"})],
+            )
         # На resume эмитим прогресс (== update_status(WORKING)) ДО финала — на старом коде
         # клиентский стрим получал только status/artifact-update без Task-события.
         req.emit(NodeEvent(node="verify"))
@@ -160,6 +165,11 @@ async def test_resume_stream_emits_task_snapshot_for_client_consumer():
     # Task-событие: top-level `id` и НЕТ `taskId` (в отличие от status/artifact-update).
     task_events = [e for e in events if "id" in e and "taskId" not in e]
     assert task_events, "resume-стрим не содержит Task-события — клиент не соберёт финал"
+    # Снапшот НЕ должен тащить накопленные артефакты прошлых ходов (там старая input-required
+    # форма/ChoiceCard) — иначе клиентский extractA2ui продублирует её после финала (дубль формы).
+    assert not task_events[0].get("artifacts"), (
+        "resume-снапшот тащит старые артефакты → клиент продублирует форму после вердикта"
+    )
     states = [
         e["status"]["state"]
         for e in events

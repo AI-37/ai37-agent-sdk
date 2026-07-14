@@ -82,7 +82,18 @@ class HostExecutor(AgentExecutor):
                 initial.history.append(context.message)
             await event_queue.enqueue_event(initial)
         else:
-            await event_queue.enqueue_event(current)
+            # На resume публикуем МИНИМАЛЬНЫЙ снапшот (id/context/статус) БЕЗ накопленных
+            # артефактов. В артефактах прошлых ходов лежит старая input-required форма (ChoiceCard);
+            # протащив её в completed-ход, клиентский extractA2ui собрал бы устаревшую карточку рядом
+            # с новым выводом (дубль формы после вердикта). Клиенту нужен лишь kind:"task"-якорь —
+            # актуальный вывод придёт artifact-update'ами ЭТОГО стрима, а текст вердикта берётся из
+            # status.message финального события, не из артефактов.
+            snapshot = Task(
+                id=task_id,
+                context_id=context_id,
+                status=TaskStatus(state=current.status.state),
+            )
+            await event_queue.enqueue_event(snapshot)
 
         agent_input = AgentInput(
             data=parsed.data,
