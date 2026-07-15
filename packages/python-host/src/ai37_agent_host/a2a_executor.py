@@ -88,6 +88,14 @@ class HostExecutor(AgentExecutor):
             # с новым выводом (дубль формы после вердикта). Клиенту нужен лишь kind:"task"-якорь —
             # актуальный вывод придёт artifact-update'ами ЭТОГО стрима, а текст вердикта берётся из
             # status.message финального события, не из артефактов.
+            #
+            # ТРЕБУЕТ a2a-sdk >=1.1.0 (см. constraint в pyproject). В 1.0.2 стрим-консьюмер
+            # `ActiveTask._run_consumer` на resume ПЕРЕЗАПИСЫВАЛ это событие сохранённым таском из
+            # стора (`if isinstance(event, Task): event = new_task`, active_task.py:455) — со всеми
+            # старыми артефактами, поэтому минимальный снапшот не помогал (дубль формы оставался).
+            # В 1.1.0 перезапись убрана: клиенту уходит сырой executor-event. Тест-регрессия —
+            # tests/test_executor_streaming.py::test_resume_stream_emits_task_snapshot_for_client_consumer
+            # (зелёный на >=1.1.0, падает на 1.0.2).
             snapshot = Task(
                 id=task_id,
                 context_id=context_id,
