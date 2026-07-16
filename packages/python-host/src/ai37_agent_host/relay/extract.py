@@ -35,10 +35,30 @@ def _parts_text(parts: Any) -> str:
 
 
 def _collect_task_text(task: dict[str, Any]) -> str:
-    chunks: list[str] = []
+    """Текст ответа из ``Task``. Авторитет — ``status.message`` терминального снапшота;
+    text-артефакты СУММИРОВАТЬ с ним нельзя (порт фикса ts-host ``relay/extract.ts``).
+
+    Почему: A2A штатно разрешает стримить ответ дельтами (``artifact-update`` + ``append``), и
+    text-артефакт в этом случае — ЖИВАЯ ПРОЕКЦИЯ того же ответа, а не вторая его часть. Такой
+    агент отдаёт один и тот же текст дважды: дельтами в артефакт и снапшотом в ``status.message``.
+    Прежняя склейка обоих каналов печатала пользователю ОТВЕТ ДВАЖДЫ. Баг был латентным: у агентов
+    на ``create_agent_host`` артефакты несут только data-part (см. ``a2a_executor._finalize``),
+    поэтому склейка была безвредна — и ломалась ровно на том, кто пользуется штатным стримингом A2A.
+
+    Почему авторитет именно ``status.message``: прошлые ``artifact-update`` сервер НЕ реплеит
+    (журнала событий нет), поэтому после reconnect/``tasks/get`` доживает только снапшот — стрим
+    невосстановим.
+
+    Fallback на артефакты — если терминального текста нет вовсе (агент отдал только стрим): тогда
+    артефакты и есть единственный источник.
+    """
     status = task.get("status")
     if isinstance(status, dict) and isinstance(status.get("message"), dict):
-        chunks.append(_parts_text(status["message"].get("parts")))
+        status_text = _parts_text(status["message"].get("parts"))
+        if status_text:
+            return status_text
+
+    chunks: list[str] = []
     for artifact in task.get("artifacts") or []:
         if isinstance(artifact, dict):
             chunks.append(_parts_text(artifact.get("parts")))
