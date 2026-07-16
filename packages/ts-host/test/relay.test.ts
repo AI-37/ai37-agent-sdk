@@ -155,3 +155,75 @@ describe('executeRemoteA2aStreaming (relay стрим)', () => {
     expect(res.state).toBe('completed')
   })
 })
+
+/**
+ * Контракт текста ответа: авторитет — `status.message`; text-артефакты при стриминге содержат ТОТ ЖЕ
+ * ответ (живая проекция), поэтому суммировать их с ним нельзя — иначе агент, пользующийся штатным
+ * A2A-стримингом, отдаёт пользователю ответ дважды.
+ */
+describe('extractText: текст ответа не удваивается', () => {
+  const streamedTask = (statusMessageText?: string): Task =>
+    ({
+      kind: 'task',
+      id: 't',
+      contextId: 'c',
+      status: {
+        state: 'completed',
+        timestamp: '1',
+        ...(statusMessageText
+          ? {
+              message: {
+                kind: 'message',
+                messageId: 'm',
+                role: 'agent',
+                parts: [{ kind: 'text', text: statusMessageText }],
+              },
+            }
+          : {}),
+      },
+      // Артефакт-стрим: тот же ответ, накопленный дельтами.
+      artifacts: [{ artifactId: 'response-text', parts: [{ kind: 'text', text: 'ответ агента' }] }],
+    }) as unknown as Task
+
+  it('стримящий агент: status.message + тот же текст в артефакте → ОДНА копия', async () => {
+    const { client } = fakeClient(() => streamedTask('ответ агента'))
+    const res = await executeRemoteA2a(client, { query: 'hi' })
+    expect(res.text).toBe('ответ агента')
+  })
+
+  it('status.message авторитетнее артефакта (стрим мог разойтись со снапшотом)', async () => {
+    const { client } = fakeClient(() => streamedTask('итоговый ответ'))
+    const res = await executeRemoteA2a(client, { query: 'hi' })
+    expect(res.text).toBe('итоговый ответ')
+  })
+
+  it('нет терминального текста (агент отдал только стрим) → берём артефакты', async () => {
+    const { client } = fakeClient(() => streamedTask(undefined))
+    const res = await executeRemoteA2a(client, { query: 'hi' })
+    expect(res.text).toBe('ответ агента')
+  })
+
+  it('агент на createAgentHost: текст в status.message, артефакты только data → ОДНА копия', async () => {
+    const hostStyleTask = {
+      kind: 'task',
+      id: 't',
+      contextId: 'c',
+      status: {
+        state: 'completed',
+        timestamp: '1',
+        message: {
+          kind: 'message',
+          messageId: 'm',
+          role: 'agent',
+          parts: [{ kind: 'text', text: 'расчёт готов' }],
+        },
+      },
+      artifacts: [
+        { artifactId: 'result', parts: [{ kind: 'data', data: { a2ui: [], result: { x: 1 } } }] },
+      ],
+    } as unknown as Task
+    const { client } = fakeClient(() => hostStyleTask)
+    const res = await executeRemoteA2a(client, { query: 'hi' })
+    expect(res.text).toBe('расчёт готов')
+  })
+})

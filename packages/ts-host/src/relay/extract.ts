@@ -15,9 +15,30 @@ function partsText(parts: ReadonlyArray<TextPart>): string {
     .join('')
 }
 
+/**
+ * Текст ответа из `Task`. Авторитет — `status.message` терминального снапшота; text-артефакты
+ * СУММИРОВАТЬ с ним нельзя.
+ *
+ * Почему: A2A штатно разрешает стримить ответ дельтами (`artifact-update` + `append: true`), и
+ * text-артефакт в этом случае — ЖИВАЯ ПРОЕКЦИЯ того же самого ответа, а не вторая его часть. Такой
+ * агент отдаёт один и тот же текст дважды: дельтами в артефакт и снапшотом в `status.message`.
+ * Прежняя склейка обоих каналов печатала пользователю ОТВЕТ ДВАЖДЫ. Баг был латентным: у агентов на
+ * `createAgentHost` артефакты несут только `kind:'data'` (см. build-task `toTask`), поэтому склейка
+ * была безвредна — и ломалась ровно на том, кто пользуется штатным стримингом A2A.
+ *
+ * Почему авторитет именно `status.message`: прошлые `artifact-update` сервер НЕ реплеит (журнала
+ * событий нет), поэтому после reconnect/`tasks/get` доживает только снапшот — стрим невосстановим.
+ *
+ * Fallback на артефакты — если терминального текста нет вовсе (агент отдал только стрим): тогда
+ * артефакты и есть единственный источник.
+ */
 function collectTaskText(task: Task): string {
+  const statusText = task.status.message?.parts
+    ? partsText(task.status.message.parts as TextPart[])
+    : ''
+  if (statusText) return statusText
+
   const chunks: string[] = []
-  if (task.status.message?.parts) chunks.push(partsText(task.status.message.parts as TextPart[]))
   for (const artifact of task.artifacts ?? []) chunks.push(partsText(artifact.parts as TextPart[]))
   return chunks.filter(Boolean).join('\n\n')
 }
