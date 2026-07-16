@@ -1,0 +1,65 @@
+[tool.poetry]
+name = "ai37-agent-host"
+version = "0.1.0a8"
+description = "AI37 agent host (Python): A2A + AG-UI + MCP + file-aware store backends поверх a2a-sdk и ai37-agent-sdk. Порт @ai37/agent-host."
+authors = ["AI37"]
+license = "Apache-2.0"
+readme = "README.md"
+packages = [{ include = "ai37_agent_host", from = "src" }]
+
+[tool.poetry.dependencies]
+python = "^3.11"
+# Базовый SDK (auth/billing/a2a/context/output-modes).
+# Версионное ограничение (не path!): при сборке wheel даёт валидный Requires-Dist для PyPI.
+# `>=…a1` явно разрешает предрелиз, иначе pip не поставит 0.1.0a1 без --pre.
+ai37-agent-sdk = ">=0.1.0a1,<0.2.0"
+# Несущий A2A-протокол (Starlette-сервер, AgentExecutor, TaskUpdater, TaskStore).
+# >=1.1.0 ОБЯЗАТЕЛЬНО: resume-снапшот executor'а (a2a_executor.py, ветка current_task) корректен
+# только с 1.1.0 — в 1.0.2 стрим-консьюмер перезаписывал Task-событие сохранённым таском из стора
+# (active_task.py:455 `event = new_task`), из-за чего старая input-required форма дублировалась на
+# клиенте. В 1.1.0 перезапись убрана. Требование живёт ЗДЕСЬ (владелец стрим-кода), не в агентах.
+a2a-sdk = ">=1.1.0"
+fastapi = ">=0.110"
+starlette = ">=0.37"
+sse-starlette = ">=2.0"
+httpx = ">=0.27,<0.29"
+anyio = ">=4.4"
+# Redis-клиент нужен только потребителю RedisTaskStore (клиент инжектится, не импортируется
+# хостом). Опциональный extra: `pip install ai37-agent-host[redis]`.
+redis = { version = ">=5.0", optional = true }
+
+[tool.poetry.extras]
+redis = ["redis"]
+
+[tool.poetry.group.dev.dependencies]
+pytest = "^8.3"
+pytest-asyncio = ">=0.24,<0.26"
+ruff = ">=0.6,<0.13"
+mypy = "^1.11"
+# Асинхронный in-memory Redis для тестов RedisTaskStore (fakeredis.aioredis.FakeRedis).
+fakeredis = ">=2.20"
+
+# Опциональные группы подключаются по мере реализации модулей:
+#   mcp (python mcp SDK), observability (langfuse + opentelemetry),
+#   agui (ag-ui protocol / самописный SSE), files (deepagents CompositeBackend).
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "UP", "B"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+ignore_missing_imports = true
+warn_unused_ignores = false
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+asyncio_mode = "auto"

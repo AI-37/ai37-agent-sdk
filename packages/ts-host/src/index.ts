@@ -6,6 +6,8 @@ export {
   currentBearer,
   currentAcceptedOutputModes,
   currentSupportedCatalogIds,
+  currentPartnerInstructions,
+  withPartnerInstructions,
   currentTraceId,
   currentLangfuseTrace,
   currentLangfuseHandler,

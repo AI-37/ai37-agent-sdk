@@ -36,6 +36,21 @@ function readSupportedCatalogIds(body: unknown): string[] | undefined {
 }
 
 /**
+ * Достаёт `metadata.ai37.instructions` (жёсткая политика владельца) из A2A-сообщения
+ * (`params.message.metadata.ai37`). Для AG-UI-тела `params` нет → undefined (там инструкцию в scope
+ * кладёт роутер из forwardedProps). Пустая строка → undefined.
+ */
+function readInstructions(body: unknown): string | undefined {
+  const ai37 = (
+    body as
+      | { params?: { message?: { metadata?: { ai37?: { instructions?: unknown } } } } }
+      | undefined
+  )?.params?.message?.metadata?.ai37
+  const raw = typeof ai37?.instructions === 'string' ? ai37.instructions.trim() : ''
+  return raw || undefined
+}
+
+/**
  * Express-middleware: строит verified `AgentContext` из заголовков и открывает
  * request-scope. При `required` и невалидном/отсутствующем токене → 401.
  * При `required=false` — пропускает без ctx (миграция).
@@ -55,10 +70,17 @@ export function jwtGuard(
   ): Promise<void> => {
     const acceptedOutputModes = readAcceptedOutputModes(req.body)
     const supportedCatalogIds = readSupportedCatalogIds(req.body)
+    const instructions = readInstructions(req.body)
     try {
       const ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
       requestScope.run(
-        { ctx, bearer: extractBearer(req.headers), acceptedOutputModes, supportedCatalogIds },
+        {
+          ctx,
+          bearer: extractBearer(req.headers),
+          acceptedOutputModes,
+          supportedCatalogIds,
+          instructions,
+        },
         () => next(),
       )
     } catch (e) {
@@ -67,7 +89,13 @@ export function jwtGuard(
         return
       }
       requestScope.run(
-        { ctx: undefined, bearer: undefined, acceptedOutputModes, supportedCatalogIds },
+        {
+          ctx: undefined,
+          bearer: undefined,
+          acceptedOutputModes,
+          supportedCatalogIds,
+          instructions,
+        },
         () => next(),
       )
     }

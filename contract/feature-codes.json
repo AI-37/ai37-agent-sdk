@@ -5,6 +5,16 @@
       "code": "elevator-calc-agent",
       "constant": "ElevatorCalcAgent",
       "name": "Elevator Calculation Agent"
+    },
+    {
+      "code": "minstroy-agent",
+      "constant": "MinstroyAgent",
+      "name": "Minstroy agent"
+    },
+    {
+      "code": "thermal-calc-agent",
+      "constant": "ThermalCalcAgent",
+      "name": "Thermal Calculation Agent"
     }
   ],
   "privileges": [
@@ -12,6 +22,16 @@
       "code": "elevator-calc-allowed",
       "constant": "ElevatorCalcAllowed",
       "name": "Elevator Calculation Allowed"
+    },
+    {
+      "code": "minstroy-check-inn",
+      "constant": "MinstroyCheckInn",
+      "name": "Minstroy check INN"
+    },
+    {
+      "code": "thermal-calc-allowed",
+      "constant": "ThermalCalcAllowed",
+      "name": "Thermal Calculation Allowed"
     }
   ]
 }

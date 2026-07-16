@@ -22,6 +22,12 @@ export interface HostScope {
    */
   supportedCatalogIds?: string[]
   /**
+   * Постоянная инструкция владельца/партнёра (`metadata.ai37.instructions`). Host кладёт её сюда
+   * из ai37 (A2A-guard + AG-UI-роутер); когниция агента дописывает её в system-промпт через
+   * `withPartnerInstructions()` (видимо в трейсе). Пусто → no-op.
+   */
+  instructions?: string
+  /**
    * Per-turn Langfuse-наблюдаемость (turn-спан + LangChain `CallbackHandler`). Заполняется
    * executor'ом/AG-UI-роутером внутри `withTurnObservability` ДО вызова handler'а, поэтому
    * когниция агента может прокинуть `currentLangfuseCallbacks()` в LangChain `invoke`, не зная
@@ -53,6 +59,30 @@ export const currentAcceptedOutputModes = (): string[] | undefined =>
 
 export const currentSupportedCatalogIds = (): string[] | undefined =>
   requestScope.getStore()?.supportedCatalogIds
+
+/**
+ * Постоянная инструкция владельца/партнёра текущего хода (`metadata.ai37.instructions`) или
+ * undefined. `Ai37ChatCompletions` читает её и подмешивает как system-directive абсолютного
+ * приоритета — поэтому агенту НЕ нужно прокидывать её вручную (работает на всех агентах).
+ */
+export const currentPartnerInstructions = (): string | undefined =>
+  requestScope.getStore()?.instructions
+
+/**
+ * Дописывает постоянную инструкцию владельца/партнёра (`currentPartnerInstructions`, из
+ * `metadata.ai37.instructions`) ОТДЕЛЬНОЙ СЕКЦИЕЙ В КОНЕЦ системного промпта агента. Агент зовёт её
+ * там, где строит system-сообщение для LLM: `new SystemMessage(withPartnerInstructions(basePrompt))`.
+ *
+ * Почему так, а не инъекцией в модель: инструкция попадает в сообщения ДО `invoke`, поэтому она
+ * ВИДНА и в реальном запросе к LLM, и в Langfuse-трейсе (в отличие от подмешивания внутри
+ * `_generate`, которое трассировка не показывает). Работает на всех агентах — one-liner на
+ * call-site. Нет инструкции (обычно вне widget-канала) → промпт не меняется.
+ */
+export const withPartnerInstructions = (systemPrompt: string): string => {
+  const instructions = requestScope.getStore()?.instructions?.trim()
+  if (!instructions) return systemPrompt
+  return `${systemPrompt}\n\n## Инструкция владельца (соблюдай в приоритете)\n${instructions}`
+}
 
 /**
  * Стабильный id Langfuse-трейса текущего хода (или undefined, если трассировка выключена).

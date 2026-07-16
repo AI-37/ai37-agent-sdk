@@ -134,6 +134,10 @@ export function aguiRouter(
     if (scope) {
       scope.acceptedOutputModes = accepted
       if (supportedCatalogIds.length > 0) scope.supportedCatalogIds = supportedCatalogIds
+      // Инструкция владельца (жёсткая политика) в scope — Ai37ChatCompletions подмешает её в LLM-вызовы.
+      if (typeof metadata.instructions === 'string' && metadata.instructions.trim()) {
+        scope.instructions = metadata.instructions.trim()
+      }
     }
 
     // Multi-turn/HITL: состояние прошлого хода thread'а из task-store

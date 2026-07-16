@@ -47,12 +47,18 @@ def ensure_ok(response: httpx.Response, message_prefix: str) -> httpx.Response:
 
 
 def validate_options(
-    *, base_url: str, auth_token: str, runtime_state_cache_ttl_ms: float
+    *,
+    base_url: str,
+    auth_token: str,
+    usage_ingest_token: str,
+    runtime_state_cache_ttl_ms: float,
 ) -> None:
     if not base_url.strip():
         raise BillingConfigurationError("Billing client base_url is required")
     if not auth_token.strip():
         raise BillingConfigurationError("Billing client auth_token is required")
+    if not usage_ingest_token.strip():
+        raise BillingConfigurationError("Billing client usage_ingest_token is required")
     if runtime_state_cache_ttl_ms < 0:
         raise BillingConfigurationError(
             "Billing client runtime_state_cache_ttl_ms must be >= 0"

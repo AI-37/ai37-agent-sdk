@@ -52,11 +52,27 @@ export interface Ai37Metadata {
   intent?: IntentEnvelope
   trace_id?: string
   /**
+   * Человеко-гейт (confirm_mode): согласие выполнить задачу без интерактивного подтверждения.
+   * `auto` — сабагент МОЖЕТ посчитать oneshot без confirm (машинный вызов: MCP-агрегатор/structured);
+   * `ask`/отсутствие — обязателен диалог+confirm (ход человека). Ставит доверенная граница
+   * (агрегатор/оркестратор), цепочка форвардит. НЕ путать с A2A `configuration.blocking` (транспорт:
+   * ждать ли синхронно). Дефолт-политику (`ask` при отсутствии) применяет агент-потребитель.
+   */
+  confirm_mode?: 'ask' | 'auto'
+  /**
    * Принимаемые клиентом форматы вывода (content-negotiation, РЕШЕНИЕ 10).
    * Носитель ТОЛЬКО для AG-UI (`forwardedProps.ai37`), где нет нативного A2A-поля.
    * Для A2A носитель — нативный `params.configuration.acceptedOutputModes` (НЕ этот конверт).
    */
   acceptedOutputModes?: string[]
+  /**
+   * Постоянная инструкция владельца/партнёра, влияющая на ход диалога (напр. виджет: «считай
+   * лифты со скоростью 5 м/с»). Host кладёт её в request-scope (`currentPartnerInstructions`), а
+   * когниция агента ВИДИМО дописывает её отдельной секцией в конец system-промпта через
+   * `withPartnerInstructions(systemPrompt)` — так она попадает и в реальный LLM-запрос, и в
+   * Langfuse-трейс. Пусто/undefined (обычно вне widget-канала) → промпт не меняется.
+   */
+  instructions?: string
 }
 
 /**

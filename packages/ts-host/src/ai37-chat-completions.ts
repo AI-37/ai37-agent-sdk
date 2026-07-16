@@ -10,12 +10,14 @@ import { ChatOpenAICompletions } from '@langchain/openai'
  * `ChatOpenAICompletions` с базовым методом. Расширяем сам impl-класс (для litellm / Chat
  * Completions это ровно тот путь, что фасад и так выбирает) — отсюда и имя `Ai37ChatCompletions`.
  *
- * Зачем глушим: базовый `getNumTokens` (из `@langchain/core`) тянет BPE-таблицы с
+ * Зачем глушим getNumTokens: базовый (из `@langchain/core`) тянет BPE-таблицы с
  * `https://tiktoken.pages.dev` (`js-tiktoken/lite` их не бандлит) → виснет на IPv6-egress из
  * кластера (~100с, ETIMEDOUT) перед каждым стриминговым ходом → запрос не доходит, UI отдаёт
- * "network error". Для не-OpenAI модели (deepseek) счёт всё равно идёт по чужому словарю
- * (фоллбэк gpt-2). Реальный usage берём из ответа litellm (`usage_metadata`); считать локально
- * не нужно — возвращаем 0.
+ * "network error". Реальный usage берём из ответа litellm (`usage_metadata`) — возвращаем 0.
+ *
+ * Партнёрскую инструкцию (`metadata.ai37.instructions`) сюда НЕ подмешиваем: это делается ВИДИМО в
+ * когниции агента — `withPartnerInstructions(systemPrompt)` дописывает её отдельной секцией в конец
+ * системного промпта ДО `invoke`, поэтому она попадает и в реальный запрос, и в Langfuse-трейс.
  */
 export class Ai37ChatCompletions extends ChatOpenAICompletions {
   override getNumTokens(): Promise<number> {
