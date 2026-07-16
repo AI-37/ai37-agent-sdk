@@ -7,9 +7,11 @@ from ai37_agent_sdk import (
     BillingExecutionRequirement,
     BillingRequestError,
     create_billing_client,
+    explain_denial,
+    friendly_billing_message,
 )
 from ai37_agent_sdk.billing import BillingExecutionDeniedError
-from ai37_agent_sdk.billing.types import BillingUsageEventInput
+from ai37_agent_sdk.billing.types import BillingRuntimeState, BillingUsageEventInput
 
 ACTIVE = {
     "orgId": "u1",
@@ -115,3 +117,70 @@ def test_request_error():
     with pytest.raises(BillingRequestError) as exc:
         client.get_runtime_state_by_billing_org_id("org1")
     assert exc.value.status == 500
+
+
+# --- информативность отказа (explain_denial / BillingExecutionDeniedError / friendly) ---
+
+def _priv(value: object) -> dict:
+    return {
+        "code": "elevator-calc-allowed",
+        "value": value,
+        "valueType": "boolean",
+        "config": {},
+    }
+
+
+_ELEV_FEATURE = {"code": "elevator-calc-agent", "privileges": [_priv(True)]}
+
+
+def _state(**overrides) -> BillingRuntimeState:
+    base = {**ACTIVE, "features": [_ELEV_FEATURE]}
+    base.update(overrides)
+    return BillingRuntimeState.from_api(base)
+
+
+_REQ = BillingExecutionRequirement(
+    feature="elevator-calc-agent", privilege="elevator-calc-allowed"
+)
+
+
+def test_explain_denial_returns_none_when_allowed():
+    assert explain_denial(_state(), _REQ) is None
+
+
+def test_explain_denial_names_missing_feature_with_granted_list():
+    reason, detail = explain_denial(_state(features=[]), _REQ)
+    assert reason == "MISSING_FEATURE"
+    assert "required feature=elevator-calc-agent" in detail
+    assert "granted: []" in detail
+
+
+def test_explain_denial_names_missing_privilege():
+    denied = _state(
+        features=[{"code": "elevator-calc-agent", "privileges": [_priv(False)]}]
+    )
+    reason, _ = explain_denial(denied, _REQ)
+    assert reason == "MISSING_PRIVILEGE"
+
+
+def test_explain_denial_inactive_and_no_tokens():
+    assert explain_denial(_state(entitlementStatus="suspended"), _REQ)[0] == "ENTITLEMENT_INACTIVE"
+    assert explain_denial(_state(remainingTotalTokens=0), _REQ)[0] == "NO_TOKENS"
+
+
+def test_error_message_is_truthful_and_structured():
+    err = BillingExecutionDeniedError(_state(features=[]), _REQ)
+    assert err.reason == "MISSING_FEATURE"
+    assert err.requirement is _REQ
+    assert str(err) == (
+        "BILLING_DENIED[MISSING_FEATURE]: required feature=elevator-calc-agent "
+        "not granted (granted: [])"
+    )
+    assert "BILLING_NO_RESOURCES" not in str(err)
+
+
+def test_friendly_message_hides_internals():
+    err = BillingExecutionDeniedError(_state(features=[]), _REQ)
+    msg = friendly_billing_message(err)
+    assert "feature=" not in msg and "elevator-calc-agent" not in msg
+    assert friendly_billing_message(Exception("boom")).endswith("подписку.")

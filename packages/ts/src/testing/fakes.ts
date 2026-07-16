@@ -52,7 +52,7 @@ export class InMemoryBillingClient implements BillingClient {
       s.remainingTotalTokens <= 0 ||
       !hasRequiredAccess(s, requirement)
     ) {
-      throw new BillingExecutionDeniedError(s)
+      throw new BillingExecutionDeniedError(s, requirement)
     }
     return s
   }
