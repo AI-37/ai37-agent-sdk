@@ -6,15 +6,19 @@ from urllib.parse import quote
 
 import httpx
 
+from .access import has_required_access
 from .errors import BillingExecutionDeniedError
 from .http import ensure_ok, normalize_billing_base_url, validate_options
 from .types import (
     BillingClient,
     BillingExecutionRequirement,
-    BillingRuntimePrivilege,
     BillingRuntimeState,
     BillingUsageEventInput,
 )
+
+# has_required_access переехал в .access (чтобы errors.py звал explain_denial без цикла);
+# импорт выше держит его доступным и как billing.client.has_required_access (совместимость).
+__all__ = ["HttpBillingClient", "create_billing_client", "has_required_access"]
 
 
 class HttpBillingClient:
@@ -81,7 +85,7 @@ class HttpBillingClient:
             or state.remaining_total_tokens <= 0
             or not has_required_access(state, requirement)
         ):
-            raise BillingExecutionDeniedError(state)
+            raise BillingExecutionDeniedError(state, requirement)
         return state
 
     def send_usage_event(self, event: BillingUsageEventInput) -> None:
@@ -114,46 +118,6 @@ def create_billing_client(
         runtime_state_cache_ttl_ms=runtime_state_cache_ttl_ms,
         http_client=http_client,
     )
-
-
-def has_required_access(
-    state: BillingRuntimeState,
-    requirement: BillingExecutionRequirement | None = None,
-) -> bool:
-    """Чистая проверка прав по runtime state (переиспользуется in-memory клиентом)."""
-    if requirement is None or (requirement.feature is None and requirement.privilege is None):
-        return True
-
-    if requirement.feature is not None:
-        matching = [f for f in state.features if f.code == requirement.feature]
-    else:
-        matching = list(state.features)
-
-    if not matching:
-        return False
-
-    if requirement.privilege is None:
-        return True
-
-    return any(
-        any(
-            priv.code == requirement.privilege and _is_privilege_accessible(priv)
-            for priv in feature.privileges
-        )
-        for feature in matching
-    )
-
-
-def _is_privilege_accessible(privilege: BillingRuntimePrivilege) -> bool:
-    if privilege.value_type == "boolean":
-        return privilege.value is True
-    if privilege.value_type == "integer":
-        return isinstance(privilege.value, int | float) and not isinstance(
-            privilege.value, bool
-        )
-    if privilege.value_type in ("string", "select"):
-        return isinstance(privilege.value, str) and len(privilege.value) > 0
-    return False
 
 
 def _build_usage_payload(event: BillingUsageEventInput) -> dict[str, Any]:

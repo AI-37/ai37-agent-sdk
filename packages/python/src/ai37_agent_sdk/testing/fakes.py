@@ -48,7 +48,7 @@ class InMemoryBillingClient:
             or s.remaining_total_tokens <= 0
             or not has_required_access(s, requirement)
         ):
-            raise BillingExecutionDeniedError(s)
+            raise BillingExecutionDeniedError(s, requirement)
         return s
 
     def send_usage_event(self, event: BillingUsageEventInput) -> None:

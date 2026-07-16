@@ -1,6 +1,7 @@
 // billing-клиент: runtime state + metered usage.
 // runtime state несёт llmKey (см. types.ts / contract).
 import { LRUCache } from 'lru-cache'
+import { hasRequiredAccess } from './access'
 import { BillingExecutionDeniedError } from './errors'
 import {
   ensureOk,
@@ -12,10 +13,13 @@ import type {
   BillingClient,
   BillingClientOptions,
   BillingExecutionRequirement,
-  BillingRuntimePrivilege,
   BillingRuntimeState,
   BillingUsageEventInput,
 } from './types'
+
+// hasRequiredAccess переехал в ./access (чтобы errors.ts мог звать explainDenial без цикла);
+// ре-экспортируем отсюда ради обратной совместимости прежних импортов.
+export { hasRequiredAccess } from './access'
 
 export function createBillingClient(
   options: BillingClientOptions,
@@ -87,7 +91,7 @@ export function createBillingClient(
       state.remainingTotalTokens <= 0 ||
       !hasRequiredAccess(state, requirement)
     ) {
-      throw new BillingExecutionDeniedError(state)
+      throw new BillingExecutionDeniedError(state, requirement)
     }
 
     return state
@@ -117,52 +121,6 @@ export function createBillingClient(
 
 /** @deprecated alias — используйте createBillingClient. */
 export const createBillingAppsClient = createBillingClient
-
-/** Чистая проверка прав по runtime state. Переиспользуется in-memory клиентом в testing kit. */
-export function hasRequiredAccess(
-  state: BillingRuntimeState,
-  requirement?: BillingExecutionRequirement,
-): boolean {
-  if (!requirement?.feature && !requirement?.privilege) {
-    return true
-  }
-
-  const matchingFeatures = requirement?.feature
-    ? state.features.filter((feature) => feature.code === requirement.feature)
-    : state.features
-
-  if (matchingFeatures.length === 0) {
-    return false
-  }
-
-  if (!requirement?.privilege) {
-    return true
-  }
-
-  return matchingFeatures.some((feature) =>
-    feature.privileges.some(
-      (privilege) =>
-        privilege.code === requirement.privilege &&
-        isPrivilegeAccessible(privilege),
-    ),
-  )
-}
-
-function isPrivilegeAccessible(privilege: BillingRuntimePrivilege): boolean {
-  if (privilege.valueType === 'boolean') {
-    return privilege.value === true
-  }
-
-  if (privilege.valueType === 'integer') {
-    return typeof privilege.value === 'number'
-  }
-
-  if (privilege.valueType === 'string' || privilege.valueType === 'select') {
-    return typeof privilege.value === 'string' && privilege.value.length > 0
-  }
-
-  return false
-}
 
 function buildUsageEventPayload(event: BillingUsageEventInput) {
   return {

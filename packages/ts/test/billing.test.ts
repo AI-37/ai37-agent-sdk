@@ -6,6 +6,8 @@ import {
   BillingExecutionDeniedError,
   BillingRequestError,
   createBillingAppsClient,
+  explainDenial,
+  friendlyBillingMessage,
   normalizeBillingBaseUrl,
 } from '../src'
 import type { BillingRuntimeState } from '../src'
@@ -486,5 +488,105 @@ describe('createBillingAppsClient', () => {
       name: 'BillingRequestError',
       status: 422,
     })
+  })
+})
+
+describe('explainDenial / BillingExecutionDeniedError / friendlyBillingMessage', () => {
+  function state(overrides?: Partial<BillingRuntimeState>): BillingRuntimeState {
+    return {
+      orgId: 'o',
+      billingOrgId: 'o',
+      entitlementStatus: 'active',
+      remainingTotalTokens: 100,
+      features: [
+        {
+          code: BillingFeatureCode.ElevatorCalcAgent,
+          privileges: [
+            {
+              code: BillingPrivilegeCode.ElevatorCalcAllowed,
+              value: true,
+              valueType: 'boolean',
+              config: {},
+            },
+          ],
+        },
+      ],
+      stale: false,
+      ...overrides,
+    }
+  }
+  const req = {
+    feature: BillingFeatureCode.ElevatorCalcAgent,
+    privilege: BillingPrivilegeCode.ElevatorCalcAllowed,
+  }
+
+  it('returns null when access is allowed', () => {
+    expect(explainDenial(state(), req)).toBeNull()
+  })
+
+  it('names ENTITLEMENT_INACTIVE with plan/subscription detail', () => {
+    const d = explainDenial(
+      state({
+        entitlementStatus: 'suspended',
+        currentPlanCode: 'pro',
+        currentSubscriptionStatus: 'unpaid',
+      }),
+      req,
+    )
+    expect(d?.reason).toBe('ENTITLEMENT_INACTIVE')
+    expect(d?.detail).toContain('entitlement_status=suspended')
+    expect(d?.detail).toContain('plan=pro')
+  })
+
+  it('names NO_TOKENS', () => {
+    expect(explainDenial(state({ remainingTotalTokens: 0 }), req)?.reason).toBe('NO_TOKENS')
+  })
+
+  it('names MISSING_FEATURE and lists granted features (the confusing case)', () => {
+    const d = explainDenial(state({ features: [] }), req)
+    expect(d?.reason).toBe('MISSING_FEATURE')
+    expect(d?.detail).toContain('required feature=elevator-calc-agent')
+    expect(d?.detail).toContain('granted: []')
+  })
+
+  it('names MISSING_PRIVILEGE when the feature is present but the privilege is not accessible', () => {
+    const denied = state({
+      features: [
+        {
+          code: BillingFeatureCode.ElevatorCalcAgent,
+          privileges: [
+            {
+              code: BillingPrivilegeCode.ElevatorCalcAllowed,
+              value: false,
+              valueType: 'boolean',
+              config: {},
+            },
+          ],
+        },
+      ],
+    })
+    const d = explainDenial(denied, req)
+    expect(d?.reason).toBe('MISSING_PRIVILEGE')
+    expect(d?.detail).toContain('privilege=elevator-calc-allowed')
+  })
+
+  it('error carries reason + requirement and a truthful message (not the old misleading string)', () => {
+    const err = new BillingExecutionDeniedError(state({ features: [] }), req)
+    expect(err.reason).toBe('MISSING_FEATURE')
+    expect(err.requirement).toEqual(req)
+    expect(err.message).toBe(
+      'BILLING_DENIED[MISSING_FEATURE]: required feature=elevator-calc-agent not granted (granted: [])',
+    )
+    expect(err.message).not.toContain('BILLING_NO_RESOURCES')
+  })
+
+  it('friendlyBillingMessage maps the reason to a safe user string (no internals leaked)', () => {
+    const err = new BillingExecutionDeniedError(state({ features: [] }), req)
+    const msg = friendlyBillingMessage(err)
+    expect(msg).not.toContain('feature=')
+    expect(msg).not.toContain('elevator-calc-agent')
+    expect(msg.length).toBeGreaterThan(0)
+    // Unknown errors fall back to the generic subscription message.
+    expect(friendlyBillingMessage(new Error('boom'))).toContain('подписку')
   })
 })

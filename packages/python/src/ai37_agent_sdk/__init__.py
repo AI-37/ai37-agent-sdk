@@ -16,6 +16,7 @@ from .auth import (
 from .billing import (
     BillingClient,
     BillingConfigurationError,
+    BillingDenialReason,
     BillingExecutionDeniedError,
     BillingExecutionRequirement,
     BillingRequestError,
@@ -24,6 +25,8 @@ from .billing import (
     BillingRuntimeState,
     BillingUsageEventInput,
     create_billing_client,
+    explain_denial,
+    friendly_billing_message,
     has_required_access,
     normalize_billing_base_url,
 )
@@ -53,6 +56,7 @@ __all__ = [
     # billing
     "BillingClient",
     "BillingConfigurationError",
+    "BillingDenialReason",
     "BillingExecutionDeniedError",
     "BillingExecutionRequirement",
     "BillingRequestError",
@@ -61,6 +65,8 @@ __all__ = [
     "BillingRuntimeState",
     "BillingUsageEventInput",
     "create_billing_client",
+    "explain_denial",
+    "friendly_billing_message",
     "has_required_access",
     "normalize_billing_base_url",
     # a2a
