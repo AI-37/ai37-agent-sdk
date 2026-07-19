@@ -1,8 +1,15 @@
 import type { JSONWebKeySet, JWTVerifyGetKey } from 'jose'
 
 /**
+ * Роль пользователя в его организации (multi-user orgs, амендмент v2).
+ * `USER` < `EDITOR` < `OWNER`. Дефолт при отсутствии claim — `USER` (least-privilege).
+ */
+export type OrgRole = 'OWNER' | 'EDITOR' | 'USER'
+
+/**
  * Claims user-JWT (см. contract/claims.schema.json).
  * v1.2: один issuer (sp-ai). `app_id` появляется в v2 и опционален.
+ * `org_role` появляется с multi-user-организациями; `org_id` — id организации (расцеплен от `sub`).
  */
 export interface Claims {
   iss: string
@@ -14,6 +21,8 @@ export interface Claims {
   org_id: string
   billing_org_id: string
   app_id?: string
+  /** Роль в организации; отсутствует у до-миграционных токенов (трактуется как `USER`). */
+  org_role?: OrgRole
   email?: string
   name?: string
   [claim: string]: unknown

@@ -3,6 +3,17 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.10] - 2026-07-19
+
+### Added
+- Multi-user организации (амендмент v2): тип `OrgRole` (`OWNER | EDITOR | USER`) и опциональный
+  claim `Claims.org_role`. Верификатор и обязательные claims (`sub`/`org_id`/`billing_org_id`)
+  НЕ меняются — `org_role` едет как дополнительный claim.
+- `AgentContext.orgId`, `AgentContext.role` (отсутствующий claim → `USER`, least-privilege) и
+  `AgentContext.assertRole(min)` — гейт по роли для EDITOR+ инструментов; при недостатке роли
+  бросает `AuthError` с новым кодом `forbidden_role` (семантика 403, не 401). Порядок:
+  `USER < EDITOR < OWNER`.
+
 ## [0.1.0-alpha.6] - 2026-06-24
 
 ### Fixed

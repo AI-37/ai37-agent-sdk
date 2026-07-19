@@ -6,7 +6,7 @@ from .introspection import (
     create_composite_verifier,
     looks_like_jwt,
 )
-from .types import Claims, JwtVerifier
+from .types import Claims, JwtVerifier, OrgRole
 from .verifier import JwksJwtVerifier, KeyResolver, create_jwt_verifier
 
 __all__ = [
@@ -14,6 +14,7 @@ __all__ = [
     "AuthErrorCode",
     "extract_bearer",
     "Claims",
+    "OrgRole",
     "JwtVerifier",
     "JwksJwtVerifier",
     "KeyResolver",
