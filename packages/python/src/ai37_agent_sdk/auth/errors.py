@@ -2,7 +2,8 @@ from __future__ import annotations
 
 from typing import Literal
 
-AuthErrorCode = Literal["invalid_token", "missing_claim", "config"]
+# ``forbidden_role`` — аутентифицирован, но роли недостаточно (семантика 403, не 401).
+AuthErrorCode = Literal["invalid_token", "missing_claim", "config", "forbidden_role"]
 
 
 class AuthError(Exception):

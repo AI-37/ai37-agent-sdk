@@ -10,6 +10,7 @@ from .auth import (
     Claims,
     JwksJwtVerifier,
     JwtVerifier,
+    OrgRole,
     create_jwt_verifier,
     extract_bearer,
 )
@@ -49,6 +50,7 @@ __all__ = [
     # auth
     "AuthError",
     "Claims",
+    "OrgRole",
     "JwtVerifier",
     "JwksJwtVerifier",
     "create_jwt_verifier",

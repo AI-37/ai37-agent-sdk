@@ -6,7 +6,7 @@ from typing import Any
 from .auth.errors import AuthError
 from .auth.headers import extract_bearer
 from .auth.introspection import create_composite_verifier, looks_like_jwt
-from .auth.types import Claims, JwtVerifier
+from .auth.types import Claims, JwtVerifier, OrgRole
 from .auth.verifier import JwksJwtVerifier
 from .billing.client import create_billing_client
 from .billing.types import (
@@ -15,6 +15,9 @@ from .billing.types import (
     BillingRuntimeState,
     BillingUsageEventInput,
 )
+
+# Порядок ролей для сравнения в assert_role: USER < EDITOR < OWNER.
+_ORG_ROLE_RANK: dict[OrgRole, int] = {"USER": 0, "EDITOR": 1, "OWNER": 2}
 
 
 @dataclass
@@ -128,6 +131,26 @@ class AgentContext:
     @property
     def billing_org_id(self) -> str | None:
         return self.claims.get("billing_org_id") if self.claims else None
+
+    @property
+    def org_id(self) -> str | None:
+        """Id организации из claims (расцеплён от ``sub``)."""
+        return self.claims.get("org_id") if self.claims else None
+
+    @property
+    def role(self) -> OrgRole:
+        """Роль в организации; отсутствующий claim трактуется как ``USER`` (least-privilege)."""
+        value = self.claims.get("org_role") if self.claims else None
+        return value if value in _ORG_ROLE_RANK else "USER"
+
+    def assert_role(self, minimum: OrgRole) -> None:
+        """Гейт по роли для EDITOR+ инструментов. Бросает ``AuthError('forbidden_role')``
+        (семантика 403), если роль ниже требуемой. Порядок: USER < EDITOR < OWNER."""
+        if _ORG_ROLE_RANK[self.role] < _ORG_ROLE_RANK[minimum]:
+            raise AuthError(
+                f"AgentContext: недостаточно прав (требуется {minimum}, есть {self.role})",
+                "forbidden_role",
+            )
 
     @property
     def llm_key(self) -> str | None:

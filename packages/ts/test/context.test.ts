@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import {
+  AuthError,
   BillingExecutionDeniedError,
   BillingFeatureCode,
   BillingPrivilegeCode,
@@ -79,5 +80,40 @@ describe('AgentContext (через testing kit)', () => {
         privilege: BillingPrivilegeCode.ElevatorCalcAllowed,
       }),
     ).rejects.toBeInstanceOf(BillingExecutionDeniedError)
+  })
+})
+
+describe('AgentContext — org identity/role (multi-user orgs)', () => {
+  it('orgId из claims; role дефолтит в USER при отсутствии org_role', async () => {
+    const ctx = await makeTestContext({ claims })
+    expect(ctx.orgId).toBe('user-1')
+    expect(ctx.role).toBe('USER')
+  })
+
+  it('role берётся из claims.org_role', async () => {
+    const ctx = await makeTestContext({ claims: { ...claims, org_role: 'EDITOR' } })
+    expect(ctx.role).toBe('EDITOR')
+  })
+
+  it('assertRole пропускает при роли >= требуемой', async () => {
+    const owner = await makeTestContext({ claims: { ...claims, org_role: 'OWNER' } })
+    expect(() => owner.assertRole('EDITOR')).not.toThrow()
+    expect(() => owner.assertRole('OWNER')).not.toThrow()
+
+    const editor = await makeTestContext({ claims: { ...claims, org_role: 'EDITOR' } })
+    expect(() => editor.assertRole('EDITOR')).not.toThrow()
+    expect(() => editor.assertRole('USER')).not.toThrow()
+  })
+
+  it('assertRole бросает AuthError(forbidden_role) при роли ниже требуемой', async () => {
+    const user = await makeTestContext({ claims })
+    expect(() => user.assertRole('EDITOR')).toThrow(AuthError)
+    try {
+      user.assertRole('OWNER')
+      expect.unreachable('assertRole должен был бросить')
+    } catch (err) {
+      expect(err).toBeInstanceOf(AuthError)
+      expect((err as AuthError).code).toBe('forbidden_role')
+    }
   })
 })

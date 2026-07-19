@@ -61,3 +61,41 @@ def test_optional_token_skips_auth():
     )
     assert ctx.claims is None
     assert ctx.billing_org_id is None
+
+
+def test_org_id_and_role_default_user():
+    ctx = make_test_context(
+        claims={"sub": "u1", "org_id": "org1", "billing_org_id": "b1"}
+    )
+    assert ctx.org_id == "org1"
+    assert ctx.role == "USER"
+
+
+def test_role_from_claim():
+    ctx = make_test_context(
+        claims={"sub": "u1", "org_id": "org1", "billing_org_id": "b1", "org_role": "EDITOR"}
+    )
+    assert ctx.role == "EDITOR"
+
+
+def test_assert_role_passes_when_sufficient():
+    owner = make_test_context(
+        claims={"sub": "u1", "org_id": "org1", "billing_org_id": "b1", "org_role": "OWNER"}
+    )
+    owner.assert_role("EDITOR")
+    owner.assert_role("OWNER")
+
+    editor = make_test_context(
+        claims={"sub": "u1", "org_id": "org1", "billing_org_id": "b1", "org_role": "EDITOR"}
+    )
+    editor.assert_role("EDITOR")
+    editor.assert_role("USER")
+
+
+def test_assert_role_raises_when_insufficient():
+    user = make_test_context(
+        claims={"sub": "u1", "org_id": "org1", "billing_org_id": "b1"}
+    )
+    with pytest.raises(AuthError) as exc:
+        user.assert_role("EDITOR")
+    assert exc.value.code == "forbidden_role"

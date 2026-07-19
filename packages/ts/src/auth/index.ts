@@ -14,6 +14,7 @@ export {
 } from './introspection'
 export type {
   Claims,
+  OrgRole,
   JwtVerifier,
   JwtVerifierOptions,
   IssuerConfig,

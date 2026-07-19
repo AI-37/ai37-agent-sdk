@@ -14,7 +14,10 @@ import type {
   BillingExecutionRequirement,
   BillingRuntimeState,
 } from './billing/types'
-import type { Claims, IssuerConfig, JwtVerifier } from './auth/types'
+import type { Claims, IssuerConfig, JwtVerifier, OrgRole } from './auth/types'
+
+/** Порядок ролей для сравнения в assertRole: USER < EDITOR < OWNER. */
+const ORG_ROLE_RANK: Record<OrgRole, number> = { USER: 0, EDITOR: 1, OWNER: 2 }
 
 export interface AgentContextSettings {
   auth: {
@@ -167,6 +170,29 @@ export class AgentContext {
 
   get billingOrgId(): string | undefined {
     return this.claims?.billing_org_id
+  }
+
+  /** Id организации из claims (расцеплён от `sub`; у виджет/service-account может отсутствовать). */
+  get orgId(): string | undefined {
+    return this.claims?.org_id
+  }
+
+  /** Роль в организации; отсутствующий claim трактуется как `USER` (least-privilege). */
+  get role(): OrgRole {
+    return this.claims?.org_role ?? 'USER'
+  }
+
+  /**
+   * Гейт по роли для EDITOR+ инструментов агента. Бросает `AuthError('forbidden_role')`
+   * (семантика 403), если роль ниже требуемой. Порядок: USER < EDITOR < OWNER.
+   */
+  assertRole(min: OrgRole): void {
+    if (ORG_ROLE_RANK[this.role] < ORG_ROLE_RANK[min]) {
+      throw new AuthError(
+        `AgentContext: недостаточно прав (требуется ${min}, есть ${this.role})`,
+        'forbidden_role',
+      )
+    }
   }
 
   /** Ключ LLM-шлюза из последнего полученного runtime state (preflight). */

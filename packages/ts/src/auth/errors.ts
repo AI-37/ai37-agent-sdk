@@ -1,6 +1,7 @@
 export class AuthError extends Error {
-  /** Машинно-читаемая причина: invalid_token | missing_claim | config */
-  readonly code: 'invalid_token' | 'missing_claim' | 'config'
+  /** Машинно-читаемая причина: invalid_token | missing_claim | config | forbidden_role.
+   *  `forbidden_role` — аутентифицирован, но роли недостаточно (семантика 403, не 401). */
+  readonly code: 'invalid_token' | 'missing_claim' | 'config' | 'forbidden_role'
 
   constructor(
     message: string,
