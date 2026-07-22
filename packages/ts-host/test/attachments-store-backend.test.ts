@@ -83,46 +83,44 @@ function project(projectId: () => string | undefined): ProjectAttachmentsStoreBa
   })
 }
 
+// Бэкенд MOUNT-RELATIVE (контракт CompositeBackend): composite срезает префикс маунта на входе
+// и добавляет его к путям результатов на выходе. Поэтому бэкенд видит `/` и `/<fileId>`,
+// а внешние пути (`/chat-attachments/f1`) существуют только снаружи composite.
 describe('ChatAttachmentsStoreBackend', () => {
   const ctx = () => 'ctx1'
 
-  it('ls("/chat-attachments/") — файлы по fileId', async () => {
-    const res = await chat(ctx).ls('/chat-attachments/')
-    expect((res.files ?? []).map((f) => f.path)).toEqual(['/chat-attachments/f1'])
+  it('ls("/") — файлы по fileId, пути относительные', async () => {
+    const res = await chat(ctx).ls('/')
+    expect((res.files ?? []).map((f) => f.path)).toEqual(['/f1'])
   })
 
-  it('read директории — markdown-манифест с source_name/summary', async () => {
-    const res = await chat(ctx).read('/chat-attachments/')
+  it('read("/") — markdown-манифест с source_name/summary', async () => {
+    const res = await chat(ctx).read('/')
     expect(res.content).toContain('spec.pdf')
     expect(res.content).toContain('расчёт лифтов')
     expect(res.content).toContain('большой') // is_large сигнал
   })
 
   it('read файла с offset/limit → окно (серверная нарезка)', async () => {
-    const res = await chat(ctx).read('/chat-attachments/f1', 0, 100)
+    const res = await chat(ctx).read('/f1', 0, 100)
     expect(res.content).toBe('# spec\nстрока1')
     expect(res.mimeType).toBe('text/markdown')
   })
 
-  it('grep → серверный поиск, путь по fileId', async () => {
-    const res = await chat(ctx).grep('лифты', '/chat-attachments/')
-    expect(res.matches?.[0].path).toBe('/chat-attachments/f1')
+  it('grep → серверный поиск, относительный путь по fileId', async () => {
+    const res = await chat(ctx).grep('лифты', '/')
+    expect(res.matches?.[0].path).toBe('/f1')
     expect(res.matches?.[0].line).toBe(5)
   })
 
   it('glob по имени файла', async () => {
     const res = await chat(ctx).glob('spec')
-    expect((res.files ?? []).map((f) => f.path)).toEqual(['/chat-attachments/f1'])
+    expect((res.files ?? []).map((f) => f.path)).toEqual(['/f1'])
   })
 
   it('нет contextId в ходе → ошибка скоупа', async () => {
-    const res = await chat(() => undefined).ls('/chat-attachments/')
+    const res = await chat(() => undefined).ls('/')
     expect(res.error).toBeTruthy()
-  })
-
-  it('толерантность к scope-обрезке: якорь не на позиции 0', async () => {
-    const res = await chat(ctx).ls('/x/chat-attachments/')
-    expect((res.files ?? []).map((f) => f.path)).toEqual(['/chat-attachments/f1'])
   })
 
   it('write/edit — read-only ошибка', async () => {
@@ -131,37 +129,32 @@ describe('ChatAttachmentsStoreBackend', () => {
     expect((await b.edit()).error).toBeTruthy()
   })
 
-  // CompositeBackend срезает префикс маунта перед делегированием: путь из манифеста
-  // `/chat-attachments/f1` приходит бэкенду как `/f1`. Обе формы должны работать.
-  it('срезанный CompositeBackend путь: read("/f1") → контент файла', async () => {
-    const res = await chat(ctx).read('/f1', 0, 100)
-    expect(res.content).toBe('# spec\nстрока1')
+  // BREAKING: якорная форма пути standalone больше не поддерживается — бэкенд не знает
+  // своего маунта. `/chat-attachments/f1` = два сегмента → «Неизвестный путь».
+  it('якорный путь standalone → ошибка (breaking, mount-relative контракт)', async () => {
+    const res = await chat(ctx).read('/chat-attachments/f1')
+    expect(res.error).toBeTruthy()
   })
 
-  it('срезанный путь директории: read("/") → markdown-манифест', async () => {
-    const res = await chat(ctx).read('/')
-    expect(res.content).toContain('spec.pdf')
-  })
-
-  it('путь глубже одного сегмента без якоря → ошибка, не ложный fileId', async () => {
+  it('путь глубже одного сегмента → ошибка, не ложный fileId', async () => {
     const res = await chat(ctx).read('/foo/bar')
     expect(res.error).toBeTruthy()
   })
 })
 
 describe('ProjectAttachmentsStoreBackend', () => {
-  it('ls по projectId', async () => {
-    const res = await project(() => 'proj1').ls('/project-attachments/')
-    expect((res.files ?? []).map((f) => f.path)).toEqual(['/project-attachments/f9'])
+  it('ls("/") по projectId — относительные пути', async () => {
+    const res = await project(() => 'proj1').ls('/')
+    expect((res.files ?? []).map((f) => f.path)).toEqual(['/f9'])
   })
 
   it('read файла резолвится по fileId без projectId', async () => {
-    const res = await project(() => undefined).read('/project-attachments/f9')
+    const res = await project(() => undefined).read('/f9')
     expect(res.content).toContain('план')
   })
 
   it('нет projectId для манифеста → ошибка скоупа', async () => {
-    const res = await project(() => undefined).ls('/project-attachments/')
+    const res = await project(() => undefined).ls('/')
     expect(res.error).toBeTruthy()
   })
 })
