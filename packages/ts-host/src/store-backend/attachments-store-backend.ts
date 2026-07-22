@@ -152,12 +152,22 @@ abstract class AttachmentsStoreBackendBase implements StoreBackend {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  /** fileId сегмента (string), '' для директории-якоря, null если якорь не найден. */
+  /**
+   * fileId сегмента (string), '' для директории-якоря, null если путь не распознан.
+   * Поддерживаем ДВЕ формы: полную `/chat-attachments/<id>` (прямые вызовы, пути из манифеста
+   * `context_files`) и срезанную `/<id>` — CompositeBackend перед делегированием бэкенду удаляет
+   * префикс маунта. Без fallback'а любой путь из манифеста при вызове через deepagents-ФС умирал
+   * в «Неизвестный путь» (срезка съедала якорь), и reader-агент подбирал рабочий путь перебором,
+   * сжигая итерации петли (инцидент лифтового агента 2026-07-22).
+   */
   protected parse(path: string): string | null {
     const seg = path.split('/').filter(Boolean)
     const i = seg.findIndex((s) => s === this.anchor)
-    if (i === -1) return null
-    return seg[i + 1] ?? ''
+    if (i !== -1) return seg[i + 1] ?? ''
+    // Срезанная форма: '/' → директория-якорь, '/<fileId>' → fileId. Глубже сегмента — не наш путь.
+    if (seg.length === 0) return ''
+    if (seg.length === 1) return seg[0]
+    return null
   }
 
   protected fileInfo(a: AttachmentMetaDto): FileInfo {

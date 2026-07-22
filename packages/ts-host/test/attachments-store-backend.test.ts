@@ -130,6 +130,23 @@ describe('ChatAttachmentsStoreBackend', () => {
     expect((await b.write()).error).toBeTruthy()
     expect((await b.edit()).error).toBeTruthy()
   })
+
+  // CompositeBackend срезает префикс маунта перед делегированием: путь из манифеста
+  // `/chat-attachments/f1` приходит бэкенду как `/f1`. Обе формы должны работать.
+  it('срезанный CompositeBackend путь: read("/f1") → контент файла', async () => {
+    const res = await chat(ctx).read('/f1', 0, 100)
+    expect(res.content).toBe('# spec\nстрока1')
+  })
+
+  it('срезанный путь директории: read("/") → markdown-манифест', async () => {
+    const res = await chat(ctx).read('/')
+    expect(res.content).toContain('spec.pdf')
+  })
+
+  it('путь глубже одного сегмента без якоря → ошибка, не ложный fileId', async () => {
+    const res = await chat(ctx).read('/foo/bar')
+    expect(res.error).toBeTruthy()
+  })
 })
 
 describe('ProjectAttachmentsStoreBackend', () => {
