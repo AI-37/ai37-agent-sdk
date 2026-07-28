@@ -17,6 +17,7 @@ import anyio
 from ai37_agent_sdk import AgentContext, AgentContextSettings, AuthError, extract_bearer
 
 from .als import HostScope, reset_scope, set_scope
+from .metrics import record_auth_failure
 
 
 class AuthGuardMiddleware:
@@ -30,12 +31,14 @@ class AuthGuardMiddleware:
         required: bool,
         guarded_prefixes: list[str],
         overrides: dict[str, Any] | None = None,
+        service: str = "unknown",
     ) -> None:
         self.app = app
         self._settings = settings
         self._required = required
         self._prefixes = tuple(guarded_prefixes)
         self._overrides = overrides or {}
+        self._service = service
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http" or not self._is_guarded(scope.get("path", "")):
@@ -49,6 +52,7 @@ class AuthGuardMiddleware:
             ctx = await anyio.to_thread.run_sync(self._build_ctx, headers)
         except AuthError as exc:
             if self._required:
+                record_auth_failure(self._service)
                 await _send_unauthorized(send, str(exc))
                 return
             # required=false → пропускаем без ctx (миграция).

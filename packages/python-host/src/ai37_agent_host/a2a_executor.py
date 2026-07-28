@@ -16,16 +16,19 @@
 from __future__ import annotations
 
 import asyncio
+import time
 from typing import Any
 
 from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Task, TaskState, TaskStatus
+from ai37_agent_sdk import BillingExecutionDeniedError
 from google.protobuf.json_format import MessageToDict
 
 from .als import current_accepted_output_modes, current_ctx
 from .build_task import data_part, resolve_result_a2ui, text_part
+from .metrics import norm_final_state, observe_turn, record_billing_denied
 from .output_modes import negotiate_output
 from .parse import parse_a2a_message
 from .types import AgentEvent, AgentHandler, AgentInput, AgentRequest, AgentResult
@@ -45,12 +48,15 @@ class HostExecutor(AgentExecutor):
         handler: AgentHandler,
         agent_text_modes: list[str] | None = None,
         agent_catalog_ids: str | list[str] | None = None,
+        service: str = "unknown",
     ) -> None:
         self._handler = handler
         self._agent_text_modes = list(agent_text_modes or [])
         self._agent_catalog_ids = agent_catalog_ids
+        self._service = service
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        started_at = time.monotonic()
         ctx = current_ctx()
         parsed = parse_a2a_message(context)
         accepted = _read_accepted_output_modes(context)
@@ -149,6 +155,10 @@ class HostExecutor(AgentExecutor):
             await drain_task
 
         await self._finalize(updater, result, negotiation)
+        # RED-метрики хода (a2a): rate + errors + duration + terminal-state.
+        observe_turn(
+            self._service, "a2a", norm_final_state(result.status), time.monotonic() - started_at
+        )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
         # Host не знает про доменную отмену; агенты со специфической отменой переопределяют.
@@ -162,6 +172,10 @@ class HostExecutor(AgentExecutor):
     ) -> AgentResult:
         try:
             return await self._handler.run(AgentRequest(input=agent_input, emit=emit, ctx=ctx))
+        except BillingExecutionDeniedError as exc:
+            # Классифицируем отказ биллинга ДО сворачивания — единый choke-point для всех агентов.
+            record_billing_denied(self._service, exc.reason)
+            return AgentResult(status="failed", message=f"INTERNAL: {exc}")
         except Exception as exc:  # noqa: BLE001 - ошибку хода сворачиваем в failed, не пробрасываем
             return AgentResult(status="failed", message=f"INTERNAL: {exc}")
 

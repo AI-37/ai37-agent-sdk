@@ -8,6 +8,7 @@ import {
 } from '@ai37/agent-sdk'
 import { readClientCapabilities } from './output-modes'
 import { requestScope } from './als'
+import { recordAuthFailure } from './metrics'
 
 /**
  * Достаёт нативный `params.configuration.acceptedOutputModes` (формат текста) из тела A2A JSON-RPC
@@ -62,6 +63,7 @@ export function jwtGuard(
   settings: AgentContextSettings,
   required: boolean,
   overrides: AgentContextOverrides = {},
+  service: string = 'unknown',
 ) {
   return async (
     req: Request,
@@ -85,6 +87,7 @@ export function jwtGuard(
       )
     } catch (e) {
       if (e instanceof AuthError && required) {
+        recordAuthFailure(service)
         res.status(401).json({ error: 'unauthorized', detail: e.message })
         return
       }
