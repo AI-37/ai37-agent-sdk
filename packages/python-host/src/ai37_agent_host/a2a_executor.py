@@ -69,14 +69,17 @@ class HostExecutor(AgentExecutor):
         )
         task_id = context.task_id
         context_id = context.context_id
+        assert task_id is not None and context_id is not None  # a2a-sdk присваивает оба до execute
         updater = TaskUpdater(event_queue, task_id, context_id)
-        # Публикуем Task САМИМ Task-событием (а не через updater.submit() == update_status(SUBMITTED)
-        # → TaskStatusUpdateEvent). Инвариант «Task заэнкьюен ДО любого TaskStatusUpdateEvent» держат
-        # ДВА консьюмера: серверный (a2a-sdk ActiveTask._run_consumer — иначе InvalidAgentResponseError)
-        # и КЛИЕНТСКИЙ (оркестратор drainStream'ит свежий sendMessageStream). На resume серверу Task не
-        # нужен (setup уже поставил _task_created), НО клиентский стрим начинается заново и без Task-
-        # события не соберёт финал («поток не дал финального Message/Task»). Поэтому публикуем всегда:
-        # на первом ходу — submitted-снапшот, на resume — текущий снапшот задачи из store.
+        # Публикуем Task САМИМ Task-событием (а не через updater.submit() ==
+        # update_status(SUBMITTED) → TaskStatusUpdateEvent). Инвариант «Task заэнкьюен ДО
+        # любого TaskStatusUpdateEvent» держат ДВА консьюмера: серверный (a2a-sdk
+        # ActiveTask._run_consumer — иначе InvalidAgentResponseError) и КЛИЕНТСКИЙ
+        # (оркестратор drainStream'ит свежий sendMessageStream). На resume серверу Task не
+        # нужен (setup уже поставил _task_created), НО клиентский стрим начинается заново и
+        # без Task-события не соберёт финал («поток не дал финального Message/Task»).
+        # Поэтому публикуем всегда: на первом ходу — submitted-снапшот, на resume —
+        # текущий снапшот задачи из store.
         current = getattr(context, "current_task", None)
         if current is None:
             initial = Task(
@@ -88,19 +91,22 @@ class HostExecutor(AgentExecutor):
                 initial.history.append(context.message)
             await event_queue.enqueue_event(initial)
         else:
-            # На resume публикуем МИНИМАЛЬНЫЙ снапшот (id/context/статус) БЕЗ накопленных
-            # артефактов. В артефактах прошлых ходов лежит старая input-required форма (ChoiceCard);
-            # протащив её в completed-ход, клиентский extractA2ui собрал бы устаревшую карточку рядом
-            # с новым выводом (дубль формы после вердикта). Клиенту нужен лишь kind:"task"-якорь —
-            # актуальный вывод придёт artifact-update'ами ЭТОГО стрима, а текст вердикта берётся из
-            # status.message финального события, не из артефактов.
+            # На resume публикуем МИНИМАЛЬНЫЙ снапшот (id/context/статус) БЕЗ
+            # накопленных артефактов. В артефактах прошлых ходов лежит старая
+            # input-required форма (ChoiceCard); протащив её в completed-ход,
+            # клиентский extractA2ui собрал бы устаревшую карточку рядом с новым выводом
+            # (дубль формы после вердикта). Клиенту нужен лишь kind:"task"-якорь —
+            # актуальный вывод придёт artifact-update'ами ЭТОГО стрима, а текст вердикта
+            # берётся из status.message финального события, не из артефактов.
             #
-            # ТРЕБУЕТ a2a-sdk >=1.1.0 (см. constraint в pyproject). В 1.0.2 стрим-консьюмер
-            # `ActiveTask._run_consumer` на resume ПЕРЕЗАПИСЫВАЛ это событие сохранённым таском из
-            # стора (`if isinstance(event, Task): event = new_task`, active_task.py:455) — со всеми
-            # старыми артефактами, поэтому минимальный снапшот не помогал (дубль формы оставался).
-            # В 1.1.0 перезапись убрана: клиенту уходит сырой executor-event. Тест-регрессия —
-            # tests/test_executor_streaming.py::test_resume_stream_emits_task_snapshot_for_client_consumer
+            # ТРЕБУЕТ a2a-sdk >=1.1.0 (см. constraint в pyproject). В 1.0.2
+            # стрим-консьюмер `ActiveTask._run_consumer` на resume ПЕРЕЗАПИСЫВАЛ это
+            # событие сохранённым таском из стора (`if isinstance(event, Task):
+            # event = new_task`, active_task.py:455) — со всеми старыми артефактами,
+            # поэтому минимальный снапшот не помогал (дубль формы оставался). В 1.1.0
+            # перезапись убрана: клиенту уходит сырой executor-event. Тест-регрессия:
+            # tests/test_executor_streaming.py
+            # ::test_resume_stream_emits_task_snapshot_for_client_consumer
             # (зелёный на >=1.1.0, падает на 1.0.2).
             snapshot = Task(
                 id=task_id,

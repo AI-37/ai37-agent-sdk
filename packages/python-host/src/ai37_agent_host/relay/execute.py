@@ -180,6 +180,8 @@ def _to_state(raw: dict[str, Any]) -> RemoteA2aState:
         return "message"
     status = raw.get("status")
     state = status.get("state") if isinstance(status, dict) else None
+    if not isinstance(state, str):
+        return "message"
     return _STATE_MAP.get(state, "message")
 
 
