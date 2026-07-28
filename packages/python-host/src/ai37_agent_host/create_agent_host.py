@@ -23,9 +23,11 @@ from ai37_agent_sdk import AgentContextSettings
 from fastapi import FastAPI
 from fastapi.responses import JSONResponse
 from google.protobuf.json_format import ParseDict
+from prometheus_client import make_asgi_app
 
 from .a2a_executor import HostExecutor
 from .auth_guard import AuthGuardMiddleware
+from .metrics import service_label
 from .types import AgentHandler
 
 
@@ -48,6 +50,7 @@ def create_agent_host(
     """FastAPI-приложение агента: health + agent-card + A2A JSON-RPC/REST за guard'ом."""
     app = FastAPI()
     info = dict(build_info or {})
+    service = service_label(info.get("service"))
     agent_card = _as_agent_card(card)
     card_dict = agent_card_to_dict(agent_card)
     # protobuf AgentCard не имеет слота под расширения (x-ai37) и top-level url/protocolVersion —
@@ -64,7 +67,7 @@ def create_agent_host(
 
     store = task_store or InMemoryTaskStore()
     request_handler = DefaultRequestHandlerV2(
-        agent_executor=HostExecutor(handler, agent_text_modes, catalog_id),
+        agent_executor=HostExecutor(handler, agent_text_modes, catalog_id, service),
         task_store=store,
         agent_card=agent_card,
     )
@@ -99,10 +102,14 @@ def create_agent_host(
         ]
     )
 
+    # Prometheus /metrics — ВНЕ guarded_prefixes AuthGuard → отдаётся без токена (скрейпит Alloy).
+    app.mount("/metrics", make_asgi_app())
+
     app.add_middleware(
         AuthGuardMiddleware,
         settings=agent_context,
         required=agent_context.auth.required,
         guarded_prefixes=[base_path, "/agui", "/mcp"],
+        service=service,
     )
     return app

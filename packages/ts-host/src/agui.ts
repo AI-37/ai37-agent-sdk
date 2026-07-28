@@ -16,7 +16,10 @@ import type {
   A2uiComponent,
   A2uiAction,
   A2uiDataPatch,
+  AgentStatus,
 } from './types'
+import { observeTurn, recordBillingDenied, normFinalState } from './metrics'
+import { BillingExecutionDeniedError } from '@ai37/agent-sdk'
 
 /**
  * AG-UI SSE-адаптер (канон). Эмитит каноничные AG-UI-события через `@ag-ui/encoder`,
@@ -97,11 +100,14 @@ export function aguiRouter(
   agentTextModes: string[] = [],
   agentCatalogIds?: string | string[],
   taskStore?: TaskStore,
+  service: string = 'unknown',
 ): Router {
   const r = Router()
   const encoder = new EventEncoder()
 
   r.post('/', async (req: Request, res: Response) => {
+    const startedAt = Date.now()
+    let finalState: AgentStatus = 'failed'
     res.setHeader('Content-Type', encoder.getContentType())
     res.setHeader('Cache-Control', 'no-cache')
     res.setHeader('Connection', 'keep-alive')
@@ -298,6 +304,8 @@ export function aguiRouter(
         (r) => ({ status: r.status, message: r.message }),
       )
 
+      finalState = result.status
+
       // Закрываем reasoning-блок до финального текста/завершения хода (если ещё открыт).
       endReasoning()
 
@@ -326,9 +334,12 @@ export function aguiRouter(
         emitEvent({ type: EventType.RUN_FINISHED, threadId, runId })
       }
     } catch (e) {
+      if (e instanceof BillingExecutionDeniedError) recordBillingDenied(service, e.reason)
       endReasoning()
       emitEvent({ type: EventType.RUN_ERROR, message: String(e) })
     } finally {
+      // RED-метрики хода (agui): finalState = result.status (или 'failed' при throw).
+      observeTurn(service, 'agui', normFinalState(finalState), (Date.now() - startedAt) / 1000)
       // Langfuse-батч уже досослан внутри `withTurnObservability` (forceFlush на закрытии turn-спана).
       res.end()
     }

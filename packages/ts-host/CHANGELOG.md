@@ -3,6 +3,19 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.30] - 2026-07-27
+
+### Added
+- **Prometheus-метрики хоста (`GET /metrics`).** Общий `createAgentHost` экспонирует низкокардинальные
+  `ai37_*`-серии — все агенты и оркестратор получают RED + billing/auth-сигналы без своего кода:
+  `ai37_agent_requests_total{service,transport,status}`,
+  `ai37_agent_request_duration_seconds{service,transport}`,
+  `ai37_agent_tasks_total{service,final_state}`, `ai37_billing_denied_total{service,reason}`,
+  `ai37_agent_auth_failures_total{service}`. Эндпоинт смонтирован ДО `jwtGuard` (скрейпит
+  внутрикластерный Alloy; порт агента не на публичном Ingress). Инкременты default-safe (сбой метрик
+  не ломает ход); `service`-лейбл — фиксированный slug из `card.name` (кардинальность = 1 на процесс).
+  Новая dependency `prom-client`. Инкременты — в `a2a-executor`/`agui`/`auth-guard`.
+
 ## [0.1.0-alpha.29] - 2026-07-16
 
 ### Fixed

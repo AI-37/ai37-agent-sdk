@@ -21,6 +21,7 @@ import { aguiRouter } from './agui'
 import { mountMcp } from './mcp/mount'
 import type { McpOptions } from './mcp/types'
 import type { AgentHandler } from './types'
+import { renderMetrics, metricsContentType, serviceLabel } from './metrics'
 
 export interface AgentHostOptions {
   /** AgentCard (discovery). */
@@ -72,6 +73,18 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     res.json(info)
   })
 
+  // Prometheus-метрики хоста. ВНЕ jwtGuard: скрейпит внутрикластерный Alloy, порт агента не на
+  // публичном Ingress. service-лейбл фиксирован на процесс (из card.name) → низкая кардинальность.
+  const service = serviceLabel(opts.card.name)
+  app.get('/metrics', async (_req, res) => {
+    try {
+      res.setHeader('Content-Type', metricsContentType)
+      res.end(await renderMetrics())
+    } catch {
+      res.status(500).end()
+    }
+  })
+
   // Multi-turn/HITL: состояние хода живёт в task-store (см. AgentResult.state /
   // AgentInput.taskState). По умолчанию in-memory; для durable — opts.taskStore.
   // Content-negotiation (РЕШЕНИЕ 10), две оси:
@@ -87,7 +100,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   const requestHandler = new DefaultRequestHandler(
     opts.card,
     taskStore,
-    new HostExecutor(opts.handler, agentTextModes, agentCatalogIds),
+    new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
   )
 
   app.use(
@@ -105,7 +118,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
         'Не использовать в проде.',
     )
   }
-  const guard = jwtGuard(opts.agentContext, required, devOverrides)
+  const guard = jwtGuard(opts.agentContext, required, devOverrides, service)
   const base = opts.basePath ?? '/a2a/v1'
 
   app.use(
@@ -117,7 +130,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     }),
   )
 
-  app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds, taskStore))
+  app.use('/agui', guard, aguiRouter(opts.handler, agentTextModes, agentCatalogIds, taskStore, service))
 
   // «Экспорт» MCP (опционально): /mcp + protected-resource-metadata за тем же verified auth.
   // Отдельный challenge-guard (RFC 9728: 401 + WWW-Authenticate), а не общий jwtGuard.
