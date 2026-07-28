@@ -1,0 +1,70 @@
+name: publish · @ai37/agent-host (npm)
+
+# Публикация TS-хоста @ai37/agent-host (packages/ts-host) в npmjs.
+# Зависит от @ai37/agent-sdk (file:../ts): его prepublishOnly → tsc --noEmit резолвит типы
+# @ai37/agent-sdk из ../ts/dist, поэтому packages/ts надо собрать ПЕРВЫМ (как в ci.yml).
+# Версия берётся из packages/ts-host/package.json. Повторная публикация той же версии падает.
+#
+# Требуемый секрет репозитория:
+#   NPM_TOKEN — npm Automation-токен (обходит 2FA/OTP) с правом publish на scope @ai37.
+#
+# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for publish job
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
+      dry_run:
+        description: Dry run (сборка + валидация, без заливки в npm)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ts-host-${{ github.ref }}
+  cancel-in-progress: false        # publish нельзя отменять на лету
+
+jobs:
+  publish:
+    name: npm publish · @ai37/agent-host
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'   # пишет .npmrc, читающий NODE_AUTH_TOKEN
+          cache: npm
+          cache-dependency-path: |
+            packages/ts/package-lock.json
+            packages/ts-host/package-lock.json
+      - name: build @ai37/agent-sdk (зависимость)
+        working-directory: packages/ts
+        run: npm ci && npm run build
+      - name: install @ai37/agent-host
+        working-directory: packages/ts-host
+        run: npm ci
+      # prepublishOnly → npm run verify (tsc --noEmit + vitest + tsup) сработает на publish, в т.ч. --dry-run.
+      - name: publish (dry-run)
+        if: ${{ inputs.dry_run }}
+        working-directory: packages/ts-host
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: publish
+        if: ${{ !inputs.dry_run }}
+        working-directory: packages/ts-host
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
