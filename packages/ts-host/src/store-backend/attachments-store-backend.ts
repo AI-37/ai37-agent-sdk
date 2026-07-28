@@ -38,9 +38,15 @@ const READ_ONLY = 'Вложения доступны только для чте�
  * Сами файлы (Redis/Postgres) знает только chat-backend — единая точка auth/tenancy. Агент работает
  * штатной ФС-эргономикой deepagents `CompositeBackend`; физически операции уходят в chat-backend с JWT.
  *
- * Виртуальная ФС (якорь — `anchor`, толерантно к scope-обрезке CompositeBackend):
- * - `/<anchor>/`           — манифест файлов: `ls` (структурно) / `read` (markdown с source_name/summary);
- * - `/<anchor>/{fileId}`   — `read` окна markdown (offset/limit);
+ * MOUNT-RELATIVE по контракту CompositeBackend: composite срезает префикс маунта на входе и добавляет
+ * его к путям результатов на выходе, поэтому бэкенд оперирует путями ОТНОСИТЕЛЬНО точки монтирования
+ * и не знает (и не должен знать), куда смонтирован — один инстанс можно монтировать в несколько
+ * префиксов. `anchor` — лишь ИМЯ канонического маунта (`/<anchor>/`): используется в текстах ошибок
+ * и в markdown-манифесте (текст для LLM, которая видит внешние — смонтированные — пути).
+ *
+ * Виртуальная ФС (пути относительные):
+ * - `/`          — манифест файлов: `ls` (структурно) / `read` (markdown с source_name/summary);
+ * - `/{fileId}`  — `read` окна markdown (offset/limit);
  * - `grep` — серверный поиск по содержимому; `glob` — по имени файла; `write/edit` — read-only.
  */
 abstract class AttachmentsStoreBackendBase implements StoreBackend {
@@ -129,7 +135,8 @@ abstract class AttachmentsStoreBackendBase implements StoreBackend {
       })
       return {
         matches: matches.map<GrepMatch>((h) => ({
-          path: `/${this.anchor}/${h.fileId}`,
+          // Путь относительный — внешний префикс добавит CompositeBackend.
+          path: `/${h.fileId}`,
           line: h.line,
           text: `[${h.sourceName}] ${oneLine(h.snippet)}`,
         })),
@@ -152,16 +159,22 @@ abstract class AttachmentsStoreBackendBase implements StoreBackend {
   }
 
   // ── helpers ────────────────────────────────────────────────────────────────
-  /** fileId сегмента (string), '' для директории-якоря, null если якорь не найден. */
+  /**
+   * fileId сегмента (string), '' для корня-директории, null если путь не распознан.
+   * Путь относителен точки монтирования (контракт CompositeBackend: префикс срезан до нас):
+   * `/` → директория-манифест, `/<fileId>` → файл, глубже одного сегмента — не наш путь.
+   * Якорной формы (`/chat-attachments/<id>`) больше нет: бэкенд не знает своего маунта.
+   */
   protected parse(path: string): string | null {
     const seg = path.split('/').filter(Boolean)
-    const i = seg.findIndex((s) => s === this.anchor)
-    if (i === -1) return null
-    return seg[i + 1] ?? ''
+    if (seg.length === 0) return ''
+    if (seg.length === 1) return seg[0]
+    return null
   }
 
+  // Путь относительный — внешний префикс добавит CompositeBackend.
   protected fileInfo(a: AttachmentMetaDto): FileInfo {
-    return { path: `/${this.anchor}/${a.fileId}`, is_dir: false, size: a.bytes, modified_at: a.uploadedAt }
+    return { path: `/${a.fileId}`, is_dir: false, size: a.bytes, modified_at: a.uploadedAt }
   }
 
   protected scopeMissing(): string {
@@ -262,6 +275,8 @@ export class ProjectAttachmentsStoreBackend extends AttachmentsStoreBackendBase 
 }
 
 // ── helpers ─────────────────────────────────────────────────────────────────────
+// Манифест — ТЕКСТ для LLM, которая видит внешние (смонтированные) пути; anchor здесь — имя
+// канонического маунта `/<anchor>/`, а не знание бэкенда о фактической точке монтирования.
 function renderManifest(anchor: string, attachments: AttachmentMetaDto[]): string {
   const lines = [`# Вложения (${anchor})`, '']
   for (const a of attachments) {

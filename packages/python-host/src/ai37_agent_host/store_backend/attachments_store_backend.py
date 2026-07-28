@@ -37,7 +37,14 @@ BearerFn = Callable[[], str | None]
 
 
 class AttachmentsStoreBackendBase:
-    """База StoreBackend'ов вложений: HTTP-клиент к chat-backend. Виртуальная ФС по ``anchor``."""
+    """База StoreBackend'ов вложений: HTTP-клиент к chat-backend.
+
+    MOUNT-RELATIVE по контракту CompositeBackend: composite срезает префикс маунта на входе и
+    добавляет его к путям результатов на выходе — бэкенд оперирует путями относительно точки
+    монтирования (``/`` — манифест, ``/<fileId>`` — файл) и не знает, куда смонтирован.
+    ``anchor`` — лишь имя канонического маунта: тексты ошибок и markdown-манифест (текст для LLM,
+    которая видит внешние — смонтированные — пути).
+    """
 
     anchor: str = ""
     api_base: str = ""
@@ -131,7 +138,8 @@ class AttachmentsStoreBackendBase:
             data = await self._api_json("/search", {**scope, "q": pattern})
             matches = [
                 GrepMatch(
-                    path=f"/{self.anchor}/{hit['fileId']}",
+                    # Путь относительный — внешний префикс добавит CompositeBackend.
+                    path=f"/{hit['fileId']}",
                     line=int(hit.get("line", 0)),
                     text=f"[{hit.get('sourceName', '')}] {_one_line(str(hit.get('snippet', '')))}",
                 )
@@ -155,16 +163,23 @@ class AttachmentsStoreBackendBase:
 
     # ── helpers ────────────────────────────────────────────────────────────────
     def _parse(self, path: str) -> str | None:
-        """fileId сегмента (str), '' для директории-якоря, None если якорь не найден."""
+        """fileId сегмента (str), '' для корня-директории, None если путь не распознан.
+
+        Путь относителен точки монтирования (контракт CompositeBackend: префикс срезан до нас):
+        ``/`` — директория-манифест, ``/<fileId>`` — файл, глубже сегмента — не наш путь.
+        Якорной формы (``/chat-attachments/<id>``) больше нет: бэкенд не знает своего маунта.
+        """
         segments = [s for s in path.split("/") if s]
-        if self.anchor not in segments:
-            return None
-        index = segments.index(self.anchor)
-        return segments[index + 1] if index + 1 < len(segments) else ""
+        if not segments:
+            return ""
+        if len(segments) == 1:
+            return segments[0]
+        return None
 
     def _file_info(self, meta: dict[str, Any]) -> FileInfo:
+        # Путь относительный — внешний префикс добавит CompositeBackend.
         return FileInfo(
-            path=f"/{self.anchor}/{meta.get('fileId')}",
+            path=f"/{meta.get('fileId')}",
             is_dir=False,
             size=meta.get("bytes"),
             modified_at=meta.get("uploadedAt"),

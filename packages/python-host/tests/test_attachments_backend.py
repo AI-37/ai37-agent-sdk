@@ -1,4 +1,9 @@
-"""Тесты HTTP store-backend'ов вложений через httpx.MockTransport (без сети)."""
+"""Тесты HTTP store-backend'ов вложений через httpx.MockTransport (без сети).
+
+Бэкенды MOUNT-RELATIVE (контракт CompositeBackend): composite срезает префикс маунта на входе
+и добавляет его к путям результатов на выходе. Бэкенд видит ``/`` и ``/<fileId>``; внешние пути
+(``/chat-attachments/f1``) существуют только снаружи composite.
+"""
 
 import httpx
 
@@ -39,10 +44,10 @@ async def test_ls_and_manifest_read():
         return httpx.Response(200, json={"attachments": [_META]})
 
     backend = _chat(handler)
-    ls = await backend.ls("/chat-attachments/")
+    ls = await backend.ls("/")
     assert ls.error is None
-    assert ls.files[0].path == "/chat-attachments/f1"
-    read = await backend.read("/chat-attachments/")
+    assert ls.files[0].path == "/f1"
+    read = await backend.read("/")
     assert "list.xlsx" in read.content
     assert read.mime_type == "text/markdown"
 
@@ -54,7 +59,7 @@ async def test_read_content_window():
         assert req.url.params["limit"] == "100"
         return httpx.Response(200, json={"content": "markdown-window"})
 
-    read = await _chat(handler).read("/chat-attachments/f1", 0, 100)
+    read = await _chat(handler).read("/f1", 0, 100)
     assert read.content == "markdown-window"
 
 
@@ -68,7 +73,7 @@ async def test_read_raw_returns_bytes():
             200, content=raw, headers={"content-type": "application/octet-stream"}
         )
 
-    res = await _chat(handler).read_raw("/chat-attachments/f1")
+    res = await _chat(handler).read_raw("/f1")
     assert res.error is None
     assert res.content == raw
     assert res.mime_type == "application/octet-stream"
@@ -76,8 +81,17 @@ async def test_read_raw_returns_bytes():
 
 async def test_scope_missing_without_context():
     backend = ChatAttachmentsStoreBackend(base_url="http://cb", context_id=lambda: None)
-    ls = await backend.ls("/chat-attachments/")
+    ls = await backend.ls("/")
     assert ls.error is not None and "scope" in ls.error.lower()
+    raw = await backend.read_raw("/f1")
+    assert raw.error is not None
+
+
+async def test_anchor_path_standalone_is_error():
+    """BREAKING: якорная форма standalone не поддерживается — бэкенд не знает своего маунта."""
+    backend = ChatAttachmentsStoreBackend(base_url="http://cb", context_id=lambda: "c1")
+    read = await backend.read("/chat-attachments/f1")
+    assert read.error is not None
     raw = await backend.read_raw("/chat-attachments/f1")
     assert raw.error is not None
 
@@ -102,12 +116,12 @@ async def test_grep_and_glob():
         return httpx.Response(200, json={"attachments": [_META]})
 
     backend = _chat(handler)
-    grep = await backend.grep("лифт", "/chat-attachments/")
-    assert grep.matches[0].path == "/chat-attachments/f1"
+    grep = await backend.grep("лифт", "/")
+    assert grep.matches[0].path == "/f1"
     assert grep.matches[0].line == 3
     assert grep.matches[0].text == "[list.xlsx] лифт тут"
     glob = await backend.glob("*.xlsx")
-    assert glob.files[0].path == "/chat-attachments/f1"
+    assert glob.files[0].path == "/f1"
 
 
 async def test_write_edit_read_only():
@@ -118,6 +132,6 @@ async def test_write_edit_read_only():
 
 async def test_project_read_raw_not_supported():
     backend = ProjectAttachmentsStoreBackend(base_url="http://cb", project_id=lambda: "p1")
-    res = await backend.read_raw("/project-attachments/f1")
+    res = await backend.read_raw("/f1")
     assert res.error is not None
     assert res.content is None
