@@ -1,9 +1,20 @@
 name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
+  # Ручной запуск — чтобы можно было прогнать CI на self-hosted раннере
+  # (например когда исчерпаны минуты GitHub-hosted). На push/PR input не задан,
+  # inputs.runner пуст → все джобы идут на ubuntu-latest как раньше.
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for CI jobs
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
 
 # Отменять предыдущий прогон на той же ветке/PR.
 concurrency:
@@ -14,7 +25,7 @@ jobs:
   # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
   ts:
     name: ts · @ai37/agent-sdk
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/ts
@@ -34,7 +45,7 @@ jobs:
   # Зависит от @ai37/agent-sdk (file:../ts) — сначала собираем ядро, чтобы был его dist.
   ts-host:
     name: ts · @ai37/agent-host
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -63,7 +74,7 @@ jobs:
   # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
   python:
     name: py · ai37-agent-sdk
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/python
@@ -85,7 +96,7 @@ jobs:
   # codes.ts / codes.py должны соответствовать contract/feature-codes.json.
   codegen-parity:
     name: codegen parity
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
