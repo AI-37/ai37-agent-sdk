@@ -1,0 +1,66 @@
+name: publish · @ai37/agent-sdk (npm)
+
+# Публикация TS-ядра @ai37/agent-sdk (packages/ts) в npmjs.
+# Версия берётся из packages/ts/package.json — publish это осознанное ручное действие.
+# Повторная публикация той же версии естественно падает (npm отвергает существующую версию).
+#
+# Требуемый секрет репозитория:
+#   NPM_TOKEN — npm Automation-токен (обходит 2FA/OTP) с правом publish на scope @ai37.
+#
+# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1
+# (например когда исчерпаны минуты GitHub-hosted). Trusted publishing (OIDC) для npm
+# не используется намеренно — он не поддерживает self-hosted раннеры.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for publish job
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
+      dry_run:
+        description: Dry run (сборка + валидация, без заливки в npm)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ts-${{ github.ref }}
+  cancel-in-progress: false        # publish нельзя отменять на лету
+
+jobs:
+  publish:
+    name: npm publish · @ai37/agent-sdk
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/ts
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          registry-url: 'https://registry.npmjs.org'   # пишет .npmrc, читающий NODE_AUTH_TOKEN
+          cache: npm
+          cache-dependency-path: packages/ts/package-lock.json
+      - run: npm ci
+      # prepublishOnly → npm run verify (tsc --noEmit + vitest + tsup) выполнится на publish
+      # автоматически, в т.ч. при --dry-run → dry-run это полноценный gate (сборка+тесты), без заливки.
+      - name: publish (dry-run)
+        if: ${{ inputs.dry_run }}
+        run: npm publish --dry-run
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+      - name: publish
+        if: ${{ !inputs.dry_run }}
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

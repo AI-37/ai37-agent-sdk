@@ -1,0 +1,68 @@
+name: publish · ai37-agent-sdk (PyPI)
+
+# Публикация Python-ядра ai37-agent-sdk (packages/python) в PyPI через poetry.
+# Версия берётся из packages/python/pyproject.toml. Повторная публикация той же версии падает.
+# У Python нет аналога npm prepublishOnly, поэтому верификацию (ruff/mypy/pytest) гоняем явно —
+# паритет с TS-гейтом.
+#
+# Требуемый секрет репозитория:
+#   PYPI_TOKEN — PyPI API-токен (значение начинается с pypi-); прокидывается как
+#                POETRY_PYPI_TOKEN_PYPI (poetry-соглашение).
+#
+# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for publish job
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
+      dry_run:
+        description: Dry run (сборка + валидация, без заливки в PyPI)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-python-${{ github.ref }}
+  cancel-in-progress: false        # publish нельзя отменять на лету
+
+jobs:
+  publish:
+    name: PyPI publish · ai37-agent-sdk
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/python
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # единый источник версии рантайма — packages/python/.python-version (как локально через pyenv)
+          python-version-file: packages/python/.python-version
+      - name: install poetry
+        run: pipx install poetry
+      - name: install deps
+        run: poetry install --with dev --no-interaction
+      - name: verify (ruff + mypy + pytest)
+        run: |
+          poetry run ruff check .
+          poetry run mypy src
+          poetry run pytest
+      - name: publish (dry-run)
+        if: ${{ inputs.dry_run }}
+        run: poetry publish --build --dry-run --no-interaction
+      - name: publish to PyPI
+        if: ${{ !inputs.dry_run }}
+        env:
+          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
+        run: poetry publish --build --no-interaction
