@@ -1,8 +1,6 @@
 name: ci
 
 on:
-  push:
-    branches: [main]
   pull_request:
   # Ручной запуск — чтобы можно было прогнать CI на self-hosted раннере
   # (например когда исчерпаны минуты GitHub-hosted). На push/PR input не задан,
