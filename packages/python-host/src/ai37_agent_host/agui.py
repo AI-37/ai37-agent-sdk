@@ -41,6 +41,7 @@ from .types import (
     AgentRequest,
     AgentResult,
     Ai37Metadata,
+    ToolEvent,
 )
 
 # ── soft-import ag_ui (optional-группа ``agui``) ──────────────────────────────
@@ -137,8 +138,10 @@ def extract_ai37(body: dict[str, Any]) -> Ai37Metadata:
     (только известные поля) и добивает ``thread_id`` из ``forwardedProps.thread_id`` / ``threadId``.
     ``acceptedOutputModes`` — единственный носитель формата текста для AG-UI (A2A-поля нет).
     """
-    fp = body.get("forwardedProps") if isinstance(body.get("forwardedProps"), dict) else {}
-    raw = fp.get("ai37") if isinstance(fp.get("ai37"), dict) else {}
+    fp_raw = body.get("forwardedProps")
+    fp = fp_raw if isinstance(fp_raw, dict) else {}
+    ai37_raw = fp.get("ai37")
+    raw = ai37_raw if isinstance(ai37_raw, dict) else {}
 
     def _get(*keys: str) -> Any:
         for k in keys:
@@ -177,8 +180,10 @@ def build_agent_input(
     billing_org_id: str | None = None,
 ) -> AgentInput:
     """Нормализованный :class:`AgentInput` из AG-UI-тела (порт сборки ``input`` в TS)."""
-    fp = body.get("forwardedProps") if isinstance(body.get("forwardedProps"), dict) else {}
-    data = fp.get("data") if isinstance(fp.get("data"), dict) else {}
+    fp_raw = body.get("forwardedProps")
+    fp = fp_raw if isinstance(fp_raw, dict) else {}
+    data_raw = fp.get("data")
+    data = data_raw if isinstance(data_raw, dict) else {}
     action = read_a2ui_action(fp)
     return AgentInput(
         data=data,
@@ -417,7 +422,7 @@ class _Emitter:
             self._reasoning_block_id = None
 
     # -- tool-call → нативные TOOL_CALL_* (DefaultToolCallRenderer) --
-    def emit_tool(self, event: AgentEvent) -> None:
+    def emit_tool(self, event: ToolEvent) -> None:
         tool_id = getattr(event, "id", None) or f"tc-{uuid.uuid4()}"
         if event.phase == "start":
             self._put(
@@ -455,17 +460,18 @@ class _Emitter:
 
     def dispatch(self, event: AgentEvent) -> None:
         """Sync-``emit`` домена → соответствующее AG-UI-событие (порт switch в ``handler.run``)."""
-        kind = getattr(event, "type", None)
-        if kind == "text":
+        # event.type — Literal-дискриминант dataclass-union'а → mypy сужает ветки
+        # до конкретного класса события (в отличие от getattr(event, "type"), дающего Any).
+        if event.type == "text":
             self.emit_text(event.delta)
-        elif kind == "a2ui":
+        elif event.type == "a2ui":
             self.emit_a2ui(event.component)
-        elif kind == "reasoning":
+        elif event.type == "reasoning":
             self.emit_reasoning(event.delta)
-        elif kind == "node":
+        elif event.type == "node":
             # back-compat: имя ноды агента вливаем строкой в reasoning-карточку.
             self.emit_reasoning(f"▸ {event.node}\n")
-        elif kind == "tool":
+        elif event.type == "tool":
             self.emit_tool(event)
 
 
