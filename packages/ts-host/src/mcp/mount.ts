@@ -47,7 +47,7 @@ export function mountMcp(app: Express, opts: MountMcpOptions): void {
   // (напр. BASE_URL пуст в dev/тестах) — не монтируем MCP и НЕ роняем хост (A2A/AG-UI работают).
   let origin: string
   try {
-    const u = new URL(opts.card.url)
+    const u = new URL(opts.card.supportedInterfaces[0]?.url ?? '')
     if (u.protocol !== 'http:' && u.protocol !== 'https:') throw new Error('non-http')
     origin = u.origin
   } catch {

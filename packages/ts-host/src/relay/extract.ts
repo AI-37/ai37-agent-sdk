@@ -1,17 +1,16 @@
 import type { Message, Task } from '@a2a-js/sdk'
 import type { A2uiComponent, A2uiSnapshot } from '../types'
+import { isTask, partData, partText } from '../a2a-v1'
 
 /**
  * Чистые хелперы разбора ответа удалённого A2A-агента (Message | Task). Без ALS/NestJS/LangChain —
  * переносимы в любой relay. Подняты из chat-backend `remote-agent-registry`.
  */
 
-type TextPart = { kind: string; text?: string }
-
-function partsText(parts: ReadonlyArray<TextPart>): string {
+function partsText(parts: Message['parts']): string {
   return parts
-    .filter((p) => p.kind === 'text' && typeof p.text === 'string')
-    .map((p) => p.text)
+    .map(partText)
+    .filter((text): text is string => text !== undefined)
     .join('')
 }
 
@@ -33,19 +32,19 @@ function partsText(parts: ReadonlyArray<TextPart>): string {
  * артефакты и есть единственный источник.
  */
 function collectTaskText(task: Task): string {
-  const statusText = task.status.message?.parts
-    ? partsText(task.status.message.parts as TextPart[])
+  const statusText = task.status?.message?.parts
+    ? partsText(task.status.message.parts)
     : ''
   if (statusText) return statusText
 
   const chunks: string[] = []
-  for (const artifact of task.artifacts ?? []) chunks.push(partsText(artifact.parts as TextPart[]))
+  for (const artifact of task.artifacts ?? []) chunks.push(partsText(artifact.parts))
   return chunks.filter(Boolean).join('\n\n')
 }
 
 /** Текст из результата `sendMessage` (Message | Task). */
 export function extractText(result: Message | Task): string {
-  const text = result.kind === 'task' ? collectTaskText(result) : partsText(result.parts as TextPart[])
+  const text = isTask(result) ? collectTaskText(result) : partsText(result.parts)
   return text.trim()
 }
 
@@ -57,14 +56,12 @@ export function extractText(result: Message | Task): string {
  * есть: оркестратор кладёт их в свой `result.a2ui`, host эмитит с теми же id.
  */
 export function extractA2ui(result: Message | Task): (A2uiComponent | A2uiSnapshot)[] {
-  if (result.kind !== 'task') return []
+  if (!isTask(result)) return []
   const out: (A2uiComponent | A2uiSnapshot)[] = []
   for (const artifact of result.artifacts ?? []) {
     for (const part of artifact.parts) {
-      if (part.kind === 'data') {
-        const a2ui = (part.data as { a2ui?: unknown } | undefined)?.a2ui
-        if (Array.isArray(a2ui)) out.push(...(a2ui as (A2uiComponent | A2uiSnapshot)[]))
-      }
+      const a2ui = (partData(part) as { a2ui?: unknown } | undefined)?.a2ui
+      if (Array.isArray(a2ui)) out.push(...(a2ui as (A2uiComponent | A2uiSnapshot)[]))
     }
   }
   const metaA2ui = (result.metadata as { a2ui?: unknown } | undefined)?.a2ui

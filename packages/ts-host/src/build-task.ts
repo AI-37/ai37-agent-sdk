@@ -1,8 +1,9 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Message, Task } from '@a2a-js/sdk'
+import { Role, TaskState, type Message, type Task } from '@a2a-js/sdk'
 import { filterA2uiByCatalog, type OutputNegotiation } from './output-modes'
 import { toA2uiSnapshot } from './a2ui'
 import type { A2uiComponent, AgentResult } from './types'
+import { dataPart, textPart } from './a2a-v1'
 
 const now = (): string => new Date().toISOString()
 
@@ -15,12 +16,14 @@ export function agentMessage(
   text: string,
 ): Message {
   return {
-    kind: 'message',
     messageId: uuidv4(),
-    role: 'agent',
-    parts: [{ kind: 'text', text }],
+    role: Role.ROLE_AGENT,
+    parts: [textPart(text)],
     contextId,
     taskId,
+    metadata: undefined,
+    extensions: [],
+    referenceTaskIds: [],
   }
 }
 
@@ -51,27 +54,30 @@ export function toTask(
 
   if (result.status === 'failed') {
     return {
-      kind: 'task',
       id: taskId,
       contextId,
       status: {
-        state: 'failed',
+        state: TaskState.TASK_STATE_FAILED,
         message: agentMessage(taskId, contextId, result.message ?? 'Ошибка'),
         timestamp: now(),
       },
+      artifacts: [],
+      history: [],
+      metadata: undefined,
     }
   }
 
   if (result.status === 'input-required') {
     return {
-      kind: 'task',
       id: taskId,
       contextId,
       status: {
-        state: 'input-required',
+        state: TaskState.TASK_STATE_INPUT_REQUIRED,
         message: agentMessage(taskId, contextId, result.message ?? 'Уточните'),
         timestamp: now(),
       },
+      artifacts: [],
+      history: [],
       metadata: {
         a2ui: followup ? [followup] : a2ui,
         ...(result.state !== undefined ? { state: result.state } : {}),
@@ -80,11 +86,11 @@ export function toTask(
   }
 
   return {
-    kind: 'task',
     id: taskId,
     contextId,
     status: {
-      state: 'completed',
+      state: TaskState.TASK_STATE_COMPLETED,
+      message: undefined,
       // Текст — только если агент его дал (компонент-онли каноничен: AG-UI content опционален,
       // A2A не требует текстовый part). Никаких болванок '.Готово'.
       ...(result.message
@@ -92,17 +98,16 @@ export function toTask(
         : {}),
       timestamp: now(),
     },
-    ...(result.state !== undefined ? { metadata: { state: result.state } } : {}),
+    metadata: result.state !== undefined ? { state: result.state } : undefined,
+    history: [],
     artifacts: [
       {
         artifactId: uuidv4(),
         name: 'result',
-        parts: [
-          {
-            kind: 'data',
-            data: { a2ui, result: result.result },
-          },
-        ],
+        description: '',
+        parts: [dataPart({ a2ui, result: result.result })],
+        metadata: undefined,
+        extensions: [],
       },
     ],
   }

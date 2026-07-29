@@ -4,7 +4,17 @@ API зеркалит TS-пакет @ai37/agent-sdk (имена snake_case, си�
 в подпакете ``ai37_agent_sdk.testing``.
 """
 
-from .a2a import A2A_PROTOCOL_VERSION, build_a2a_auth_headers
+from .a2a import (
+    A2A_PROTOCOL_VERSION,
+    AI37_ROUTING_EXTENSION_URI,
+    AgentRoutingExtension,
+    AgentRoutingIntent,
+    AgentRoutingProfile,
+    build_a2a_auth_headers,
+    build_agent_routing_extension,
+    normalize_agent_routing_profile,
+    parse_agent_routing_extension,
+)
 from .auth import (
     AuthError,
     Claims,
@@ -73,7 +83,14 @@ __all__ = [
     "normalize_billing_base_url",
     # a2a
     "A2A_PROTOCOL_VERSION",
+    "AI37_ROUTING_EXTENSION_URI",
+    "AgentRoutingExtension",
+    "AgentRoutingIntent",
+    "AgentRoutingProfile",
     "build_a2a_auth_headers",
+    "build_agent_routing_extension",
+    "normalize_agent_routing_profile",
+    "parse_agent_routing_extension",
     # context
     "AgentContext",
     "AgentContextSettings",

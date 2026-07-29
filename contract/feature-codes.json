@@ -2,6 +2,11 @@
   "$comment": "Источник истины для BillingFeatureCode / BillingPrivilegeCode. Кодоген в packages/ts/src/codes.ts и packages/python/src/ai37_agent_sdk/codes.py (см. scripts/codegen.mjs). Менять только согласованно (WP0a).",
   "features": [
     {
+      "code": "daylight-calc-agent",
+      "constant": "DaylightCalcAgent",
+      "name": "Daylight Calculation Agent"
+    },
+    {
       "code": "elevator-calc-agent",
       "constant": "ElevatorCalcAgent",
       "name": "Elevator Calculation Agent"
@@ -18,6 +23,11 @@
     }
   ],
   "privileges": [
+    {
+      "code": "daylight-calc-allowed",
+      "constant": "DaylightCalcAllowed",
+      "name": "Daylight Calculation Allowed"
+    },
     {
       "code": "elevator-calc-allowed",
       "constant": "ElevatorCalcAllowed",

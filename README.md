@@ -6,18 +6,19 @@ SDK для **агентов** экосистемы **AI37**. Закрывает 
 - **auth** — верификация входящего **user-JWT** по JWKS (issuer/audience/exp, кэш ключей);
 - **billing** — runtime state + metered usage через billing-сервис (entitlement, остаток токенов,
   ключ LLM-шлюза `llmKey`);
-- **a2a** — **forward** того же user-JWT при вызове другого агента по A2A;
+- **a2a** — **forward** того же user-JWT при вызове другого агента по A2A и versioned
+  routing-extension для динамического реестра агентов;
 - **AgentContext** — sugar над auth+billing (verify → preflight → usage);
 - **testing kit** — фейки, фикстуры и тест-токены, чтобы агенты тестировались без внешних сервисов.
 
 Монорепо, две реализации с **общим контрактом** (`contract/`), идентичные по именам и семантике:
 
-| Пакет | Реестр | Путь | Статус |
-|---|---|---|---|
-| `@ai37/agent-sdk` | npm | `packages/ts` | реализован: auth, billing, a2a, AgentContext, testing, CLI |
-| `ai37-agent-sdk` | PyPI | `packages/python` | реализован: auth, billing, a2a, AgentContext, testing (CLI — follow-up) |
+| Пакет             | Реестр | Путь              | Статус                                                                  |
+| ----------------- | ------ | ----------------- | ----------------------------------------------------------------------- |
+| `@ai37/agent-sdk` | npm    | `packages/ts`     | реализован: auth, billing, a2a, AgentContext, testing, CLI              |
+| `ai37-agent-sdk`  | PyPI   | `packages/python` | реализован: auth, billing, a2a, AgentContext, testing (CLI — follow-up) |
 
-> **Это resource-server / agent SDK.** Он *проверяет* и *форвардит* уже выданный токен, но **не
+> **Это resource-server / agent SDK.** Он _проверяет_ и _форвардит_ уже выданный токен, но **не
 > выполняет OIDC-логин** (Authorization Code + PKCE, обмен code, refresh, сессия) — это сторона
 > клиента/UI. Host-слой агента (HTTP + A2A + AG-UI) — отдельный пакет `@ai37/agent-host`.
 
@@ -32,12 +33,12 @@ flowchart LR
   AG -->|"a2a.forward user-JWT"| S["суб-агент"]
 ```
 
-| Что делает агент | Модуль SDK |
-|---|---|
-| Проверить входящий JWT + биллинг (preflight/usage) | **`AgentContext`** (auth + billing) |
-| Вызвать другого агента по A2A (forward токена) | **`a2a`** (`buildA2AAuthHeaders` / `forwardAuthFetch`) |
-| LLM-вызов оплачиваемой моделью | `llmKey` из runtime state → apiKey к LLM-шлюзу |
-| Тесты без сети | **`testing`** (фейки/фикстуры/токены) |
+| Что делает агент                                   | Модуль SDK                                             |
+| -------------------------------------------------- | ------------------------------------------------------ |
+| Проверить входящий JWT + биллинг (preflight/usage) | **`AgentContext`** (auth + billing)                    |
+| Вызвать другого агента по A2A (forward токена)     | **`a2a`** (`buildA2AAuthHeaders` / `forwardAuthFetch`) |
+| LLM-вызов оплачиваемой моделью                     | `llmKey` из runtime state → apiKey к LLM-шлюзу         |
+| Тесты без сети                                     | **`testing`** (фейки/фикстуры/токены)                  |
 
 ## Типичный поток агента
 
@@ -107,15 +108,54 @@ from ai37_agent_sdk import build_a2a_auth_headers
 headers = build_a2a_auth_headers(user_jwt)
 ```
 
+## Routing-профиль в Agent Card
+
+Оркестратор не должен хранить копию доменной семантики каждого агента. Агент публикует компактный
+профиль `domains` / `intents` / `excludes` в `capabilities.extensions` своей Agent Card под
+versioned URI:
+
+```text
+https://schemas.ai37.ru/a2a/extensions/routing/v1
+```
+
+```ts
+import { buildAgentRoutingExtension } from "@ai37/agent-sdk";
+
+card.capabilities.extensions = [
+  buildAgentRoutingExtension({
+    domains: ["тепловая защита зданий"],
+    intents: ["engineering_calculation", "parameter_selection"],
+    excludes: ["поиск документов без расчёта"],
+  }),
+];
+```
+
+Для чтения карточки используйте `parseAgentRoutingExtension`; для валидации без сборки extension —
+`normalizeAgentRoutingProfile`. Python-пакет экспортирует те же операции в snake_case:
+`build_agent_routing_extension`, `parse_agent_routing_extension`,
+`normalize_agent_routing_profile`. Контракт и ограничения полей зафиксированы в
+`contract/a2a-routing-extension.schema.json`.
+
 ## Тестирование агента без сети
 
 Подпакет `@ai37/agent-sdk/testing` / `ai37_agent_sdk.testing` — чтобы агенты не изобретали моки.
 
 ```ts
-import { makeTestContext, InMemoryBillingClient, fixtures } from "@ai37/agent-sdk/testing";
+import {
+  makeTestContext,
+  InMemoryBillingClient,
+  fixtures,
+} from "@ai37/agent-sdk/testing";
 const ctx = await makeTestContext({
-  claims: { sub: "u1", org_id: "u1", billing_org_id: "org1", app_id: "product-a" },
-  billing: new InMemoryBillingClient({ runtimeState: fixtures.runtimeState.active() }),
+  claims: {
+    sub: "u1",
+    org_id: "u1",
+    billing_org_id: "org1",
+    app_id: "product-a",
+  },
+  billing: new InMemoryBillingClient({
+    runtimeState: fixtures.runtimeState.active(),
+  }),
 });
 ```
 
@@ -133,19 +173,19 @@ ctx = make_test_context(
 
 ## Модули и публичный API
 
-| Модуль | TS (`@ai37/agent-sdk`) | Python (`ai37_agent_sdk`) |
-|---|---|---|
-| **auth** | `JwksJwtVerifier`, `createJwtVerifier`, `extractBearer`, `Claims`, `AuthError` | `JwksJwtVerifier`, `create_jwt_verifier`, `extract_bearer`, `Claims`, `AuthError` |
-| **billing** | `createBillingClient`, `BillingClient`, `BillingRuntimeState`, `hasRequiredAccess`, ошибки | `create_billing_client`, `BillingClient`, `BillingRuntimeState`, `has_required_access`, ошибки |
-| **a2a** | `buildA2AAuthHeaders`, `forwardAuthFetch`, `A2A_PROTOCOL_VERSION` | `build_a2a_auth_headers`, `A2A_PROTOCOL_VERSION` |
-| **AgentContext** | `.fromRequest`, `.assertExecutionAllowed`, `.reportUsage`, `.llmKey` | `.from_request`, `.assert_execution_allowed`, `.report_usage`, `.llm_key` |
-| **codes** | `BillingFeatureCode`, `BillingPrivilegeCode` | `BillingFeatureCode`, `BillingPrivilegeCode` |
-| **testing** | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `makeTestContext`, `createTestKeyset` | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `make_test_context`, `create_test_keyset` |
+| Модуль           | TS (`@ai37/agent-sdk`)                                                                                                                                        | Python (`ai37_agent_sdk`)                                                                                                                             |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **auth**         | `JwksJwtVerifier`, `createJwtVerifier`, `extractBearer`, `Claims`, `AuthError`                                                                                | `JwksJwtVerifier`, `create_jwt_verifier`, `extract_bearer`, `Claims`, `AuthError`                                                                     |
+| **billing**      | `createBillingClient`, `BillingClient`, `BillingRuntimeState`, `hasRequiredAccess`, ошибки                                                                    | `create_billing_client`, `BillingClient`, `BillingRuntimeState`, `has_required_access`, ошибки                                                        |
+| **a2a**          | `buildA2AAuthHeaders`, `forwardAuthFetch`, `buildAgentRoutingExtension`, `parseAgentRoutingExtension`, `normalizeAgentRoutingProfile`, `A2A_PROTOCOL_VERSION` | `build_a2a_auth_headers`, `build_agent_routing_extension`, `parse_agent_routing_extension`, `normalize_agent_routing_profile`, `A2A_PROTOCOL_VERSION` |
+| **AgentContext** | `.fromRequest`, `.assertExecutionAllowed`, `.reportUsage`, `.llmKey`                                                                                          | `.from_request`, `.assert_execution_allowed`, `.report_usage`, `.llm_key`                                                                             |
+| **codes**        | `BillingFeatureCode`, `BillingPrivilegeCode`                                                                                                                  | `BillingFeatureCode`, `BillingPrivilegeCode`                                                                                                          |
+| **testing**      | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `makeTestContext`, `createTestKeyset`                                                                 | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `make_test_context`, `create_test_keyset`                                                     |
 
 ## Вне scope
 
 - **OIDC-логин (Relying Party):** Authorization Code + PKCE, обмен code, refresh, сессия — сторона
-  клиента/UI. SDK только *проверяет* и *форвардит* уже выданный токен.
+  клиента/UI. SDK только _проверяет_ и _форвардит_ уже выданный токен.
 - **Token-exchange / делегированные токены** — не реализуем (forward того же user-JWT).
 - **Host-слой агента** (HTTP + A2A + AG-UI) — пакет `@ai37/agent-host` поверх этого SDK.
 

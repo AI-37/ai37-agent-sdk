@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-A2A_PROTOCOL_VERSION = "0.3"
+A2A_PROTOCOL_VERSION = "1.0"
 
 
 def build_a2a_auth_headers(

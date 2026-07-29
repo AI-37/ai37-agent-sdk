@@ -2,7 +2,7 @@ import { Router, type Request, type Response } from 'express'
 import { v4 as uuidv4 } from 'uuid'
 import { EventEncoder } from '@ag-ui/encoder'
 import { EventType, type BaseEvent } from '@ag-ui/core'
-import type { TaskStore } from '@a2a-js/sdk/server'
+import { ServerCallContext, type TaskStore } from '@a2a-js/sdk/server'
 import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations, toA2uiSnapshot } from './a2ui'
@@ -120,6 +120,10 @@ export function aguiRouter(
     const body = (req.body ?? {}) as RunAgentInputLike
     const threadId = body.threadId ?? uuidv4()
     const runId = body.runId ?? uuidv4()
+    const aguiCallContext = new ServerCallContext({
+      requestedVersion: '1.0',
+      tenant: 'agui',
+    })
 
     const metadata = extractAi37(body)
     // content-negotiation (две оси) для AG-UI (нативных A2A-полей нет):
@@ -148,7 +152,9 @@ export function aguiRouter(
 
     // Multi-turn/HITL: состояние прошлого хода thread'а из task-store
     // (taskId = threadId). undefined на первом ходу. Симметрично A2A-пути.
-    const priorTask = taskStore ? await taskStore.load(threadId) : undefined
+    const priorTask = taskStore
+      ? await taskStore.load(threadId, aguiCallContext)
+      : undefined
     const priorState = priorTask?.metadata?.state as
       | Record<string, unknown>
       | undefined
@@ -312,7 +318,10 @@ export function aguiRouter(
       // Персистим состояние хода в task-store (multi-turn/HITL). Тот же формат
       // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы.
       if (taskStore) {
-        await taskStore.save(toTask(result, threadId, threadId, negotiation))
+        await taskStore.save(
+          toTask(result, threadId, threadId, negotiation),
+          aguiCallContext,
+        )
       }
 
       if (textMessageId) {

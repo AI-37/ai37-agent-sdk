@@ -3,6 +3,8 @@ import type {
   ExecutionEventBus,
   RequestContext,
 } from '@a2a-js/sdk/server'
+import { AgentEvent as A2aAgentEvent } from '@a2a-js/sdk/server'
+import { TaskState } from '@a2a-js/sdk'
 import type { AgentEvent } from './types'
 import { negotiateOutput } from './output-modes'
 import {
@@ -81,25 +83,31 @@ export class HostExecutor implements AgentExecutor {
       if (e.type !== 'node' && e.type !== 'reasoning') return
       if (!workingTaskStarted) {
         workingTaskStarted = true
-        bus.publish({
-          kind: 'task',
+        bus.publish(A2aAgentEvent.task({
           id: rc.taskId,
           contextId: rc.contextId,
-          status: { state: 'working', timestamp: new Date().toISOString() },
+          status: {
+            state: TaskState.TASK_STATE_WORKING,
+            message: undefined,
+            timestamp: new Date().toISOString(),
+          },
+          artifacts: [],
           history: [],
           metadata: {},
-        })
+        }))
       }
       const metadata =
         e.type === 'node' ? { 'ai37/node': e.node } : { 'ai37/reasoning': e.delta }
-      bus.publish({
-        kind: 'status-update',
+      bus.publish(A2aAgentEvent.statusUpdate({
         taskId: rc.taskId,
         contextId: rc.contextId,
-        status: { state: 'working', timestamp: new Date().toISOString() },
-        final: false,
+        status: {
+          state: TaskState.TASK_STATE_WORKING,
+          message: undefined,
+          timestamp: new Date().toISOString(),
+        },
         metadata,
-      })
+      }))
     }
 
     // Langfuse v4: turn-спан `a2a-turn` активен на время когниции (LangChain-спаны нестятся под него).
@@ -133,7 +141,31 @@ export class HostExecutor implements AgentExecutor {
     observeTurn(this.service, 'a2a', normFinalState(result.status), (Date.now() - startedAt) / 1000)
 
     // Enforcement: A2UI в Task только если клиент запросил A2UI-mode (иначе — только текст).
-    bus.publish(toTask(result, rc.taskId, rc.contextId, negotiation))
+    const finalTask = toTask(result, rc.taskId, rc.contextId, negotiation)
+    if (!workingTaskStarted) {
+      bus.publish(A2aAgentEvent.task(finalTask))
+    } else {
+      for (const artifact of finalTask.artifacts) {
+        bus.publish(
+          A2aAgentEvent.artifactUpdate({
+            taskId: rc.taskId,
+            contextId: rc.contextId,
+            artifact,
+            append: false,
+            lastChunk: true,
+            metadata: undefined,
+          }),
+        )
+      }
+      bus.publish(
+        A2aAgentEvent.statusUpdate({
+          taskId: rc.taskId,
+          contextId: rc.contextId,
+          status: finalTask.status,
+          metadata: finalTask.metadata,
+        }),
+      )
+    }
     bus.finished()
   }
 

@@ -3,7 +3,7 @@
 // в A2AClient.fromCardUrl(url, { fetchImpl }) (@a2a-js/sdk) или использовать напрямую.
 // message.metadata пробрасывается без изменений → forward-compatible с v2-конвертом metadata.ai37.
 
-export const A2A_PROTOCOL_VERSION = '0.3'
+export const A2A_PROTOCOL_VERSION = '1.0'
 
 export interface ForwardAuthOptions {
   /** Имя заголовка авторизации. По умолчанию Authorization. */

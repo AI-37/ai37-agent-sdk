@@ -2,7 +2,8 @@
 
 SDK агентов экосистемы **AI37** (Python). Зеркало TS-пакета `@ai37/agent-sdk` (имена snake_case,
 **синхронный** API). Модули: **auth** (JWKS-верификация user-JWT), **billing** (runtime state +
-metered usage), **a2a** (forward user-JWT), **AgentContext** (sugar) и **testing kit**.
+metered usage), **a2a** (forward user-JWT + routing-extension Agent Card), **AgentContext** (sugar)
+и **testing kit**.
 
 > Контракт (источник истины) — `../../contract/`. Спецификация — `docs/projects/ai37-agent-sdk/`.
 > Host-слой (Express/FastAPI) в Python **не реализован** (пока не нужен).
@@ -28,6 +29,27 @@ state = ctx.assert_execution_allowed(feature=..., privilege=...)  # preflight
 # LLM-агент:    api_key = ctx.llm_key
 # metered-агент: ctx.report_usage(transaction_id=task_id, code="lift_calculation", properties={...})
 ```
+
+## Routing-профиль в Agent Card
+
+Доменная семантика динамического агента публикуется в versioned extension
+`https://schemas.ai37.ru/a2a/extensions/routing/v1`, а не дублируется в конфиге оркестратора:
+
+```python
+from ai37_agent_sdk import build_agent_routing_extension
+
+extension = build_agent_routing_extension(
+    {
+        "domains": ["тепловая защита зданий"],
+        "intents": ["engineering_calculation", "parameter_selection"],
+        "excludes": ["поиск документов без расчёта"],
+    }
+)
+```
+
+Для discovery доступны `parse_agent_routing_extension` и
+`normalize_agent_routing_profile`. JSON Schema контракта находится в
+`../../contract/a2a-routing-extension.schema.json`.
 
 ## Тестирование агентов без внешних сервисов
 

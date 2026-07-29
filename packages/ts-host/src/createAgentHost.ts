@@ -33,6 +33,12 @@ export interface AgentHostOptions {
   /** Базовый путь A2A JSON-RPC. По умолчанию '/a2a/v1'. */
   basePath?: string
   /**
+   * Accept A2A v0.3 JSON-RPC at the transport edge while the executor,
+   * task store and public TypeScript API remain native A2A v1.0.
+   * Enabled by default for the platform migration window.
+   */
+  legacyCompat?: boolean
+  /**
    * Каталог(и) A2UI, которые эмитит этот агент (обычно один — `CATALOG_ID` из
    * `@ai37/a2ui-catalog-schemas`). Нужен для негоциации каталога (РЕШЕНИЕ 10): surface шлётся
    * только если он есть в клиентском `supportedCatalogIds`. Не задан → агент текстовый (A2UI не шлёт).
@@ -97,8 +103,31 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   // Один стор на оба пути (A2A + AG-UI), чтобы state переживал ходы в обоих.
   const taskStore = opts.taskStore ?? new InMemoryTaskStore()
 
+  const legacyCompat = opts.legacyCompat ?? true
+  const serverCard: AgentCard = legacyCompat
+    ? {
+        ...opts.card,
+        supportedInterfaces: [
+          ...opts.card.supportedInterfaces,
+          ...opts.card.supportedInterfaces
+            .filter(
+              (item) =>
+                item.protocolBinding === 'JSONRPC' &&
+                item.protocolVersion !== '0.3' &&
+                !opts.card.supportedInterfaces.some(
+                  (candidate) =>
+                    candidate.protocolBinding === item.protocolBinding &&
+                    candidate.protocolVersion === '0.3' &&
+                    candidate.url === item.url,
+                ),
+            )
+            .map((item) => ({ ...item, protocolVersion: '0.3' })),
+        ],
+      }
+    : opts.card
+
   const requestHandler = new DefaultRequestHandler(
-    opts.card,
+    serverCard,
     taskStore,
     new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
   )
@@ -126,6 +155,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     guard,
     jsonRpcHandler({
       requestHandler,
+      legacyCompat: { enabled: legacyCompat },
       userBuilder: UserBuilder.noAuthentication, // auth делает guard (ALS)
     }),
   )

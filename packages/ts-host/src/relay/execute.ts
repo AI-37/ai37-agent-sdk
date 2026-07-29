@@ -1,9 +1,17 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Client } from '@a2a-js/sdk/client'
-import type { Message, Task } from '@a2a-js/sdk'
+import type { Message, StreamResponse, Task } from '@a2a-js/sdk'
 import type { A2uiComponent, A2uiAction, A2uiSnapshot, ContextFile } from '../types'
 import { extractText, extractA2ui, isStaleTaskError } from './extract'
 import { injectTraceContext } from '../observability/langfuse'
+import {
+  dataPart,
+  isTask,
+  partText,
+  remoteState,
+  textPart,
+  userMessage,
+} from '../a2a-v1'
 
 /**
  * Транспорт-агностичный вызов удалённого A2A-агента (relay). НЕ знает про LangChain/deepagents/NestJS
@@ -78,30 +86,36 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   // трассировка выключена.
   Object.assign(metadata, injectTraceContext())
 
-  const parts: Message['parts'] = [{ kind: 'text' as const, text: req.query }]
+  const parts: Message['parts'] = [textPart(req.query)]
   // Структурный вход: A2A data-part рядом с текстом → сервер прочитает как AgentInput.data.
   if (req.data && Object.keys(req.data).length > 0) {
-    parts.push({ kind: 'data' as const, data: req.data })
+    parts.push(dataPart(req.data))
   }
-  const message = {
-    kind: 'message' as const,
-    role: 'user' as const,
+  const message = userMessage({
     messageId: uuidv4(),
     parts,
-    ...(req.contextId ? { contextId: req.contextId } : {}),
-    ...(withResume && req.resumeTaskId ? { taskId: req.resumeTaskId } : {}),
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
-  }
+    contextId: req.contextId,
+    taskId: withResume ? req.resumeTaskId : undefined,
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+  })
   return {
+    tenant: '',
     message,
-    ...(req.acceptedOutputModes ? { configuration: { acceptedOutputModes: req.acceptedOutputModes } } : {}),
-  } as Parameters<Client['sendMessage']>[0]
+    configuration: req.acceptedOutputModes
+      ? {
+          acceptedOutputModes: req.acceptedOutputModes,
+          taskPushNotificationConfig: undefined,
+          historyLength: undefined,
+          returnImmediately: false,
+        }
+      : undefined,
+    metadata: undefined,
+  }
 }
 
 function toState(raw: Message | Task): RemoteA2aState {
-  if (raw.kind !== 'task') return 'message'
-  const s = raw.status.state
-  return s === 'completed' || s === 'input-required' || s === 'failed' ? s : 'message'
+  if (!isTask(raw)) return 'message'
+  return remoteState(raw.status?.state) ?? 'message'
 }
 
 export async function executeRemoteA2a(
@@ -125,7 +139,7 @@ export async function executeRemoteA2a(
   return {
     text: extractText(raw),
     a2ui: extractA2ui(raw),
-    ...(raw.kind === 'task' ? { taskId: raw.id } : {}),
+    ...(isTask(raw) ? { taskId: raw.id } : {}),
     state: toState(raw),
     staleResumeDropped,
     raw,
@@ -160,25 +174,59 @@ export interface RemoteA2aProgressEvent {
   tool?: RemoteA2aToolCall
 }
 
-type A2aStreamItem =
-  | Message
-  | Task
-  | { kind: 'status-update'; taskId: string; contextId: string; status: Task['status']; final: boolean; metadata?: Record<string, unknown> }
-  | { kind: 'artifact-update'; taskId: string; contextId: string; artifact: NonNullable<Task['artifacts']>[number]; append?: boolean; lastChunk?: boolean }
-
 /** Накапливает финальный `Message | Task` из потока и форвардит node/reasoning через onEvent. */
+type LegacyStreamItem =
+  | (Message & { kind: 'message' })
+  | (Task & { kind: 'task' })
+  | {
+      kind: 'status-update'
+      taskId: string
+      contextId: string
+      status: Task['status']
+      metadata?: Record<string, unknown>
+    }
+  | {
+      kind: 'artifact-update'
+      taskId: string
+      contextId: string
+      artifact: NonNullable<Task['artifacts']>[number]
+      append?: boolean
+      lastChunk?: boolean
+    }
+
+function toStreamPayload(
+  response: StreamResponse | LegacyStreamItem,
+): StreamResponse['payload'] {
+  const item = response as unknown as Record<string, unknown>
+  if ('payload' in item) return item.payload as StreamResponse['payload']
+  const legacy = response as LegacyStreamItem
+  if (legacy.kind === 'message') {
+    return { $case: 'message', value: legacy }
+  }
+  if (legacy.kind === 'task') {
+    return { $case: 'task', value: legacy }
+  }
+  if (legacy.kind === 'status-update') {
+    return { $case: 'statusUpdate', value: legacy as never }
+  }
+  return { $case: 'artifactUpdate', value: legacy as never }
+}
+
 async function drainStream(
-  stream: AsyncGenerator<A2aStreamItem, void, undefined>,
+  stream: AsyncGenerator<StreamResponse | LegacyStreamItem, void, undefined>,
   onEvent: (e: RemoteA2aProgressEvent) => void,
 ): Promise<Message | Task | undefined> {
   let task: Task | undefined
   let message: Message | undefined
-  for await (const ev of stream) {
-    if (ev.kind === 'message') {
-      message = ev
-    } else if (ev.kind === 'task') {
-      task = ev
-    } else if (ev.kind === 'status-update') {
+  for await (const response of stream) {
+    const payload = toStreamPayload(response)
+    if (!payload) continue
+    if (payload.$case === 'message') {
+      message = payload.value
+    } else if (payload.$case === 'task') {
+      task = payload.value
+    } else if (payload.$case === 'statusUpdate') {
+      const ev = payload.value
       const meta = ev.metadata as Record<string, unknown> | undefined
       const node = meta?.['ai37/node']
       const reasoning = meta?.['ai37/reasoning']
@@ -189,27 +237,30 @@ async function drainStream(
         onEvent({ type: 'tool', value: '', tool: tool as RemoteA2aToolCall })
       }
       if (task && ev.taskId === task.id) task = { ...task, status: ev.status }
-    } else if (ev.kind === 'artifact-update') {
+    } else if (payload.$case === 'artifactUpdate') {
+      const ev = payload.value
       // Канон A2A: `append:true` = ИНКРЕМЕНТ (дельта), иначе — ПОЛНЫЙ снапшот (replace). Стрим текста
       // поднимаем ТОЛЬКО при append (part.text = дельта); снапшот-replace как дельту слать нельзя —
       // потребитель их конкатенирует и получит дубли. Финальный текст всё равно соберётся в task и
       // уедет через extractText. data-части (a2ui) не трогаем (уезжают через extractA2ui).
       if (ev.append) {
-        for (const part of ev.artifact.parts ?? []) {
-          if (part.kind === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-            onEvent({ type: 'text', value: part.text })
+        for (const part of ev.artifact?.parts ?? []) {
+          const text = partText(part)
+          if (text) {
+            onEvent({ type: 'text', value: text })
           }
         }
       }
-      if (task && ev.taskId === task.id) {
+      if (task && ev.taskId === task.id && ev.artifact) {
+        const artifact = ev.artifact
         const artifacts = [...(task.artifacts ?? [])]
-        const idx = artifacts.findIndex((a) => a.artifactId === ev.artifact.artifactId)
+        const idx = artifacts.findIndex((a) => a.artifactId === artifact.artifactId)
         if (idx >= 0 && ev.append) {
-          artifacts[idx] = { ...artifacts[idx], parts: [...artifacts[idx].parts, ...ev.artifact.parts] }
+          artifacts[idx] = { ...artifacts[idx], parts: [...artifacts[idx].parts, ...artifact.parts] }
         } else if (idx >= 0) {
-          artifacts[idx] = ev.artifact
+          artifacts[idx] = artifact
         } else {
-          artifacts.push(ev.artifact)
+          artifacts.push(artifact)
         }
         task = { ...task, artifacts }
       }
@@ -234,14 +285,14 @@ export async function executeRemoteA2aStreaming(
   let raw: Message | Task | undefined
   try {
     raw = await drainStream(
-      client.sendMessageStream(buildParams(req, true)) as AsyncGenerator<A2aStreamItem, void, undefined>,
+      client.sendMessageStream(buildParams(req, true)),
       onEvent,
     )
   } catch (e) {
     if (req.resumeTaskId && isStaleTaskError(e)) {
       staleResumeDropped = true
       raw = await drainStream(
-        client.sendMessageStream(buildParams(req, false)) as AsyncGenerator<A2aStreamItem, void, undefined>,
+        client.sendMessageStream(buildParams(req, false)),
         onEvent,
       )
     } else {
@@ -255,7 +306,7 @@ export async function executeRemoteA2aStreaming(
   return {
     text: extractText(raw),
     a2ui: extractA2ui(raw),
-    ...(raw.kind === 'task' ? { taskId: raw.id } : {}),
+    ...(isTask(raw) ? { taskId: raw.id } : {}),
     state: toState(raw),
     staleResumeDropped,
     raw,

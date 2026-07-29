@@ -3,9 +3,21 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.11] - 2026-07-29
+
+### Added
+
+- Versioned AI37 Agent Card routing-extension
+  (`https://schemas.ai37.ru/a2a/extensions/routing/v1`) и компактный контракт
+  `domains` / `intents` / `excludes`.
+- Публичные helper'ы `buildAgentRoutingExtension`, `parseAgentRoutingExtension` и
+  `normalizeAgentRoutingProfile`; JSON Schema контракта хранится в
+  `contract/a2a-routing-extension.schema.json`.
+
 ## [0.1.0-alpha.10] - 2026-07-19
 
 ### Added
+
 - Multi-user организации (амендмент v2): тип `OrgRole` (`OWNER | EDITOR | USER`) и опциональный
   claim `Claims.org_role`. Верификатор и обязательные claims (`sub`/`org_id`/`billing_org_id`)
   НЕ меняются — `org_role` едет как дополнительный claim.
@@ -17,6 +29,7 @@
 ## [0.1.0-alpha.6] - 2026-06-24
 
 ### Fixed
+
 - Billing usage-ingest (`POST /api/v1/events`) уходил под форварднутым user-JWT и получал
   `HTTP 401 "invalid app auth token"`: эндпоинт принимает только apps-token. Токены разведены
   по эндпоинтам — `/state` под `authToken` (форвард JWT, anti-IDOR по `billing_org_id`),
@@ -24,12 +37,14 @@
   прокидывает `settings.billing.appsAuthToken` в `usageIngestToken`.
 
 ### Changed
+
 - `BillingClientOptions`: добавлено обязательное поле `usageIngestToken` (breaking для прямых
   потребителей `createBillingClient`). `validateOptions` требует непустое значение.
 
 ## [0.1.0-alpha.3] - 2026-06-17
 
 ### Added
+
 - `output-modes.ts` — канон content-negotiation вывода (РЕШЕНИЕ 10): MIME-константы
   (`OUTPUT_MODE_TEXT`/`_MARKDOWN`/`_MARKDOWN_SPAI`/`_A2UI_BASE`/`_A2UI_AI37`), `A2UI_MODE_CATALOG`,
   `negotiateOutput`, `clientAcceptsA2ui`, `filterA2uiComponents`, тип `OutputNegotiation`.
@@ -39,6 +54,7 @@
 ## [0.1.0-alpha.2] - 2026-06-16
 
 ### Added
+
 - Ядро SDK: billing (runtime state + `llmKey`), auth (`JwtVerifier` на jose), a2a
   (`forwardAuthFetch`, `A2A_PROTOCOL_VERSION`), `AgentContext`, testing kit (фейки, фикстуры,
   `createTestKeyset`/`makeTestContext`), CLI (`dev-jwks`/`make-token`/`dev-billing`).
@@ -47,5 +63,6 @@
 ## [0.1.0-alpha.0] - 2026-06-12
 
 ### Added
+
 - Инициализация монорепо: контракты `contract/` (claims, runtime state с `llmKey`, feature-codes,
   env), скелет, кодоген контракта.

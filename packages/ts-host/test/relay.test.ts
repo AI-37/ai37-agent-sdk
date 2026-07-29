@@ -1,11 +1,12 @@
 import { describe, it, expect } from 'vitest'
 import type { Client } from '@a2a-js/sdk/client'
-import type { Message, Task } from '@a2a-js/sdk'
+import { Role, TaskState, type Message, type Task } from '@a2a-js/sdk'
 import {
   executeRemoteA2a,
   executeRemoteA2aStreaming,
   type RemoteA2aProgressEvent,
 } from '../src/relay/index'
+import { dataPart, textPart } from '../src/a2a-v1'
 
 /** Фейковый A2A Client: запоминает params, отдаёт заранее заданный результат (или бросает). */
 function fakeClient(
@@ -24,12 +25,17 @@ function fakeClient(
 
 function inputRequiredTaskWithForm(taskId: string): Task {
   return {
-    kind: 'task',
     id: taskId,
     contextId: 'ctx-1',
-    status: { state: 'input-required', message: undefined, timestamp: '0' },
+    status: {
+      state: TaskState.TASK_STATE_INPUT_REQUIRED,
+      message: undefined,
+      timestamp: '0',
+    },
+    artifacts: [],
+    history: [],
     metadata: { a2ui: [{ component: 'FormCard', props: { title: 'T' } }] },
-  } as unknown as Task
+  }
 }
 
 describe('executeRemoteA2a (relay)', () => {
@@ -78,7 +84,7 @@ describe('executeRemoteA2a (relay)', () => {
     expect(calls).toHaveLength(2)
     // первый запрос нёс resume-taskId, второй — нет
     expect((calls[0] as any).message.taskId).toBe('stale-task')
-    expect((calls[1] as any).message.taskId).toBeUndefined()
+    expect((calls[1] as any).message.taskId).toBe('')
   })
 
   it('без action/негоциации — message.metadata отсутствует', async () => {

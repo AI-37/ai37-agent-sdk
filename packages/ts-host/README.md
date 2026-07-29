@@ -1,7 +1,8 @@
 # @ai37/agent-host
 
 HTTP-хост для **агентов** экосистемы AI37: `createAgentHost(...)` собирает Express-приложение с
-**A2A** (JSON-RPC), **AG-UI** (SSE), JWT-guard и health/version — поверх [`@ai37/agent-sdk`](https://www.npmjs.com/package/@ai37/agent-sdk).
+нативным **A2A 1.0** (JSON-RPC), **AG-UI** (SSE), JWT-guard и health/version — поверх
+[`@ai37/agent-sdk`](https://www.npmjs.com/package/@ai37/agent-sdk).
 Транспорт и auth/billing-обвязка живут здесь; когниция агента (intent/work/critic/respond) — в самом
 агенте.
 
@@ -16,7 +17,7 @@ const handler: AgentHandler = {
 };
 
 const app = createAgentHost({
-  card,                         // AgentCard (@a2a-js/sdk)
+  card, // AgentCard (@a2a-js/sdk)
   handler,
   agentContext: {
     auth: { issuer, audience, jwksUrl, required: true },
@@ -33,6 +34,10 @@ app.listen(8080);
 - `/agui` — AG-UI SSE (стрим событий когниции);
 - `/api/v1/health`, `/api/v1/version`;
 - JWT-guard через `AgentContext.fromRequest` (`@ai37/agent-sdk`) + request-scope (claims/billing → handler).
+
+Host использует канонические типы и серверный контракт `@a2a-js/sdk` 1.0. Опциональный
+`legacyCompat` (по умолчанию включён) существует только как официальный compatibility edge для
+старых A2A-клиентов; доменная логика и task-store всегда работают с моделью 1.0.
 
 ## Контракт
 
@@ -59,8 +64,21 @@ async run({ input }) {
 ```
 
 На следующем `message/send` с тем же `taskId` host грузит прошлый Task и отдаёт его состояние в
-`input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process). Для durable
-(переживает рестарт/реплики) передайте свой `taskStore` в `createAgentHost({ ..., taskStore })`.
+`input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process, только для локальной
+разработки). Для production используйте экспортируемый `RedisTaskStore`: он реализует A2A 1.0
+`TaskStore`, изолирует ключи по tenant и authenticated user и поддерживает TTL.
+
+```ts
+import { createAgentHost, RedisTaskStore } from "@ai37/agent-host";
+
+const taskStore = new RedisTaskStore({
+  url: process.env.REDIS_URL!,
+  keyPrefix: "my-agent:a2a:task:",
+  ttlSeconds: 7 * 24 * 60 * 60,
+});
+
+createAgentHost({ card, handler, agentContext, taskStore });
+```
 
 ## Установка
 

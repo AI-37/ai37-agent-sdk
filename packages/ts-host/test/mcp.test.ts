@@ -17,13 +17,37 @@ const card: AgentCard = {
   name: 'Test Agent',
   description: 'test',
   version: '0.0.0',
-  url: 'http://localhost/a2a/v1',
-  protocolVersion: '0.3',
-  preferredTransport: 'JSONRPC',
-  capabilities: { streaming: true, pushNotifications: false },
+  supportedInterfaces: [
+    {
+      url: 'http://localhost/a2a/v1',
+      protocolVersion: '1.0',
+      protocolBinding: 'JSONRPC',
+      tenant: '',
+    },
+  ],
+  provider: undefined,
+  capabilities: {
+    streaming: true,
+    pushNotifications: false,
+    extensions: [],
+  },
+  securitySchemes: {},
+  securityRequirements: [],
   defaultInputModes: ['application/json'],
   defaultOutputModes: ['text/plain'],
-  skills: [{ id: 's', name: 's', description: 'd', tags: [] }],
+  skills: [
+    {
+      id: 's',
+      name: 's',
+      description: 'd',
+      tags: [],
+      examples: [],
+      inputModes: [],
+      outputModes: [],
+      securityRequirements: [],
+    },
+  ],
+  signatures: [],
 }
 
 const handler: AgentHandler = {
@@ -98,7 +122,15 @@ describe('mcp resource server — discovery + challenge', () => {
 
   it('card.url относительный → MCP не монтируется, но хост жив', async () => {
     const relApp = createAgentHost({
-      card: { ...card, url: '/a2a/v1' },
+      card: {
+        ...card,
+        supportedInterfaces: [
+          {
+            ...card.supportedInterfaces[0],
+            url: '/a2a/v1',
+          },
+        ],
+      },
       handler,
       agentContext: {
         auth: { issuer: 'https://issuer', audience: 'aud', required: false },

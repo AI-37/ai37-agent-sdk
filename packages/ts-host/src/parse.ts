@@ -1,5 +1,6 @@
 import type { RequestContext } from '@a2a-js/sdk/server'
 import type { Ai37Metadata, A2uiAction } from './types'
+import { partData, partText } from './a2a-v1'
 
 export interface ParsedMessage {
   text?: string
@@ -17,10 +18,8 @@ export interface ParsedMessage {
 /** Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37 + A2UI-действие. */
 export function parseA2AMessage(rc: RequestContext): ParsedMessage {
   const parts = rc.userMessage.parts
-  const textPart = parts.find((p) => p.kind === 'text')
-  const dataPart = parts.find((p) => p.kind === 'data')
-  const text = textPart?.kind === 'text' ? textPart.text : undefined
-  const data = (dataPart?.kind === 'data' ? dataPart.data : {}) as Record<
+  const text = parts.map(partText).find((value) => value !== undefined)
+  const data = (parts.map(partData).find((value) => value !== undefined) ?? {}) as Record<
     string,
     unknown
   >

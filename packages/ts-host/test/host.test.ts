@@ -14,18 +14,45 @@ const card: AgentCard = {
   name: 'Test Agent',
   description: 'test',
   version: '0.0.0',
-  url: 'http://localhost/a2a/v1',
-  protocolVersion: '0.3',
-  preferredTransport: 'JSONRPC',
+  supportedInterfaces: [
+    {
+      url: 'http://localhost/a2a/v1',
+      protocolVersion: '1.0',
+      protocolBinding: 'JSONRPC',
+      tenant: '',
+    },
+  ],
+  provider: undefined,
   // ось каталога: агент объявляет каталог в extensions (discovery); формат текста — defaultOutputModes
   capabilities: {
     streaming: true,
     pushNotifications: false,
-    extensions: [{ uri: CATALOG, description: 'A2UI catalog', required: false }],
+    extensions: [
+      {
+        uri: CATALOG,
+        description: 'A2UI catalog',
+        required: false,
+        params: undefined,
+      },
+    ],
   },
+  securitySchemes: {},
+  securityRequirements: [],
   defaultInputModes: ['application/json'],
   defaultOutputModes: [OUTPUT_MODE_MARKDOWN, OUTPUT_MODE_TEXT],
-  skills: [{ id: 's', name: 's', description: 'd', tags: [] }],
+  skills: [
+    {
+      id: 's',
+      name: 's',
+      description: 'd',
+      tags: [],
+      examples: [],
+      inputModes: [],
+      outputModes: [],
+      securityRequirements: [],
+    },
+  ],
+  signatures: [],
 }
 
 const handler: AgentHandler = {
