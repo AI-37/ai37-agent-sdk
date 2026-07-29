@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.11] - 2026-07-29
+
+### Added
+
+- Единый additive-контракт Agent Card routing-extension: types, bounded
+  `buildAgentRoutingExtension` и fail-open `parseAgentRoutingExtension`.
+- `AI37_ROUTING_EXTENSION_URI` — versioned идентификатор extension, не HTTP endpoint.
+  Изменений версии A2A и сетевых обращений к URI нет.
+
 ## [0.1.0-alpha.10] - 2026-07-19
 
 ### Added
