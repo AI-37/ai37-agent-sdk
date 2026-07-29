@@ -29,6 +29,20 @@ state = ctx.assert_execution_allowed(feature=..., privilege=...)  # preflight
 # metered-агент: ctx.report_usage(transaction_id=task_id, code="lift_calculation", properties={...})
 ```
 
+## Routing profile в Agent Card
+
+```python
+from ai37_agent_sdk import build_agent_routing_extension
+
+extension = build_agent_routing_extension({
+    "domains": ["расчёт лифтов"],
+    "intents": ["engineering_calculation", "parameter_selection"],
+    "excludes": ["справочные вопросы о нормах"],
+})
+```
+
+URI extension скрыт в SDK и служит только versioned идентификатором; HTTP-запрос к нему не нужен.
+
 ## Тестирование агентов без внешних сервисов
 
 ```python

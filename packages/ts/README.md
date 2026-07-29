@@ -107,6 +107,24 @@ from ai37_agent_sdk import build_a2a_auth_headers
 headers = build_a2a_auth_headers(user_jwt)
 ```
 
+## Routing profile в Agent Card
+
+Динамический каталог агентов использует единый компактный extension:
+
+```ts
+import { buildAgentRoutingExtension } from "@ai37/agent-sdk";
+
+const extension = buildAgentRoutingExtension({
+  domains: ["расчёт лифтов"],
+  intents: ["engineering_calculation", "parameter_selection"],
+  excludes: ["справочные вопросы о нормах"],
+});
+```
+
+URI скрыт внутри SDK и является только versioned идентификатором. Ни SDK, ни потребитель карточки
+не выполняют HTTP-запрос по этому URI. Python API симметричен:
+`build_agent_routing_extension` / `parse_agent_routing_extension`.
+
 ## Тестирование агента без сети
 
 Подпакет `@ai37/agent-sdk/testing` / `ai37_agent_sdk.testing` — чтобы агенты не изобретали моки.
@@ -137,7 +155,7 @@ ctx = make_test_context(
 |---|---|---|
 | **auth** | `JwksJwtVerifier`, `createJwtVerifier`, `extractBearer`, `Claims`, `AuthError` | `JwksJwtVerifier`, `create_jwt_verifier`, `extract_bearer`, `Claims`, `AuthError` |
 | **billing** | `createBillingClient`, `BillingClient`, `BillingRuntimeState`, `hasRequiredAccess`, ошибки | `create_billing_client`, `BillingClient`, `BillingRuntimeState`, `has_required_access`, ошибки |
-| **a2a** | `buildA2AAuthHeaders`, `forwardAuthFetch`, `A2A_PROTOCOL_VERSION` | `build_a2a_auth_headers`, `A2A_PROTOCOL_VERSION` |
+| **a2a** | `buildA2AAuthHeaders`, `forwardAuthFetch`, `buildAgentRoutingExtension`, `parseAgentRoutingExtension`, `A2A_PROTOCOL_VERSION` | `build_a2a_auth_headers`, `build_agent_routing_extension`, `parse_agent_routing_extension`, `A2A_PROTOCOL_VERSION` |
 | **AgentContext** | `.fromRequest`, `.assertExecutionAllowed`, `.reportUsage`, `.llmKey` | `.from_request`, `.assert_execution_allowed`, `.report_usage`, `.llm_key` |
 | **codes** | `BillingFeatureCode`, `BillingPrivilegeCode` | `BillingFeatureCode`, `BillingPrivilegeCode` |
 | **testing** | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `makeTestContext`, `createTestKeyset` | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `make_test_context`, `create_test_keyset` |

@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a4] - 2026-07-29
+
+### Added
+
+- Python parity для Agent Card routing-extension: общий набор intents, bounded builder и
+  fail-open parser. URI — идентификатор контракта, не HTTP endpoint.
+
 ## [0.1.0a3] - 2026-07-19
 
 ### Added

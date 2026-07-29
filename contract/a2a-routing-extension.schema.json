@@ -1,0 +1,42 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai37.ru/a2a/extensions/routing/v1",
+  "title": "AI37 A2A routing extension v1",
+  "description": "Compact semantic routing profile embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["domains", "intents", "excludes"],
+  "properties": {
+    "domains": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+    },
+    "intents": {
+      "type": "array",
+      "maxItems": 16,
+      "uniqueItems": true,
+      "items": {
+        "type": "string",
+        "enum": [
+          "document_search",
+          "document_list",
+          "normative_qa",
+          "exact_clause_lookup",
+          "engineering_calculation",
+          "parameter_selection",
+          "counterparty_verification",
+          "file_processing",
+          "workflow_continue"
+        ]
+      }
+    },
+    "excludes": {
+      "type": "array",
+      "maxItems": 12,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+    }
+  }
+}
