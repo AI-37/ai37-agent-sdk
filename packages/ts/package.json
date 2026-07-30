@@ -40,7 +40,7 @@
     "npm": ">=10"
   },
   "publishConfig": {
-    "access": "public"
+    "registry": "https://npm.app.sp-ai.ru/"
   },
   "scripts": {
     "build": "tsup",
