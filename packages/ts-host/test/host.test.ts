@@ -415,6 +415,161 @@ describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляе
   })
 })
 
+describe('инвариант surfaceId конвертов (a2ui-action-owner-by-surface)', () => {
+  // Визард, который НЕ задаёт surfaceId сам: дефолт обязан вывести host — стабильно между
+  // шагами одного таска, уникально между запусками (оркестратор ключует по нему владельца формы).
+  const bareWizard: AgentHandler = {
+    async run() {
+      return {
+        status: 'input-required' as const,
+        message: 'Заполните форму',
+        a2ui: [{ component: { component: 'FormCard', props: {} } }],
+      }
+    },
+  }
+
+  function bareApp() {
+    return createAgentHost({
+      card,
+      handler: bareWizard,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+  }
+
+  function send(app: ReturnType<typeof createAgentHost>, id: string, taskId?: string) {
+    return request(app)
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id,
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: `m-${id}`,
+            role: 'user',
+            parts: [{ kind: 'text', text: 'посчитай' }],
+            metadata: caps([CATALOG]),
+            ...(taskId ? { taskId } : {}),
+          },
+        },
+      })
+  }
+
+  it('конверт без surfaceId получает дефолт от taskId; стабилен между шагами, уникален между запусками', async () => {
+    const app = bareApp()
+
+    // Шаг 1: дефолт выводится из taskId этого визарда.
+    const r1 = await send(app, '1')
+    const taskId: string = r1.body.result.id
+    expect(r1.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${taskId}`)
+
+    // Шаг 2 того же визарда (resume по taskId): surfaceId ТОТ ЖЕ — форма заменяется на месте,
+    // маппинг владельца у оркестратора не размножается.
+    const r2 = await send(app, '2', taskId)
+    expect(r2.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${taskId}`)
+
+    // Повторный запуск расчёта (новый диалог → новый таск): surfaceId ДРУГОЙ.
+    const r3 = await send(app, '3')
+    expect(r3.body.result.id).not.toBe(taskId)
+    expect(r3.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${r3.body.result.id}`)
+  })
+
+  it('заданный агентом surfaceId не перетирается, второй конверт без id получает суффикс', async () => {
+    const mixed: AgentHandler = {
+      async run() {
+        return {
+          status: 'input-required' as const,
+          message: 'формы',
+          a2ui: [
+            { component: { component: 'FormCard', props: {} }, surfaceId: 'surf-custom' },
+            { component: { component: 'FormCard', props: {} } },
+            { component: { component: 'FormCard', props: {} } },
+          ],
+        }
+      },
+    }
+    const app = createAgentHost({
+      card,
+      handler: mixed,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+
+    const r = await send(app, '1')
+    const items = r.body.result.metadata.a2ui
+    const taskId: string = r.body.result.id
+    expect(items[0].surfaceId).toBe('surf-custom')
+    expect(items[1].surfaceId).toBe(`surf-${taskId}`)
+    expect(items[2].surfaceId).toBe(`surf-${taskId}-2`)
+  })
+
+  it('сырое дерево через followup (путь elevator) уезжает КОНВЕРТОМ с дефолтным surfaceId', async () => {
+    const rawFollowupWizard: AgentHandler = {
+      async run() {
+        return {
+          status: 'input-required' as const,
+          message: 'Заполните форму',
+          followup: { component: 'FormCard', props: { title: 'Лифты' } },
+        }
+      },
+    }
+    const app = createAgentHost({
+      card,
+      handler: rawFollowupWizard,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+
+    const r = await send(app, '1')
+    const [item] = r.body.result.metadata.a2ui
+    const taskId: string = r.body.result.id
+    // Сырое дерево нормализовано в конверт: дерево внутри `component`, id — от taskId.
+    expect(item.component).toEqual({ component: 'FormCard', props: { title: 'Лифты' } })
+    expect(item.surfaceId).toBe(`surf-${taskId}`)
+  })
+
+  it('сырое дерево в result.a2ui на input-required тоже уезжает конвертом с surfaceId', async () => {
+    const rawA2uiWizard: AgentHandler = {
+      async run() {
+        return {
+          status: 'input-required' as const,
+          message: 'Заполните форму',
+          a2ui: [{ component: 'FormCard', props: { title: 'Сырая' } }],
+        }
+      },
+    }
+    const app = createAgentHost({
+      card,
+      handler: rawA2uiWizard,
+      catalogId: CATALOG,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+      buildInfo: { name: 'test-agent' },
+    })
+
+    const r = await send(app, '1')
+    const [item] = r.body.result.metadata.a2ui
+    expect(item.component).toEqual({ component: 'FormCard', props: { title: 'Сырая' } })
+    expect(item.surfaceId).toBe(`surf-${r.body.result.id}`)
+  })
+})
+
 describe('AG-UI reasoning/COT → нативные REASONING_* (CopilotKit thinking-карточка)', () => {
   // Handler, который стримит reasoning-дельты и node-вехи через emit, затем даёт финальный текст.
   const cotHandler: AgentHandler = {

@@ -2,9 +2,31 @@ import { v4 as uuidv4 } from 'uuid'
 import type { Message, Task } from '@a2a-js/sdk'
 import { filterA2uiByCatalog, type OutputNegotiation } from './output-modes'
 import { toA2uiSnapshot } from './a2ui'
-import type { A2uiComponent, AgentResult } from './types'
+import type { A2uiComponent, A2uiSnapshot, AgentResult } from './types'
 
 const now = (): string => new Date().toISOString()
+
+/**
+ * Инвариант a2ui-action-owner-by-surface: каждый `input-required` элемент A2UI уезжает КОНВЕРТОМ
+ * `A2uiSnapshot` с `surfaceId` — оркестратор строит по нему durable-маппинг «surface →
+ * агент-владелец» и маршрутизирует сабмит формы именно её владельцу. Сырое дерево (включая
+ * `followup` — путь elevator'а) нормализуется в конверт; дефолт id выводится из taskId: стабилен
+ * между шагами ОДНОГО визарда (resume того же таска) и уникален между визардами/повторными
+ * запусками в диалоге (новый запуск = новый таск). Заданные агентом id не трогаются (сквозной
+ * контракт lookup/in-place replace).
+ */
+function ensureEnvelopeSurfaceIds(
+  items: (A2uiComponent | A2uiSnapshot)[],
+  taskId: string,
+): A2uiSnapshot[] {
+  let minted = 0
+  return items.map((item) => {
+    const envelope = toA2uiSnapshot(item)
+    if (envelope.surfaceId) return envelope
+    minted += 1
+    return { ...envelope, surfaceId: minted === 1 ? `surf-${taskId}` : `surf-${taskId}-${minted}` }
+  })
+}
 
 /** Дефолт без негоциации: текст-only (каталог не согласован → A2UI не шлём). */
 const TEXT_ONLY: OutputNegotiation = { text: 'text/plain', catalogIds: [], catalogId: null }
@@ -73,7 +95,8 @@ export function toTask(
         timestamp: now(),
       },
       metadata: {
-        a2ui: followup ? [followup] : a2ui,
+        // Формы уезжают конвертами с гарантированным surfaceId (см. ensureEnvelopeSurfaceIds).
+        a2ui: ensureEnvelopeSurfaceIds(followup ? [followup] : a2ui, taskId),
         ...(result.state !== undefined ? { state: result.state } : {}),
       },
     }
