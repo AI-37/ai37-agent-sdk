@@ -24,6 +24,12 @@ export {
   isLangfuseEnabled,
 } from './observability/langfuse'
 export type { BeginTurnArgs } from './observability/langfuse'
+export { TRACE_SCHEMA_VERSION, traceMetadata } from './observability/trace-v1'
+export type {
+  TraceKind,
+  TraceMetadataV1,
+  TraceStatus,
+} from './observability/trace-v1'
 // LLM-модель без локального tiktoken-подсчёта токенов (см. ai37-chat-completions). Требует
 // @langchain/openai у консьюмера (optional peer).
 export { Ai37ChatCompletions } from './ai37-chat-completions'
@@ -72,7 +78,10 @@ export type {
   ProjectAttachmentsStoreBackendOptions,
 } from './store-backend/attachments-store-backend'
 // File-aware примитив: манифест context_files в промпт + маппинг ref→путь (read/grep). Generic.
-export { renderContextFilesManifest, contextFilePath } from './store-backend/file-context'
+export {
+  renderContextFilesManifest,
+  contextFilePath,
+} from './store-backend/file-context'
 export type {
   StoreBackend,
   FileInfo,
