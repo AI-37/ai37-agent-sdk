@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.34]
+
+### Fixed
+- **`trace.v1` correlation без legacy-подмен.** `withTurnObservability` кладёт в ALS
+  `sessionId=contextId`, `turnId=taskId`. `withRemoteA2aObservability` читает их оттуда и пишет
+  тот же envelope; OTel `traceId` — отдельное поле (дерево клеит W3C `traceparent`).
+  Fallback `sessionId/turnId = traceId|agentId` убран: вне turn-scope remote-спан открывается,
+  но fake correlation не пишется.
+
 ## [0.1.0-alpha.33]
 
 ### Added
