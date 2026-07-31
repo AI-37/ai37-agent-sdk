@@ -5,6 +5,11 @@
 
 ## [0.1.0-alpha.34]
 
+### Changed
+- **Имена turn-спанов в Langfuse.** Вместо обезличенных `agui-turn` / `a2a-turn` —
+  `{service}:agui` / `{service}:a2a`, где `service` — slug из `card.name` (как в Prometheus).
+  В списке трейсов сразу видно источник: `sp-ai-orchestrator:agui`, `lift-calculation-agent:a2a`.
+
 ### Fixed
 - **`trace.v1` correlation без legacy-подмен.** `withTurnObservability` кладёт в ALS
   `sessionId=contextId`, `turnId=taskId`. `withRemoteA2aObservability` читает их оттуда и пишет

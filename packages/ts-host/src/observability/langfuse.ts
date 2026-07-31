@@ -9,7 +9,7 @@ import { TRACE_SCHEMA_VERSION, traceMetadata } from './trace-v1'
  * Реализация на Langfuse JS SDK v4 (OpenTelemetry). Дизайн (см. als.ts / a2a-executor.ts / agui.ts):
  *  - конфиг ТОЛЬКО из env (LANGFUSE_PUBLIC_KEY/SECRET_KEY/BASE_URL); выключено → полный no-op;
  *  - на каждый ход executor зовёт `withTurnObservability(args, run)`: открывается turn-спан хода
- *    (`agui-turn`/`a2a-turn`, sessionId = contextId, userId = claims.sub) и делается АКТИВНЫМ
+ *    (`{service}:agui`/`{service}:a2a`, sessionId = contextId, userId = claims.sub) и делается АКТИВНЫМ
  *    OTel-контекстом на время `run()`. Поэтому `@langfuse/langchain` CallbackHandler (без `root`)
  *    автоматически вкладывает все LLM/LangGraph-спаны под turn-спан — единое дерево трейса;
  *  - кросс-сервис: turn-спан наследует входящий W3C `traceparent` (если оркестратор прокинул его в
@@ -326,7 +326,7 @@ export function injectTraceContext(): Record<string, string> {
 /**
  * Оборачивает исходящий remote-A2A вызов в активный OTel-спан `remote-a2a:<agentId>`, чтобы
  * `injectTraceContext` (внутри relay buildMessage) захватил ИМЕННО его. Без этого активен turn-спан
- * (`agui-turn`), и суб-агент вешается в КОРЕНЬ трейса — параллельно callback-спану инструмента
+ * (`{service}:agui`), и суб-агент вешается в КОРЕНЬ трейса — параллельно callback-спану инструмента
  * (`agent_<id>` от @langfuse/langchain, которого нет в OTel-active-цепочке), а не под свой вызов.
  * С обёрткой дерево: turn → remote-a2a:<id> → turn-спан суб-агента → его планнер/поиск.
  *

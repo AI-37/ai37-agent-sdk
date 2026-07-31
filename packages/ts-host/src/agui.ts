@@ -257,10 +257,10 @@ export function aguiRouter(
     try {
       emitEvent({ type: EventType.RUN_STARTED, threadId, runId })
 
-      // Langfuse v4: открываем turn-спан `agui-turn` (sessionId=contextId=threadId) и делаем его
-      // активным OTel-контекстом на время когниции → LangChain-спаны нестятся под него, исходящие
-      // A2A-вызовы форвардят его traceparent. No-op, если трассировка выключена. trace_id фронта
-      // (input/forwardedProps.ai37.trace_id) наследуется как id трейса.
+      // Langfuse v4: turn-спан `{service}:agui` (sessionId=contextId=threadId) — в UI сразу видно
+      // источник (slug card.name). Активный OTel-контекст на время когниции → LangChain-спаны
+      // нестятся под него, исходящие A2A форвардят traceparent. No-op без трассировки.
+      // trace_id фронта (input/forwardedProps.ai37.trace_id) наследуется как id трейса.
       const result = await withTurnObservability(
         {
           contextId: threadId,
@@ -269,7 +269,7 @@ export function aguiRouter(
           metadata,
           text: input.text,
           billingOrgId: ctx?.billingOrgId,
-          agentName: 'agui-turn',
+          agentName: `${service}:agui`,
         },
         () =>
           handler.run({
