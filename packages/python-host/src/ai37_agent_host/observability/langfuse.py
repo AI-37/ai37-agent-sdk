@@ -27,6 +27,7 @@ from typing import Any
 
 from ..als import HostLangfuseScope, current_scope
 from ..types import Ai37Metadata
+from .trace_v1 import trace_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -138,11 +139,16 @@ async def with_turn_observability(
             scope = current_scope()
             if scope is not None:
                 scope.langfuse = HostLangfuseScope(trace_id=trace_id, span=span, handler=handler)
-            result = await run()
-            if to_output is not None:
-                out = to_output(result)
-                if isinstance(out, dict):
-                    span.update(output=out)
+            try:
+                result = await run()
+            except Exception:
+                _update_turn_status(span, args, "failed")
+                raise
+            out = to_output(result) if to_output is not None else None
+            if isinstance(out, dict):
+                span.update(output=out)
+            status = out.get("status") if isinstance(out, dict) else None
+            _update_turn_status(span, args, _normalize_status(status))
             return result
     finally:
         if token is not None:
@@ -155,15 +161,22 @@ async def with_turn_observability(
 
 def _apply_trace_attributes(client: Any, args: BeginTurnArgs, tags: list[str]) -> None:
     """session_id/user_id/metadata/tags → trace через propagate_attributes (если доступен)."""
-    metadata = {
-        "taskId": args.task_id,
-        "contextId": args.context_id,
-        "channel": args.metadata.channel,
-        "app_id": args.metadata.app_id,
-        "intent": args.metadata.intent.skill if args.metadata.intent else None,
-        "billing_org_id": args.billing_org_id,
-        "tenant": args.metadata.tenant,
-    }
+    metadata = trace_metadata(
+        "turn",
+        service=args.metadata.app_id or "ai37-agent-host",
+        turn_id=args.task_id,
+        session_id=args.context_id,
+        taskId=args.task_id,
+        runId=args.task_id,
+        status="working",
+        intent=args.metadata.intent.skill if args.metadata.intent else None,
+        payloadMode="inline-truncated" if args.text is not None else "inline",
+        channel=args.metadata.channel,
+        app_id=args.metadata.app_id,
+        billing_org_id=args.billing_org_id,
+        tenant=args.metadata.tenant,
+        contextId=args.context_id,
+    )
     user_id = getattr(args.claims, "sub", None) if args.claims is not None else None
     try:
         from langfuse import propagate_attributes
@@ -176,6 +189,37 @@ def _apply_trace_attributes(client: Any, args: BeginTurnArgs, tags: list[str]) -
         )
         cm.__enter__()  # держим на весь ход — закроется с turn-спаном (см. TS span.update)
     except Exception:  # noqa: BLE001 - атрибуты не критичны для хода
+        pass
+
+
+def _normalize_status(status: Any) -> str:
+    if status == "input-required":
+        return "input-required"
+    if status in {"failed", "error"}:
+        return "failed"
+    return "completed"
+
+
+def _update_turn_status(span: Any, args: BeginTurnArgs, status: str) -> None:
+    try:
+        span.update(
+            metadata=trace_metadata(
+                "turn",
+                service=args.metadata.app_id or "ai37-agent-host",
+                turn_id=args.task_id,
+                session_id=args.context_id,
+                taskId=args.task_id,
+                runId=args.task_id,
+                status=status,
+                intent=args.metadata.intent.skill if args.metadata.intent else None,
+                channel=args.metadata.channel,
+                app_id=args.metadata.app_id,
+                billing_org_id=args.billing_org_id,
+                tenant=args.metadata.tenant,
+                contextId=args.context_id,
+            )
+        )
+    except Exception:
         pass
 
 
@@ -212,7 +256,17 @@ async def with_remote_a2a_observability(agent_id: str, run: Any) -> Any:
         return await run()
     with client.start_as_current_observation(name=f"remote-a2a:{agent_id}") as span:
         try:
-            span.update(metadata={"agentId": agent_id, "kind": "remote-a2a"})
+            active_trace_id = _current_trace_id(client) or agent_id
+            span.update(
+                metadata=trace_metadata(
+                    "agent",
+                    service="ai37-agent-host",
+                    turn_id=active_trace_id,
+                    session_id=active_trace_id,
+                    agentId=agent_id,
+                    kind="remote-a2a",
+                )
+            )
         except Exception:  # noqa: BLE001
             pass
         return await run()

@@ -72,6 +72,7 @@ from .types import (
     TextEvent,
     ToolEvent,
 )
+from .observability.trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 
 __all__ = [
     # types
@@ -130,6 +131,8 @@ __all__ = [
     # host app
     "create_agent_host",
     "HostExecutor",
+    "TRACE_SCHEMA_VERSION",
+    "trace_metadata",
     "AuthGuardMiddleware",
     # durable task store (A2A tasks/get/list reconcile)
     "RedisTaskStore",

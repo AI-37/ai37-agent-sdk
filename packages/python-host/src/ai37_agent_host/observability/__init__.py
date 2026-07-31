@@ -9,6 +9,7 @@ from .langfuse import (
     with_remote_a2a_observability,
     with_turn_observability,
 )
+from .trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 
 __all__ = [
     "BeginTurnArgs",
@@ -16,4 +17,6 @@ __all__ = [
     "with_turn_observability",
     "with_remote_a2a_observability",
     "inject_trace_context",
+    "TRACE_SCHEMA_VERSION",
+    "trace_metadata",
 ]
