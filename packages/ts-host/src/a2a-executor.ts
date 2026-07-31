@@ -102,7 +102,8 @@ export class HostExecutor implements AgentExecutor {
       })
     }
 
-    // Langfuse v4: turn-спан `a2a-turn` активен на время когниции (LangChain-спаны нестятся под него).
+    // Langfuse v4: turn-спан `{service}:a2a` (slug card.name) — в UI видно, какой агент.
+    // Активен на время когниции (LangChain-спаны нестятся под него).
     // `parentCarrier` из входящего сообщения → спан продолжает распределённый трейс оркестратора
     // (один трейс на всю цепочку UI→оркестратор→суб-агент). forceFlush — внутри обёртки.
     const result = await withTurnObservability<AgentResult>(
@@ -113,7 +114,7 @@ export class HostExecutor implements AgentExecutor {
         metadata: parsed.metadata,
         text: parsed.text,
         billingOrgId: ctx?.billingOrgId,
-        agentName: 'a2a-turn',
+        agentName: `${this.service}:a2a`,
         ...(parsed.traceCarrier ? { parentCarrier: parsed.traceCarrier } : {}),
       },
       async () => {
