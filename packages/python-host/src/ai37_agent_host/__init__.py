@@ -31,6 +31,7 @@ from .llm import (
     create_openai_client,
     resolve_llm_config,
 )
+from .observability.trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 from .output_modes import (
     A2UI_CAPABILITIES_VERSION,
     client_supports_catalog,
@@ -72,7 +73,6 @@ from .types import (
     TextEvent,
     ToolEvent,
 )
-from .observability.trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 
 __all__ = [
     # types
