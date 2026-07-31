@@ -3,6 +3,12 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.33]
+
+### Added
+- Stable `trace.v1` metadata envelope for turn, planner, agent, generation and tool observations.
+- Consistent status and correlation fields for distributed A2A traces.
+
 ## [0.1.0-alpha.30] - 2026-07-27
 
 ### Added

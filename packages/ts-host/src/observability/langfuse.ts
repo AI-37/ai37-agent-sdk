@@ -1,6 +1,7 @@
 import type { Claims } from '@ai37/agent-sdk'
 import { requestScope } from '../als'
 import type { Ai37Metadata } from '../types'
+import { TRACE_SCHEMA_VERSION, traceMetadata } from './trace-v1'
 
 /**
  * Langfuse-наблюдаемость host'а: «из коробки» для любого агента на @ai37/agent-host.
@@ -43,7 +44,11 @@ interface OtelHandle {
     inject: (ctx: unknown, carrier: Record<string, string>) => void
     extract: (ctx: unknown, carrier: Record<string, string>) => unknown
   }
-  trace: { getSpan: (ctx: unknown) => { spanContext: () => { traceId: string } } | undefined }
+  trace: {
+    getSpan: (
+      ctx: unknown,
+    ) => { spanContext: () => { traceId: string } } | undefined
+  }
   forceFlush: () => Promise<unknown>
 }
 
@@ -102,32 +107,39 @@ async function ensureOtel(): Promise<OtelHandle | null> {
     const processor = new LangfuseSpanProcessor({
       publicKey,
       secretKey,
-      ...(process.env.LANGFUSE_BASE_URL ?? process.env.LANGFUSE_HOST
-        ? { baseUrl: process.env.LANGFUSE_BASE_URL ?? process.env.LANGFUSE_HOST }
+      ...((process.env.LANGFUSE_BASE_URL ?? process.env.LANGFUSE_HOST)
+        ? {
+            baseUrl: process.env.LANGFUSE_BASE_URL ?? process.env.LANGFUSE_HOST,
+          }
         : {}),
       ...(process.env.LANGFUSE_TRACING_ENVIRONMENT
         ? { environment: process.env.LANGFUSE_TRACING_ENVIRONMENT }
         : {}),
-      ...(process.env.LANGFUSE_RELEASE ? { release: process.env.LANGFUSE_RELEASE } : {}),
+      ...(process.env.LANGFUSE_RELEASE
+        ? { release: process.env.LANGFUSE_RELEASE }
+        : {}),
     })
 
-    const NodeSDK = sdkNode.NodeSDK as new (opts: Record<string, unknown>) => { start: () => void }
+    const NodeSDK = sdkNode.NodeSDK as new (opts: Record<string, unknown>) => {
+      start: () => void
+    }
     const sdk = new NodeSDK({ spanProcessors: [processor] })
     sdk.start()
 
     // @langfuse/langchain опционален: нет пакета/@langchain/core → LangChain-трассировки нет, но
     // turn-спаны и ручные observation'ы работают.
-    let CallbackHandler: (new (opts?: Record<string, unknown>) => object) | undefined
+    let CallbackHandler:
+      (new (opts?: Record<string, unknown>) => object) | undefined
     try {
-      CallbackHandler = (await dyn('@langfuse/langchain')).CallbackHandler as new (
-        opts?: Record<string, unknown>,
-      ) => object
+      CallbackHandler = (await dyn('@langfuse/langchain'))
+        .CallbackHandler as new (opts?: Record<string, unknown>) => object
     } catch {
       CallbackHandler = undefined
     }
 
     const handle: OtelHandle = {
-      startActiveObservation: tracing.startActiveObservation as OtelHandle['startActiveObservation'],
+      startActiveObservation:
+        tracing.startActiveObservation as OtelHandle['startActiveObservation'],
       createTraceId: tracing.createTraceId as OtelHandle['createTraceId'],
       CallbackHandler,
       context: otelApi.context as OtelHandle['context'],
@@ -170,11 +182,15 @@ export interface BeginTurnArgs {
 async function parentFromTraceId(
   otel: OtelHandle,
   rawId: unknown,
-): Promise<{ traceId: string; spanId: string; traceFlags: number } | undefined> {
+): Promise<
+  { traceId: string; spanId: string; traceFlags: number } | undefined
+> {
   if (typeof rawId !== 'string' || rawId.length === 0) return undefined
   // Фронт уже шлёт валидный 32-hex OTel trace id → используем как есть (Langfuse trace id == trace_id
   // фронта, фронт может ставить score по нему). Иначе детерминированно выводим из seed.
-  const traceId = /^[0-9a-f]{32}$/i.test(rawId) ? rawId.toLowerCase() : await otel.createTraceId(rawId)
+  const traceId = /^[0-9a-f]{32}$/i.test(rawId)
+    ? rawId.toLowerCase()
+    : await otel.createTraceId(rawId)
   // spanId родителя не существует — нужен лишь валидный 16-hex для наследования (значение не важно).
   return { traceId, spanId: traceId.slice(0, 16), traceFlags: 1 }
 }
@@ -197,43 +213,79 @@ export async function withTurnObservability<T>(
   const parentCtx = args.parentCarrier
     ? otel.propagation.extract(otel.context.active(), args.parentCarrier)
     : undefined
-  const parentSpanContext = parentCtx ? undefined : await parentFromTraceId(otel, args.metadata.trace_id)
+  const parentSpanContext = parentCtx
+    ? undefined
+    : await parentFromTraceId(otel, args.metadata.trace_id)
   const tags = [args.metadata.channel, args.metadata.app_id].filter(
     (t): t is string => typeof t === 'string' && t.length > 0,
   )
 
   let result!: T
   const cb = async (span: LangfuseSpanLike): Promise<void> => {
+    const turnMetadata = traceMetadata('turn', {
+      service: args.metadata.app_id || 'ai37-agent-host',
+      environment:
+        process.env.LANGFUSE_TRACING_ENVIRONMENT ||
+        process.env.NODE_ENV ||
+        'development',
+      turnId: args.taskId,
+      sessionId: args.contextId,
+      taskId: args.taskId,
+      runId: args.taskId,
+      status: 'working',
+      intent: args.metadata.intent?.skill,
+      payloadMode: args.text === undefined ? 'inline' : 'inline-truncated',
+      channel: args.metadata.channel,
+      app_id: args.metadata.app_id,
+      billing_org_id: args.billingOrgId,
+      tenant: args.metadata.tenant,
+    })
     span.update({
       ...(args.text !== undefined ? { input: { text: args.text } } : {}),
       ...(args.contextId ? { sessionId: args.contextId } : {}),
       ...(args.claims?.sub ? { userId: args.claims.sub } : {}),
       ...(tags.length > 0 ? { tags } : {}),
-      metadata: {
-        taskId: args.taskId,
-        contextId: args.contextId,
-        channel: args.metadata.channel,
-        app_id: args.metadata.app_id,
-        intent: args.metadata.intent?.skill,
-        billing_org_id: args.billingOrgId,
-        tenant: args.metadata.tenant,
-      },
+      metadata: { ...turnMetadata, contextId: args.contextId },
     })
     // CallbackHandler без `root`: нестится под активный OTel-спан (этот turn-спан). traceId берём
     // из активного контекста — он и есть id трейса всей цепочки (для score/ручных под-спанов).
-    const handler = otel.CallbackHandler ? new otel.CallbackHandler() : undefined
-    const traceId = otel.trace.getSpan(otel.context.active())?.spanContext().traceId
+    const handler = otel.CallbackHandler
+      ? new otel.CallbackHandler()
+      : undefined
+    const traceId = otel.trace
+      .getSpan(otel.context.active())
+      ?.spanContext().traceId
     const scope = requestScope.getStore()
-    if (scope) scope.langfuse = { ...(traceId ? { traceId } : {}), span, handler }
+    if (scope)
+      scope.langfuse = { ...(traceId ? { traceId } : {}), span, handler }
     result = await run()
-    if (toOutput) span.update({ output: toOutput(result) })
+    const output = toOutput?.(result)
+    span.update({
+      ...(output ? { output } : {}),
+      metadata: {
+        ...turnMetadata,
+        contextId: args.contextId,
+        ...(output?.status
+          ? {
+              status:
+                output.status === 'input-required'
+                  ? 'input-required'
+                  : output.status === 'failed'
+                    ? 'failed'
+                    : 'completed',
+            }
+          : { status: 'completed' }),
+      },
+    })
   }
 
   const name = args.agentName ?? 'agent-turn'
   const opts = parentSpanContext ? { parentSpanContext } : {}
   try {
     if (parentCtx) {
-      await otel.context.with(parentCtx, () => otel.startActiveObservation(name, cb, opts))
+      await otel.context.with(parentCtx, () =>
+        otel.startActiveObservation(name, cb, opts),
+      )
     } else {
       await otel.startActiveObservation(name, cb, opts)
     }
@@ -280,7 +332,29 @@ export async function withRemoteA2aObservability<T>(
   await otel.startActiveObservation(
     `remote-a2a:${agentId}`,
     async (span: LangfuseSpanLike) => {
-      span.update({ metadata: { agentId, kind: 'remote-a2a' } })
+      const activeTraceId = otel.trace
+        .getSpan(otel.context.active())
+        ?.spanContext().traceId
+      span.update({
+        metadata: {
+          schemaVersion: TRACE_SCHEMA_VERSION,
+          traceKind: 'agent',
+          service: 'ai37-agent-host',
+          environment:
+            process.env.LANGFUSE_TRACING_ENVIRONMENT ||
+            process.env.NODE_ENV ||
+            'development',
+          agentId,
+          kind: 'remote-a2a',
+          ...(activeTraceId
+            ? {
+                traceId: activeTraceId,
+                sessionId: activeTraceId,
+                turnId: activeTraceId,
+              }
+            : {}),
+        },
+      })
       result = await run()
     },
   )

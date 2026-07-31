@@ -31,6 +31,7 @@ from .llm import (
     create_openai_client,
     resolve_llm_config,
 )
+from .observability.trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 from .output_modes import (
     A2UI_CAPABILITIES_VERSION,
     client_supports_catalog,
@@ -130,6 +131,8 @@ __all__ = [
     # host app
     "create_agent_host",
     "HostExecutor",
+    "TRACE_SCHEMA_VERSION",
+    "trace_metadata",
     "AuthGuardMiddleware",
     # durable task store (A2A tasks/get/list reconcile)
     "RedisTaskStore",
