@@ -256,8 +256,17 @@ export async function withTurnObservability<T>(
       .getSpan(otel.context.active())
       ?.spanContext().traceId
     const scope = requestScope.getStore()
-    if (scope)
-      scope.langfuse = { ...(traceId ? { traceId } : {}), span, handler }
+    if (scope) {
+      // sessionId/turnId кладём в ALS, чтобы remote-a2a и ручные observation'ы брали ТОТ ЖЕ
+      // correlation, что и turn-спан (диалог = contextId, ход = taskId). traceId — отдельно.
+      scope.langfuse = {
+        ...(traceId ? { traceId } : {}),
+        ...(args.contextId ? { sessionId: args.contextId } : {}),
+        ...(args.taskId ? { turnId: args.taskId } : {}),
+        span,
+        handler,
+      }
+    }
     result = await run()
     const output = toOutput?.(result)
     span.update({
@@ -320,7 +329,14 @@ export function injectTraceContext(): Record<string, string> {
  * (`agui-turn`), и суб-агент вешается в КОРЕНЬ трейса — параллельно callback-спану инструмента
  * (`agent_<id>` от @langfuse/langchain, которого нет в OTel-active-цепочке), а не под свой вызов.
  * С обёрткой дерево: turn → remote-a2a:<id> → turn-спан суб-агента → его планнер/поиск.
- * No-op при выключенной трассировке; ошибки `run()` НЕ глотает (span закрывается, трейс уходит с ходом).
+ *
+ * Контракт (без legacy-подмен):
+ *  - вызывать ТОЛЬКО внутри `withTurnObservability` (оркестраторский ход);
+ *  - `sessionId` = ALS.contextId (диалог), `turnId` = ALS.taskId (ход);
+ *  - OTel `traceId` — отдельное поле; им клеится дерево через W3C `traceparent`;
+ *  - нет turn-scope → спан всё равно открывается (дерево живёт), но `trace.v1` envelope не пишем
+ *    (не подставляем traceId/agentId вместо session/turn).
+ * No-op при выключенной трассировке; ошибки `run()` НЕ глотает.
  */
 export async function withRemoteA2aObservability<T>(
   agentId: string,
@@ -332,29 +348,40 @@ export async function withRemoteA2aObservability<T>(
   await otel.startActiveObservation(
     `remote-a2a:${agentId}`,
     async (span: LangfuseSpanLike) => {
+      const lf = requestScope.getStore()?.langfuse
       const activeTraceId = otel.trace
         .getSpan(otel.context.active())
         ?.spanContext().traceId
-      span.update({
-        metadata: {
-          schemaVersion: TRACE_SCHEMA_VERSION,
-          traceKind: 'agent',
-          service: 'ai37-agent-host',
-          environment:
-            process.env.LANGFUSE_TRACING_ENVIRONMENT ||
-            process.env.NODE_ENV ||
-            'development',
-          agentId,
-          kind: 'remote-a2a',
-          ...(activeTraceId
-            ? {
-                traceId: activeTraceId,
-                sessionId: activeTraceId,
-                turnId: activeTraceId,
-              }
-            : {}),
-        },
-      })
+      const sessionId = lf?.sessionId
+      const turnId = lf?.turnId
+
+      if (sessionId && turnId) {
+        span.update({
+          sessionId,
+          metadata: traceMetadata('agent', {
+            service: 'ai37-agent-host',
+            environment:
+              process.env.LANGFUSE_TRACING_ENVIRONMENT ||
+              process.env.NODE_ENV ||
+              'development',
+            sessionId,
+            turnId,
+            agentId,
+            kind: 'remote-a2a',
+            ...(activeTraceId ? { traceId: activeTraceId } : {}),
+          }),
+        })
+      } else {
+        // Вне turn-scope — не фабрикуем фейковый session/turn. Дерево всё равно склеится по
+        // traceparent; queryable trace.v1 появится, когда вызов будет внутри withTurnObservability.
+        span.update({
+          metadata: {
+            agentId,
+            kind: 'remote-a2a',
+            ...(activeTraceId ? { traceId: activeTraceId } : {}),
+          },
+        })
+      }
       result = await run()
     },
   )

@@ -24,4 +24,23 @@ describe('trace.v1 metadata', () => {
       status: 'working',
     })
   })
+
+  it('keeps sessionId/turnId distinct from optional OTel traceId', () => {
+    // Контракт одного дерева: session = диалог (contextId), turn = ход (taskId),
+    // traceId = OTel id цепочки. Нельзя подставлять traceId в sessionId/turnId.
+    const meta = traceMetadata('agent', {
+      turnId: 'task-1',
+      sessionId: 'context-1',
+      service: 'ai37-agent-host',
+      environment: 'dev',
+      agentId: 'lift-calc',
+      kind: 'remote-a2a',
+      traceId: 'abcdef0123456789abcdef0123456789',
+    })
+    expect(meta.sessionId).toBe('context-1')
+    expect(meta.turnId).toBe('task-1')
+    expect(meta.traceId).toBe('abcdef0123456789abcdef0123456789')
+    expect(meta.sessionId).not.toBe(meta.traceId)
+    expect(meta.turnId).not.toBe(meta.traceId)
+  })
 })

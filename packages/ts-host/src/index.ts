@@ -9,6 +9,8 @@ export {
   currentPartnerInstructions,
   withPartnerInstructions,
   currentTraceId,
+  currentSessionId,
+  currentTurnId,
   currentLangfuseTrace,
   currentLangfuseHandler,
   currentLangfuseCallbacks,

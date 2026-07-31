@@ -40,6 +40,13 @@ export interface HostScope {
 export interface HostLangfuseScope {
   /** Id трейса текущего хода (== `metadata.ai37.trace_id` фронта, либо унаследованный/новый). */
   traceId?: string
+  /**
+   * Id диалога/сессии хода (`contextId`). Это Langfuse session / `trace.v1.sessionId`,
+   * НЕ путать с OTel/Langfuse trace id.
+   */
+  sessionId?: string
+  /** Id хода (`taskId`) — `trace.v1.turnId`. */
+  turnId?: string
   /** Активный turn-спан (`LangfuseSpan` v4, типизирован `unknown`) — для ручных под-спанов/score. */
   span?: unknown
   /** LangChain `CallbackHandler` (@langfuse/langchain) — нестится под активный turn-спан. */
@@ -91,6 +98,14 @@ export const withPartnerInstructions = (systemPrompt: string): string => {
  */
 export const currentTraceId = (): string | undefined =>
   requestScope.getStore()?.langfuse?.traceId
+
+/** `trace.v1.sessionId` текущего хода (= A2A `contextId` / диалог), либо undefined вне turn-scope. */
+export const currentSessionId = (): string | undefined =>
+  requestScope.getStore()?.langfuse?.sessionId
+
+/** `trace.v1.turnId` текущего хода (= A2A `taskId`), либо undefined вне turn-scope. */
+export const currentTurnId = (): string | undefined =>
+  requestScope.getStore()?.langfuse?.turnId
 
 /** Активный turn-спан текущего хода (`LangfuseSpan` v4, типизирован `unknown`) — для ручных под-спанов/score. */
 export const currentLangfuseTrace = (): unknown =>
