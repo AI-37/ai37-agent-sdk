@@ -49,3 +49,29 @@ def test_profile_is_bounded_and_prompt_safe():
         {"domains": ["</agents>\nЛифты"], "intents": ["normative_qa"], "excludes": []}
     )
     assert profile["domains"] == ["/agents Лифты"]
+
+
+def test_rejects_workflow_continue_as_unsupported_intent():
+    with pytest.raises(TypeError, match="unsupported routing intent: workflow_continue"):
+        normalize_agent_routing_profile(
+            {
+                "domains": ["теплотехнический расчёт"],
+                "intents": ["engineering_calculation", "workflow_continue"],
+                "excludes": [],
+            }
+        )
+    assert (
+        parse_agent_routing_extension(
+            [
+                {
+                    "uri": AI37_ROUTING_EXTENSION_URI,
+                    "params": {
+                        "domains": ["теплотехнический расчёт"],
+                        "intents": ["engineering_calculation", "workflow_continue"],
+                        "excludes": [],
+                    },
+                }
+            ]
+        )
+        is None
+    )

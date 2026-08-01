@@ -31,6 +31,28 @@ describe('AI37 A2A routing extension', () => {
     ).toBeUndefined()
   })
 
+  it('rejects workflow_continue as an unsupported intent', () => {
+    expect(() =>
+      normalizeAgentRoutingProfile({
+        domains: ['теплотехнический расчёт'],
+        intents: ['engineering_calculation', 'workflow_continue'],
+        excludes: [],
+      }),
+    ).toThrow(/unsupported routing intent: workflow_continue/)
+    expect(
+      parseAgentRoutingExtension([
+        {
+          uri: AI37_ROUTING_EXTENSION_URI,
+          params: {
+            domains: ['теплотехнический расчёт'],
+            intents: ['engineering_calculation', 'workflow_continue'],
+            excludes: [],
+          },
+        },
+      ]),
+    ).toBeUndefined()
+  })
+
   it('enforces bounded and prompt-safe profiles', () => {
     expect(() =>
       normalizeAgentRoutingProfile({

@@ -5,6 +5,10 @@
 export const AI37_ROUTING_EXTENSION_URI =
   'https://schemas.ai37.ru/a2a/extensions/routing/v1' as const
 
+/**
+ * Operation intents for routing/v1. Continuation of an open HITL/wizard is orchestrator
+ * workflow state (`mode=continuation`), not an intent advertised on Agent Cards.
+ */
 export const AI37_ROUTING_INTENTS = [
   'document_search',
   'document_list',
@@ -14,7 +18,6 @@ export const AI37_ROUTING_INTENTS = [
   'parameter_selection',
   'counterparty_verification',
   'file_processing',
-  'workflow_continue',
 ] as const
 
 export type AgentRoutingIntent = (typeof AI37_ROUTING_INTENTS)[number]
