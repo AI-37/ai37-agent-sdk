@@ -8,8 +8,9 @@ export interface ParsedMessage {
   /** A2UI-действие (клик/submit), если оркестратор форварднул его в `message.metadata.a2uiAction`. */
   action?: A2uiAction
   /**
-   * W3C trace-context из `message.metadata` (`{ traceparent, tracestate? }`), который оркестратор
-   * прокинул через `injectTraceContext`. Host продолжает по нему распределённый трейс (Langfuse v4).
+   * W3C trace-context и baggage из `message.metadata` (`{ traceparent, tracestate?, baggage? }`),
+   * который оркестратор прокинул через `injectTraceContext`. Host продолжает по нему распределённый
+   * трейс (Langfuse v4).
    */
   traceCarrier?: Record<string, string>
 }
@@ -36,8 +37,9 @@ export function parseA2AMessage(rc: RequestContext): ParsedMessage {
 }
 
 /**
- * W3C trace-context из `message.metadata` (`traceparent`/`tracestate`), который оркестратор положил
- * туда через `injectTraceContext` при исходящем A2A-вызове. undefined, если оркестратор не трассирует.
+ * W3C trace-context из `message.metadata` (`traceparent`/`tracestate`/`baggage`), который оркестратор
+ * положил туда через `injectTraceContext` при исходящем A2A-вызове. undefined, если оркестратор не
+ * трассирует.
  */
 function readTraceCarrier(rc: RequestContext): Record<string, string> | undefined {
   const md = rc.userMessage.metadata as Record<string, unknown> | undefined
@@ -45,6 +47,7 @@ function readTraceCarrier(rc: RequestContext): Record<string, string> | undefine
   if (typeof traceparent !== 'string' || traceparent.length === 0) return undefined
   const carrier: Record<string, string> = { traceparent }
   if (typeof md?.tracestate === 'string') carrier.tracestate = md.tracestate
+  if (typeof md?.baggage === 'string') carrier.baggage = md.baggage
   return carrier
 }
 
