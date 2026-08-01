@@ -12,6 +12,13 @@
 - `AI37_ROUTING_EXTENSION_URI` — versioned идентификатор extension, не HTTP endpoint.
   Изменений версии A2A и сетевых обращений к URI нет.
 
+## [0.1.0-alpha.12]
+
+### Added
+
+- Публикация routing exports в npm-пакете `@ai37/agent-sdk`, чтобы consumer’ы могли импортировать
+  `AI37_ROUTING_EXTENSION_URI` и `buildAgentRoutingExtension` из published package.
+
 ## [0.1.0-alpha.10] - 2026-07-19
 
 ### Added
