@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.ai37.ru/a2a/extensions/routing/v1",
   "title": "AI37 A2A routing extension v1",
-  "description": "Compact semantic routing profile embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint.",
+  "description": "Compact semantic routing profile embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Continuation of an open HITL/wizard is orchestrator mode, not an intent.",
   "type": "object",
   "additionalProperties": false,
   "required": ["domains", "intents", "excludes"],
@@ -27,8 +27,7 @@
           "engineering_calculation",
           "parameter_selection",
           "counterparty_verification",
-          "file_processing",
-          "workflow_continue"
+          "file_processing"
         ]
       }
     },

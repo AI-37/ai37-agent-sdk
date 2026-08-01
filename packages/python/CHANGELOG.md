@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a5] - 2026-08-01
+
+### Removed
+
+- `workflow_continue` из канонического набора intents. Continuation — mode оркестратора;
+  карточка с этим значением невалидна (parse → None).
+
 ## [0.1.0a4] - 2026-07-29
 
 ### Added

@@ -6,6 +6,7 @@ from typing import Any, Literal, TypedDict, cast
 # Versioned identifier, not an endpoint. Consumers must not dereference it.
 AI37_ROUTING_EXTENSION_URI = "https://schemas.ai37.ru/a2a/extensions/routing/v1"
 
+# Operation intents only. HITL/wizard continuation is orchestrator mode, not a card intent.
 AgentRoutingIntent = Literal[
     "document_search",
     "document_list",
@@ -15,7 +16,6 @@ AgentRoutingIntent = Literal[
     "parameter_selection",
     "counterparty_verification",
     "file_processing",
-    "workflow_continue",
 ]
 
 AI37_ROUTING_INTENTS: frozenset[str] = frozenset(
@@ -28,7 +28,6 @@ AI37_ROUTING_INTENTS: frozenset[str] = frozenset(
         "parameter_selection",
         "counterparty_verification",
         "file_processing",
-        "workflow_continue",
     }
 )
 
