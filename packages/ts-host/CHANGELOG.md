@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.35]
+
+### Fixed
+- **Trace carrier теперь сохраняет baggage.** Входящий A2A `message.metadata` больше не теряет
+  `baggage` при парсинге trace-контекста, поэтому distributed Langfuse trace сохраняет полный carrier
+  между hop'ами.
+
 ## [0.1.0-alpha.34]
 
 ### Changed
