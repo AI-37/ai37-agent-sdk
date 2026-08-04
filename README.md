@@ -1,5 +1,78 @@
 # ai37-agent-sdk
 
+<!-- ai37:card:start (managed by doc-bot — do not edit inside) -->
+# ai37-agent-sdk
+
+## Описание
+SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
+
+## Стек
+- TypeScript (Node ≥ 22), npm, tsup (пакет `@ai37/agent-sdk`).
+- Python (≥ 3.11), poetry, ruff, mypy, pytest (пакет `ai37-agent-sdk`).
+- Общий контракт в `contract/` (JSON Schema, `feature-codes.json`, `env.md`), кодоген `make codegen`.
+- Host-слой: `packages/ts-host` и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse).
+
+## Схема работы
+Агент получает A2A-запрос с Bearer user-JWT; `AgentContext` (SDK):
+1. `auth.verify` — проверка подписи/iss/aud/exp по JWKS (кэш ключей);
+2. `billing` preflight (`assertExecutionAllowed`) — entitlement, остаток токенов, `llmKey`;
+3. LLM-вызов с `apiKey = llmKey`;
+4. доменная работа;
+5. `reportUsage` после успеха.
+
+При вызове суб-агента модуль `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`). Для тестов без сети есть подпакет `testing` (фейки, фикстуры, in-memory billing, тест-токены).
+
+```mermaid
+flowchart LR
+  C[UI / другой агент] -->|A2A Bearer user-JWT| AG[Агент / AgentContext]
+  AG -->|auth.verify| J[JWKS]
+  AG -->|billing preflight + usage| B[billing]
+  AG -->|apiKey = llmKey| L[LLM-шлюз]
+  AG -->|a2a.forward user-JWT| S[суб-агент]
+```
+
+## Публичные интерфейсы
+- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`; Python-пакет без CLI (follow-up).
+- **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
+- **Host-слой `@ai37/agent-host`:** A2A, AG-UI, MCP, task-релей, store-backend’ы, observability.
+
+## Зависимости в экосистеме
+### Зависит от
+- billing-сервиса (`BILLING_BASE_URL`): preflight, runtime state, usage.
+- JWKS/OIDC issuer (`JWKS_URL`, `ISSUER`, `AUDIENCE`).
+- LLM-шлюза (через `llmKey` из runtime state).
+- Суб-агентов по A2A (forward user-JWT).
+- Redis — только для host-слоя.
+
+### От него зависят
+- Агенты AI37, использующие SDK/`AgentContext`.
+- Host-пакеты `@ai37/agent-host` (ts-host/python-host) поверх SDK.
+
+## Конфигурация
+Ключевые параметры (передаются в настройки SDK; см. `contract/env.md`):
+- `ISSUER`, `AUDIENCE`, `JWKS_URL` — auth (JWT-verify).
+- `BILLING_BASE_URL` — billing.
+- `required` — обязательность проверки auth/billing.
+- `llmKey` — из runtime state billing, не из env/JWT; не логировать.
+
+## Данные и хранилища
+— У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context).
+
+## Как запускать тесты
+```bash
+make codegen   # кодоген codes.ts/codes.py из contract/
+make ts        # TS: lint + test + build
+make py        # Python: ruff + mypy + pytest
+make verify    # codegen-парити + оба пакета
+```
+
+## Деплой
+Библиотека, не сервис: публикация в npm/PyPI через GitHub Actions (`publish-ts.yml`, `publish-python.yml`, `publish-ts-host.yml`, `publish-python-host.yml`). Helm/terraform не используются.
+
+## Связанные документы
+- `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
+<!-- ai37:card:end -->
+
 SDK для **агентов** экосистемы **AI37**. Закрывает четыре сквозные задачи, которые иначе каждый агент
 реализует по-своему:
 
