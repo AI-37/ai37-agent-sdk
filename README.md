@@ -73,6 +73,9 @@ make verify    # codegen-парити + оба пакета
 - `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
 <!-- ai37:card:end -->
 
+<!-- Ниже — только уникальный человеческий контекст (замысел, инварианты, грабли).
+     Не дублируйте сюда «что/как» из карточки выше — её ведёт docs-bot из кода. -->
+
 SDK для **агентов** экосистемы **AI37**. Закрывает четыре сквозные задачи, которые иначе каждый агент
 реализует по-своему:
 
@@ -111,109 +114,6 @@ flowchart LR
 | Вызвать другого агента по A2A (forward токена) | **`a2a`** (`buildA2AAuthHeaders` / `forwardAuthFetch`) |
 | LLM-вызов оплачиваемой моделью | `llmKey` из runtime state → apiKey к LLM-шлюзу |
 | Тесты без сети | **`testing`** (фейки/фикстуры/токены) |
-
-## Типичный поток агента
-
-```mermaid
-sequenceDiagram
-  autonumber
-  participant C as Caller
-  participant A as Agent
-  participant J as JWKS
-  participant B as billing
-  participant L as LLM
-  C->>A: A2A, Bearer user-JWT
-  A->>J: verify подпись, iss, aud, exp
-  A->>B: assertExecutionAllowed preflight
-  B-->>A: runtime state — entitlement, остаток, llmKey
-  A->>L: LLM-вызов, apiKey = llmKey
-  A->>A: доменная работа
-  A->>B: reportUsage после успеха
-```
-
-## Установка
-
-```bash
-# TypeScript (Node ≥ 22)
-npm i @ai37/agent-sdk
-# Python (≥ 3.11)
-pip install ai37-agent-sdk     # или: poetry add ai37-agent-sdk
-```
-
-## Быстрый старт (агент): verify + billing одной обёрткой
-
-```ts
-import { AgentContext } from "@ai37/agent-sdk";
-
-const ctx = await AgentContext.fromRequest(headers, {
-  auth: { issuer, audience, jwksUrl, required: true },
-  billing: { baseUrl: BILLING_BASE_URL },
-});
-const state = await ctx.assertExecutionAllowed({ feature, privilege }); // отказ → исключение
-// LLM-агент:     const apiKey = ctx.llmKey;
-// metered-агент: await ctx.reportUsage({ transactionId: task.id, code, properties });
-```
-
-```python
-from ai37_agent_sdk import AgentContext, AgentContextSettings, AuthSettings, BillingSettings
-
-ctx = AgentContext.from_request(headers, AgentContextSettings(
-    auth=AuthSettings(issuer=ISSUER, audience=AUDIENCE, jwks_url=JWKS_URL, required=True),
-    billing=BillingSettings(base_url=BILLING_BASE_URL),
-))
-state = ctx.assert_execution_allowed(feature=..., privilege=...)
-# LLM-агент:     api_key = ctx.llm_key
-# metered-агент: ctx.report_usage(transaction_id=task_id, code="...", properties={...})
-```
-
-## Вызов другого агента (forward user-JWT)
-
-Когда агент сам зовёт суб-агента по A2A — прокидывает тот же user-JWT:
-
-```ts
-import { buildA2AAuthHeaders } from "@ai37/agent-sdk";
-const res = await fetch(subAgentUrl, { headers: buildA2AAuthHeaders(userJwt) });
-```
-
-```python
-from ai37_agent_sdk import build_a2a_auth_headers
-headers = build_a2a_auth_headers(user_jwt)
-```
-
-## Тестирование агента без сети
-
-Подпакет `@ai37/agent-sdk/testing` / `ai37_agent_sdk.testing` — чтобы агенты не изобретали моки.
-
-```ts
-import { makeTestContext, InMemoryBillingClient, fixtures } from "@ai37/agent-sdk/testing";
-const ctx = await makeTestContext({
-  claims: { sub: "u1", org_id: "u1", billing_org_id: "org1", app_id: "product-a" },
-  billing: new InMemoryBillingClient({ runtimeState: fixtures.runtimeState.active() }),
-});
-```
-
-```python
-from ai37_agent_sdk.testing import make_test_context, InMemoryBillingClient, fixtures
-ctx = make_test_context(
-    claims={"sub": "u1", "org_id": "u1", "billing_org_id": "org1"},
-    billing=InMemoryBillingClient(runtime_state=fixtures.runtime_state.no_resources()),
-)
-```
-
-- **Уровень 1 (юнит):** `FakeJwtVerifier` + `InMemoryBillingClient` + `fixtures` — без сети.
-- **Уровень 2a (реальная подпись):** `createTestKeyset()/makeTestToken()/testJwks()` — verify по
-  настоящему RSA-keypair, без внешнего провайдера.
-
-## Модули и публичный API
-
-| Модуль | TS (`@ai37/agent-sdk`) | Python (`ai37_agent_sdk`) |
-|---|---|---|
-| **auth** | `JwksJwtVerifier`, `createJwtVerifier`, `extractBearer`, `Claims`, `AuthError` | `JwksJwtVerifier`, `create_jwt_verifier`, `extract_bearer`, `Claims`, `AuthError` |
-| **billing** | `createBillingClient`, `BillingClient`, `BillingRuntimeState`, `hasRequiredAccess`, ошибки | `create_billing_client`, `BillingClient`, `BillingRuntimeState`, `has_required_access`, ошибки |
-| **a2a** | `buildA2AAuthHeaders`, `forwardAuthFetch`, `A2A_PROTOCOL_VERSION` | `build_a2a_auth_headers`, `A2A_PROTOCOL_VERSION` |
-| **AgentContext** | `.fromRequest`, `.assertExecutionAllowed`, `.reportUsage`, `.llmKey` | `.from_request`, `.assert_execution_allowed`, `.report_usage`, `.llm_key` |
-| **codes** | `BillingFeatureCode`, `BillingPrivilegeCode` | `BillingFeatureCode`, `BillingPrivilegeCode` |
-| **testing** | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `makeTestContext`, `createTestKeyset` | `FakeJwtVerifier`, `InMemoryBillingClient`, `fixtures`, `make_test_context`, `create_test_keyset` |
 
 ## Вне scope
 
