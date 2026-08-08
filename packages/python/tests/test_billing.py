@@ -4,11 +4,15 @@ import httpx
 import pytest
 
 from ai37_agent_sdk import (
+    BILLING_USER_MESSAGES,
+    DEFAULT_BILLING_USER_MESSAGE,
     BillingExecutionRequirement,
     BillingRequestError,
+    billing_user_message,
     create_billing_client,
     explain_denial,
     friendly_billing_message,
+    is_payment_blocked,
 )
 from ai37_agent_sdk.billing import BillingExecutionDeniedError
 from ai37_agent_sdk.billing.types import BillingRuntimeState, BillingUsageEventInput
@@ -59,6 +63,21 @@ def test_assert_denied_no_resources():
     client = _client(lambda req: httpx.Response(200, json=body))
     with pytest.raises(BillingExecutionDeniedError):
         client.assert_execution_allowed("org1")
+
+
+def test_assert_denied_payment_blocked():
+    # Всё остальное в порядке — блокирует именно оплата.
+    body = {**ACTIVE, "activePaymentStatus": False}
+    client = _client(lambda req: httpx.Response(200, json=body))
+    with pytest.raises(BillingExecutionDeniedError) as exc:
+        client.assert_execution_allowed("org1")
+    assert exc.value.reason == "PAYMENT_FAILED"
+
+
+def test_assert_allowed_when_payment_healthy():
+    body = {**ACTIVE, "activePaymentStatus": True}
+    state = _client(lambda req: httpx.Response(200, json=body)).assert_execution_allowed("org1")
+    assert state.active_payment_status is True
 
 
 def test_feature_required():
@@ -184,3 +203,33 @@ def test_friendly_message_hides_internals():
     msg = friendly_billing_message(err)
     assert "feature=" not in msg and "elevator-calc-agent" not in msg
     assert friendly_billing_message(Exception("boom")).endswith("подписку.")
+
+
+def test_explain_denial_payment_failed_takes_priority():
+    # Оплата провалена И entitlement неактивен И токенов нет: побеждает оплата.
+    denied = _state(
+        activePaymentStatus=False,
+        entitlementStatus="no_resources",
+        remainingTotalTokens=0,
+        features=[],
+    )
+    reason, detail = explain_denial(denied, _REQ)
+    assert reason == "PAYMENT_FAILED"
+    assert "active_payment_status=false" in detail
+
+
+def test_is_payment_blocked_reads_only_explicit_false():
+    assert is_payment_blocked(_state(activePaymentStatus=False)) is True
+    assert is_payment_blocked(_state(activePaymentStatus=True)) is False
+    assert is_payment_blocked(_state()) is False  # отсутствие = разрешено
+
+
+def test_billing_user_message_payment_and_fallback():
+    err = BillingExecutionDeniedError(_state(activePaymentStatus=False), _REQ)
+    assert err.reason == "PAYMENT_FAILED"
+    assert friendly_billing_message(err) == BILLING_USER_MESSAGES["PAYMENT_FAILED"]
+    assert "Платёж не прошёл" in friendly_billing_message(err)
+    # Голая причина — для собственных preflight-веток агента; неизвестное → дефолт.
+    assert billing_user_message("NO_TOKENS") == BILLING_USER_MESSAGES["NO_TOKENS"]
+    assert billing_user_message("WAT_UNKNOWN") == DEFAULT_BILLING_USER_MESSAGE
+    assert billing_user_message(None) == DEFAULT_BILLING_USER_MESSAGE

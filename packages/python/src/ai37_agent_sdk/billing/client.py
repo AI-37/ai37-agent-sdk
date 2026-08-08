@@ -6,7 +6,7 @@ from urllib.parse import quote
 
 import httpx
 
-from .access import has_required_access
+from .access import has_required_access, is_payment_blocked
 from .errors import BillingExecutionDeniedError
 from .http import ensure_ok, normalize_billing_base_url, validate_options
 from .types import (
@@ -81,7 +81,8 @@ class HttpBillingClient:
     ) -> BillingRuntimeState:
         state = self.get_runtime_state_by_billing_org_id(billing_org_id)
         if (
-            state.entitlement_status != "active"
+            is_payment_blocked(state)
+            or state.entitlement_status != "active"
             or state.remaining_total_tokens <= 0
             or not has_required_access(state, requirement)
         ):

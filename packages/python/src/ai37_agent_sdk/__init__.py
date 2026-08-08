@@ -25,6 +25,8 @@ from .auth import (
     extract_bearer,
 )
 from .billing import (
+    BILLING_USER_MESSAGES,
+    DEFAULT_BILLING_USER_MESSAGE,
     BillingClient,
     BillingConfigurationError,
     BillingDenialReason,
@@ -35,10 +37,12 @@ from .billing import (
     BillingRuntimePrivilege,
     BillingRuntimeState,
     BillingUsageEventInput,
+    billing_user_message,
     create_billing_client,
     explain_denial,
     friendly_billing_message,
     has_required_access,
+    is_payment_blocked,
     normalize_billing_base_url,
 )
 from .codes import BillingFeatureCode, BillingPrivilegeCode
@@ -79,7 +83,11 @@ __all__ = [
     "create_billing_client",
     "explain_denial",
     "friendly_billing_message",
+    "billing_user_message",
+    "BILLING_USER_MESSAGES",
+    "DEFAULT_BILLING_USER_MESSAGE",
     "has_required_access",
+    "is_payment_blocked",
     "normalize_billing_base_url",
     # a2a
     "A2A_PROTOCOL_VERSION",

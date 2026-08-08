@@ -11,11 +11,18 @@ from .types import (
 
 # Конкретная причина отказа assert_execution_allowed — машиночитаемая, для логов и UI-маппинга.
 BillingDenialReason = Literal[
+    "PAYMENT_FAILED",
     "ENTITLEMENT_INACTIVE",
     "NO_TOKENS",
     "MISSING_FEATURE",
     "MISSING_PRIVILEGE",
 ]
+
+
+def is_payment_blocked(state: BillingRuntimeState) -> bool:
+    """Заблокирован ли доступ из-за оплаты. billing отдаёт active_payment_status уже булевым;
+    SDK лишь читает флаг (блокирует только явный False, None/True = разрешено)."""
+    return state.active_payment_status is False
 
 
 def _code_str(value: object) -> str:
@@ -69,6 +76,16 @@ def explain_denial(
 
     Различает отсутствие фичи vs непредоставленную привилегию. None — отказа нет (доступ разрешён).
     """
+    # Оплата проверяется ПЕРВОЙ: провал платежа — самая действенная для пользователя причина
+    # (нужно обновить способ оплаты), она важнее прочих отказов.
+    if is_payment_blocked(state):
+        return (
+            "PAYMENT_FAILED",
+            f"active_payment_status=false "
+            f"(plan={state.current_plan_code or '—'}, "
+            f"subscription_status={state.current_subscription_status or '—'})",
+        )
+
     if state.entitlement_status != "active":
         return (
             "ENTITLEMENT_INACTIVE",

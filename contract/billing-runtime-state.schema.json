@@ -14,6 +14,10 @@
     "currentPlanCode": { "type": ["string", "null"] },
     "currentSubscriptionStatus": { "type": ["string", "null"] },
     "entitlementStatus": { "type": "string", "description": "active | no_resources | ..." },
+    "activePaymentStatus": {
+      "type": "boolean",
+      "description": "Здоровье оплаты (резолвится billing, уже булев). false → последний платёж терминально провалился, доступ блокируется. Отсутствие = разрешено. Ортогонально entitlementStatus."
+    },
     "remainingTotalTokens": { "type": "number" },
     "features": {
       "type": "array",

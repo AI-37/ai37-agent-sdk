@@ -35,6 +35,13 @@ export interface BillingRuntimeState {
   currentPlanCode?: string | null
   currentSubscriptionStatus?: string | null
   entitlementStatus: string
+  /**
+   * Здоровье оплаты — резолвится billing-сервисом (уже булев, не строка/`null`).
+   * `false` → последний платёж терминально провалился, доступ блокируется. Отсутствие поля
+   * (старый billing) трактуется как разрешено. Ортогонально `entitlementStatus`
+   * (тот — про доступные функции подписки, не про оплату).
+   */
+  activePaymentStatus?: boolean
   remainingTotalTokens: number
   features: BillingRuntimeFeature[]
   /** Виртуальный ключ LLM-шлюза (v1.2+). Секрет — не логировать. */

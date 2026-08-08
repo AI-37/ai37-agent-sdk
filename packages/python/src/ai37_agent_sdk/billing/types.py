@@ -34,6 +34,10 @@ class BillingRuntimeState:
     remaining_total_tokens: float
     features: list[BillingRuntimeFeature] = field(default_factory=list)
     stale: bool = False
+    # Здоровье оплаты — резолвится billing-сервисом (уже булев). False → терминальный провал
+    # платежа → доступ блокируется. None (старый billing) трактуется как разрешено.
+    # Ортогонально entitlement_status.
+    active_payment_status: bool | None = None
     llm_key: str | None = None  # секрет — не логировать
     licensed_external_subscription_id: str | None = None
     metered_external_subscription_id: str | None = None
@@ -70,6 +74,7 @@ class BillingRuntimeState:
             remaining_total_tokens=data["remainingTotalTokens"],
             features=features,
             stale=bool(data.get("stale", False)),
+            active_payment_status=data.get("activePaymentStatus"),
             llm_key=data.get("llmKey"),
             licensed_external_subscription_id=data.get("licensedExternalSubscriptionId"),
             metered_external_subscription_id=data.get("meteredExternalSubscriptionId"),

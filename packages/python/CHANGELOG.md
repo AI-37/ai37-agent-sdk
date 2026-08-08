@@ -3,6 +3,19 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a6] - 2026-08-08
+
+### Added
+
+- `active_payment_status: bool | None` в `BillingRuntimeState` (+ маппинг `from_api`): здоровье
+  оплаты, резолвится billing-сервисом. `False` → терминальный провал платежа → доступ блокируется.
+  Ортогонально `entitlement_status`.
+- Причина отказа `PAYMENT_FAILED` (проверяется первой) в `BillingDenialReason`/`explain_denial`;
+  `assert_execution_allowed` блокирует при `active_payment_status is False`. Хелпер `is_payment_blocked`.
+- Единая карта текстов `BILLING_USER_MESSAGES` + `DEFAULT_BILLING_USER_MESSAGE` +
+  `billing_user_message(reason_or_err)` — единый источник дружелюбного текста для агентов.
+  `friendly_billing_message` — тонкая обёртка над ним.
+
 ## [0.1.0a5] - 2026-08-01
 
 ### Removed
