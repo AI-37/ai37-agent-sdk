@@ -2,12 +2,16 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   BillingFeatureCode,
   BillingPrivilegeCode,
+  BILLING_USER_MESSAGES,
   BillingConfigurationError,
   BillingExecutionDeniedError,
   BillingRequestError,
+  billingUserMessage,
   createBillingAppsClient,
+  DEFAULT_BILLING_USER_MESSAGE,
   explainDenial,
   friendlyBillingMessage,
+  isPaymentBlocked,
   normalizeBillingBaseUrl,
 } from '../src'
 import type { BillingRuntimeState } from '../src'
@@ -253,6 +257,50 @@ describe('createBillingAppsClient', () => {
     await expect(client.assertExecutionAllowed('org-1')).rejects.toBeInstanceOf(
       BillingExecutionDeniedError,
     )
+  })
+
+  it('denies execution when payment is blocked (activePaymentStatus=false)', async () => {
+    // Всё остальное в порядке (active, есть токены и фича) — блокирует именно оплата.
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify(buildRuntimeState({ activePaymentStatus: false })),
+        { status: 200 },
+      ),
+    )
+    const client = createBillingAppsClient({
+      baseUrl: 'https://billing.example.com',
+      authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
+      fetch: fetchMock as typeof fetch,
+    })
+
+    await expect(
+      client.assertExecutionAllowed('org-1', {
+        feature: BillingFeatureCode.ElevatorCalcAgent,
+      }),
+    ).rejects.toMatchObject({
+      name: 'BillingExecutionDeniedError',
+      reason: 'PAYMENT_FAILED',
+    })
+  })
+
+  it('allows execution when payment status is healthy or absent', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify(buildRuntimeState({ activePaymentStatus: true })),
+        { status: 200 },
+      ),
+    )
+    const client = createBillingAppsClient({
+      baseUrl: 'https://billing.example.com',
+      authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
+      fetch: fetchMock as typeof fetch,
+    })
+
+    await expect(client.assertExecutionAllowed('org-1')).resolves.toMatchObject({
+      billingOrgId: 'org-1',
+    })
   })
 
   it('allows execution when the required feature is present', async () => {
@@ -588,5 +636,43 @@ describe('explainDenial / BillingExecutionDeniedError / friendlyBillingMessage',
     expect(msg.length).toBeGreaterThan(0)
     // Unknown errors fall back to the generic subscription message.
     expect(friendlyBillingMessage(new Error('boom'))).toContain('подписку')
+  })
+
+  it('names PAYMENT_FAILED first — before entitlement/token/access reasons', () => {
+    // Оплата провалена И entitlement неактивен И токенов нет: побеждает оплата (самое действенное).
+    const d = explainDenial(
+      state({
+        activePaymentStatus: false,
+        entitlementStatus: 'no_resources',
+        remainingTotalTokens: 0,
+        features: [],
+      }),
+      req,
+    )
+    expect(d?.reason).toBe('PAYMENT_FAILED')
+    expect(d?.detail).toContain('active_payment_status=false')
+  })
+
+  it('isPaymentBlocked reads only an explicit false (absent/true → not blocked)', () => {
+    expect(isPaymentBlocked(state({ activePaymentStatus: false }))).toBe(true)
+    expect(isPaymentBlocked(state({ activePaymentStatus: true }))).toBe(false)
+    expect(isPaymentBlocked(state())).toBe(false)
+  })
+
+  it('billingUserMessage/friendlyBillingMessage surface the payment-failed copy', () => {
+    const err = new BillingExecutionDeniedError(
+      state({ activePaymentStatus: false }),
+      req,
+    )
+    expect(err.reason).toBe('PAYMENT_FAILED')
+    expect(friendlyBillingMessage(err)).toBe(BILLING_USER_MESSAGES.PAYMENT_FAILED)
+    expect(friendlyBillingMessage(err)).toContain('Платёж не прошёл')
+  })
+
+  it('billingUserMessage accepts a bare reason and falls back to the default', () => {
+    // Агенты используют это для СВОИХ preflight-веток (порог токенов и т.п.), не собирая ошибку.
+    expect(billingUserMessage('NO_TOKENS')).toBe(BILLING_USER_MESSAGES.NO_TOKENS)
+    expect(billingUserMessage('WAT_UNKNOWN')).toBe(DEFAULT_BILLING_USER_MESSAGE)
+    expect(billingUserMessage(undefined)).toBe(DEFAULT_BILLING_USER_MESSAGE)
   })
 })

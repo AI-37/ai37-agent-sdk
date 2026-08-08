@@ -7,10 +7,19 @@ import type {
 
 /** Конкретная причина отказа `assertExecutionAllowed` — машиночитаемая, для логов и UI-маппинга. */
 export type BillingDenialReason =
+  | 'PAYMENT_FAILED'
   | 'ENTITLEMENT_INACTIVE'
   | 'NO_TOKENS'
   | 'MISSING_FEATURE'
   | 'MISSING_PRIVILEGE'
+
+/**
+ * Заблокирован ли доступ из-за оплаты. billing-сервис отдаёт `activePaymentStatus` уже булевым;
+ * SDK только читает флаг (блокирует лишь явный `false`, отсутствие = разрешено).
+ */
+export function isPaymentBlocked(state: BillingRuntimeState): boolean {
+  return state.activePaymentStatus === false
+}
 
 export function isPrivilegeAccessible(privilege: BillingRuntimePrivilege): boolean {
   if (privilege.valueType === 'boolean') {
@@ -67,6 +76,17 @@ export function explainDenial(
   state: BillingRuntimeState,
   requirement?: BillingExecutionRequirement,
 ): { reason: BillingDenialReason; detail: string } | null {
+  // Оплата проверяется ПЕРВОЙ: провал платежа — самая действенная для пользователя причина
+  // (нужно обновить способ оплаты), она важнее прочих отказов.
+  if (isPaymentBlocked(state)) {
+    return {
+      reason: 'PAYMENT_FAILED',
+      detail:
+        `active_payment_status=false ` +
+        `(plan=${state.currentPlanCode ?? '—'}, subscription_status=${state.currentSubscriptionStatus ?? '—'})`,
+    }
+  }
+
   if (state.entitlementStatus !== 'active') {
     return {
       reason: 'ENTITLEMENT_INACTIVE',

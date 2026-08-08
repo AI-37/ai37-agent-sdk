@@ -47,22 +47,44 @@ export class BillingExecutionDeniedError extends Error {
 }
 
 /**
+ * Единый источник текстов биллинг-ошибок для чата. Агенты НЕ конструируют строки сами — берут отсюда,
+ * а полную диагностику пишут в логи/трейс. Ключ — машиночитаемая причина отказа.
+ */
+export const BILLING_USER_MESSAGES: Record<BillingDenialReason, string> = {
+  PAYMENT_FAILED: 'Платёж не прошёл — обновите способ оплаты.',
+  NO_TOKENS: 'Достигнут лимит использования — обратитесь к владельцу.',
+  ENTITLEMENT_INACTIVE: 'Подписка неактивна — обратитесь к владельцу.',
+  MISSING_FEATURE: 'Этот ассистент недоступен для текущей подписки.',
+  MISSING_PRIVILEGE: 'Этот ассистент недоступен для текущей подписки.',
+}
+
+/** Общий fallback, когда причина неизвестна (не BillingExecutionDeniedError или своя ветка агента). */
+export const DEFAULT_BILLING_USER_MESSAGE =
+  'Доступ к ассистенту недоступен — проверьте подписку.'
+
+/**
+ * Дружелюбный текст по причине ИЛИ по ошибке. Агенты зовут его и для СВОИХ preflight-веток
+ * (напр. `billingUserMessage('NO_TOKENS')` для порога токенов), не собирая BillingExecutionDeniedError.
+ * `null`/неизвестная причина → {@link DEFAULT_BILLING_USER_MESSAGE}.
+ */
+export function billingUserMessage(
+  reasonOrErr: BillingDenialReason | unknown,
+): string {
+  const reason: BillingDenialReason | undefined =
+    typeof reasonOrErr === 'string'
+      ? (reasonOrErr as BillingDenialReason)
+      : reasonOrErr instanceof BillingExecutionDeniedError
+        ? reasonOrErr.reason
+        : undefined
+  return (
+    (reason && BILLING_USER_MESSAGES[reason]) || DEFAULT_BILLING_USER_MESSAGE
+  )
+}
+
+/**
  * Безопасный для конечного пользователя текст по причине отказа (не раскрывает биллинг-внутренности).
- * Агенты показывают его в чате, а полную диагностику пишут в логи/трейс. `err` — любое исключение;
- * причина берётся из BillingExecutionDeniedError.reason, иначе — общий fallback.
+ * Тонкая обёртка над {@link billingUserMessage} — оставлена ради обратной совместимости импортов.
  */
 export function friendlyBillingMessage(err: unknown): string {
-  const reason =
-    err instanceof BillingExecutionDeniedError ? err.reason : undefined
-  switch (reason) {
-    case 'NO_TOKENS':
-      return 'Достигнут лимит использования — обратитесь к владельцу.'
-    case 'ENTITLEMENT_INACTIVE':
-      return 'Подписка неактивна — обратитесь к владельцу.'
-    case 'MISSING_FEATURE':
-    case 'MISSING_PRIVILEGE':
-      return 'Этот ассистент недоступен для текущей подписки.'
-    default:
-      return 'Доступ к ассистенту недоступен — проверьте подписку.'
-  }
+  return billingUserMessage(err)
 }

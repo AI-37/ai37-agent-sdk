@@ -3,6 +3,19 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.14] - 2026-08-08
+
+### Added
+
+- `activePaymentStatus?: boolean` в `BillingRuntimeState` (+ contract schema): здоровье оплаты,
+  резолвится billing-сервисом. `false` → терминальный провал платежа → доступ блокируется.
+  Ортогонально `entitlementStatus`.
+- Причина отказа `PAYMENT_FAILED` (проверяется первой) в `BillingDenialReason`/`explainDenial`;
+  `assertExecutionAllowed` блокирует при `activePaymentStatus === false`. Хелпер `isPaymentBlocked`.
+- Единая карта текстов `BILLING_USER_MESSAGES` + `DEFAULT_BILLING_USER_MESSAGE` +
+  `billingUserMessage(reasonOrErr)` — единый источник дружелюбного текста для агентов
+  (в т.ч. для их preflight-веток). `friendlyBillingMessage` — тонкая обёртка над ним.
+
 ## [0.1.0-alpha.13] - 2026-08-01
 
 ### Removed
