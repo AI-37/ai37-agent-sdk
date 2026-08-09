@@ -14,7 +14,7 @@
 - Единая карта текстов `BILLING_USER_MESSAGES` + `DEFAULT_BILLING_USER_MESSAGE` +
   `billingUserMessage(reasonOrErr)` — единый источник дружелюбного текста для агентов
   (в т.ч. для их preflight-веток). `friendlyBillingMessage` — тонкая обёртка над ним.
-  Текст `PAYMENT_FAILED` → «Платёж не прошёл — обновите способ оплаты.»
+  Текст `PAYMENT_FAILED` → «Платёж не прошёл…».
 
 ## [0.1.0-alpha.13] - 2026-08-01
 
