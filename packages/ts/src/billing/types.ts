@@ -34,6 +34,12 @@ export interface BillingRuntimeState {
   meteredExternalSubscriptionId?: string | null
   currentPlanCode?: string | null
   currentSubscriptionStatus?: string | null
+  /**
+   * Статус доступа (резолвится billing-сервисом). `active` — всё ок; `no_resources` — кончились
+   * токены; `payment_failed` — терминально провалился платёж. Любое значение `!== 'active'` → отказ
+   * в `assertExecutionAllowed`; по конкретному значению выбирается текст ошибки
+   * (см. `explainDenial` / `BILLING_USER_MESSAGES`).
+   */
   entitlementStatus: string
   remainingTotalTokens: number
   features: BillingRuntimeFeature[]

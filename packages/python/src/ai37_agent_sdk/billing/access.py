@@ -11,6 +11,7 @@ from .types import (
 
 # Конкретная причина отказа assert_execution_allowed — машиночитаемая, для логов и UI-маппинга.
 BillingDenialReason = Literal[
+    "PAYMENT_FAILED",
     "ENTITLEMENT_INACTIVE",
     "NO_TOKENS",
     "MISSING_FEATURE",
@@ -69,6 +70,19 @@ def explain_denial(
 
     Различает отсутствие фичи vs непредоставленную привилегию. None — отказа нет (доступ разрешён).
     """
+    # Причина кодируется billing в entitlement_status. Провал платежа проверяется ПЕРВЫМ — это
+    # самая действенная для пользователя причина (нужно обновить способ оплаты).
+    if state.entitlement_status == "payment_failed":
+        return (
+            "PAYMENT_FAILED",
+            f"entitlement_status=payment_failed "
+            f"(plan={state.current_plan_code or '—'}, "
+            f"subscription_status={state.current_subscription_status or '—'})",
+        )
+
+    if state.entitlement_status == "no_resources" or state.remaining_total_tokens <= 0:
+        return ("NO_TOKENS", f"remaining_total_tokens={state.remaining_total_tokens}")
+
     if state.entitlement_status != "active":
         return (
             "ENTITLEMENT_INACTIVE",
@@ -76,9 +90,6 @@ def explain_denial(
             f"(plan={state.current_plan_code or '—'}, "
             f"subscription_status={state.current_subscription_status or '—'})",
         )
-
-    if state.remaining_total_tokens <= 0:
-        return ("NO_TOKENS", f"remaining_total_tokens={state.remaining_total_tokens}")
 
     # entitlement активен и токены есть → отказ может быть только по требуемому доступу.
     if (

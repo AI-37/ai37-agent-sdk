@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a6] - 2026-08-09
+
+### Added
+
+- Причина отказа `PAYMENT_FAILED` в `BillingDenialReason`. `explain_denial` маппит значение
+  `entitlement_status` в причину: `payment_failed` → `PAYMENT_FAILED`, `no_resources` → `NO_TOKENS`,
+  иное `!= 'active'` → `ENTITLEMENT_INACTIVE`. Гейт `assert_execution_allowed` НЕ менялся
+  (`entitlement_status != 'active'` уже блокирует провал платежа) — billing кодирует причину в статусе.
+- Единая карта текстов `BILLING_USER_MESSAGES` + `DEFAULT_BILLING_USER_MESSAGE` +
+  `billing_user_message(reason_or_err)` — единый источник дружелюбного текста для агентов.
+  `friendly_billing_message` — тонкая обёртка над ним. Текст `PAYMENT_FAILED` → «Платёж не прошёл…».
+
 ## [0.1.0a5] - 2026-08-01
 
 ### Removed

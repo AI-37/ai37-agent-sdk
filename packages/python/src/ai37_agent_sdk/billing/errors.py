@@ -39,16 +39,47 @@ class BillingExecutionDeniedError(Exception):
         self.reason: BillingDenialReason = reason
 
 
+# Единый источник текстов биллинг-ошибок для чата. Агенты НЕ конструируют строки сами — берут
+# отсюда, а полную диагностику пишут в логи/трейс. Ключ — машиночитаемая причина отказа.
+BILLING_USER_MESSAGES: dict[BillingDenialReason, str] = {
+    "PAYMENT_FAILED": "Платёж не прошёл — обновите способ оплаты или привяжите другую карту.",
+    "NO_TOKENS": (
+        "Достигнут лимит использования — выберите другой план, "
+        "либо увеличьте лимиты на странице оплаты."
+    ),
+    "ENTITLEMENT_INACTIVE": (
+        "Подписка неактивна — (пере)привяжите карту или обновите план на странице оплаты."
+    ),
+    "MISSING_FEATURE": "Этот ассистент недоступен для текущей подписки.",
+    "MISSING_PRIVILEGE": "Эта функция ассистента недоступна для текущей подписки.",
+}
+
+# Общий fallback, когда причина неизвестна (не BillingExecutionDeniedError или своя ветка агента).
+DEFAULT_BILLING_USER_MESSAGE = "Доступ к ассистенту недоступен — проверьте подписку."
+
+
+def billing_user_message(reason_or_err: object) -> str:
+    """Дружелюбный текст по причине ИЛИ по ошибке.
+
+    Агенты зовут его и для СВОИХ preflight-веток (напр. billing_user_message("NO_TOKENS") для
+    порога токенов), не собирая BillingExecutionDeniedError. None/неизвестная причина →
+    DEFAULT_BILLING_USER_MESSAGE.
+    """
+    if isinstance(reason_or_err, str):
+        reason: str | None = reason_or_err
+    elif isinstance(reason_or_err, BillingExecutionDeniedError):
+        reason = reason_or_err.reason
+    else:
+        reason = None
+    for key, text in BILLING_USER_MESSAGES.items():
+        if key == reason:
+            return text
+    return DEFAULT_BILLING_USER_MESSAGE
+
+
 def friendly_billing_message(err: object) -> str:
     """Безопасный для конечного пользователя текст по причине отказа (без биллинг-внутренностей).
 
-    Агенты показывают его в чате, а полную диагностику пишут в логи/трейс.
+    Тонкая обёртка над billing_user_message — оставлена ради обратной совместимости импортов.
     """
-    reason = err.reason if isinstance(err, BillingExecutionDeniedError) else None
-    if reason == "NO_TOKENS":
-        return "Достигнут лимит использования — обратитесь к владельцу."
-    if reason == "ENTITLEMENT_INACTIVE":
-        return "Подписка неактивна — обратитесь к владельцу."
-    if reason in ("MISSING_FEATURE", "MISSING_PRIVILEGE"):
-        return "Этот ассистент недоступен для текущей подписки."
-    return "Доступ к ассистенту недоступен — проверьте подписку."
+    return billing_user_message(err)

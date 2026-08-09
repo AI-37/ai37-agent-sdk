@@ -7,6 +7,7 @@ import type {
 
 /** Конкретная причина отказа `assertExecutionAllowed` — машиночитаемая, для логов и UI-маппинга. */
 export type BillingDenialReason =
+  | 'PAYMENT_FAILED'
   | 'ENTITLEMENT_INACTIVE'
   | 'NO_TOKENS'
   | 'MISSING_FEATURE'
@@ -67,19 +68,30 @@ export function explainDenial(
   state: BillingRuntimeState,
   requirement?: BillingExecutionRequirement,
 ): { reason: BillingDenialReason; detail: string } | null {
+  // Причина кодируется billing в `entitlement_status`. Провал платежа проверяется ПЕРВЫМ — это
+  // самая действенная для пользователя причина (нужно обновить способ оплаты).
+  if (state.entitlementStatus === 'payment_failed') {
+    return {
+      reason: 'PAYMENT_FAILED',
+      detail:
+        `entitlement_status=payment_failed ` +
+        `(plan=${state.currentPlanCode ?? '—'}, subscription_status=${state.currentSubscriptionStatus ?? '—'})`,
+    }
+  }
+
+  if (state.entitlementStatus === 'no_resources' || state.remainingTotalTokens <= 0) {
+    return {
+      reason: 'NO_TOKENS',
+      detail: `remaining_total_tokens=${state.remainingTotalTokens}`,
+    }
+  }
+
   if (state.entitlementStatus !== 'active') {
     return {
       reason: 'ENTITLEMENT_INACTIVE',
       detail:
         `entitlement_status=${state.entitlementStatus} ` +
         `(plan=${state.currentPlanCode ?? '—'}, subscription_status=${state.currentSubscriptionStatus ?? '—'})`,
-    }
-  }
-
-  if (state.remainingTotalTokens <= 0) {
-    return {
-      reason: 'NO_TOKENS',
-      detail: `remaining_total_tokens=${state.remainingTotalTokens}`,
     }
   }
 

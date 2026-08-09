@@ -6,9 +6,12 @@ export {
 export { explainDenial } from './access'
 export type { BillingDenialReason } from './access'
 export {
+  BILLING_USER_MESSAGES,
   BillingConfigurationError,
   BillingExecutionDeniedError,
   BillingRequestError,
+  billingUserMessage,
+  DEFAULT_BILLING_USER_MESSAGE,
   friendlyBillingMessage,
 } from './errors'
 export { normalizeBillingBaseUrl } from './http'

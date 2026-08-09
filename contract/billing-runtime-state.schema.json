@@ -13,7 +13,10 @@
     "meteredExternalSubscriptionId": { "type": ["string", "null"] },
     "currentPlanCode": { "type": ["string", "null"] },
     "currentSubscriptionStatus": { "type": ["string", "null"] },
-    "entitlementStatus": { "type": "string", "description": "active | no_resources | ..." },
+    "entitlementStatus": {
+      "type": "string",
+      "description": "active | no_resources | payment_failed | ... Любое значение != active → отказ; no_resources = кончились токены, payment_failed = терминальный провал платежа. Конкретное значение выбирает текст ошибки."
+    },
     "remainingTotalTokens": { "type": "number" },
     "features": {
       "type": "array",

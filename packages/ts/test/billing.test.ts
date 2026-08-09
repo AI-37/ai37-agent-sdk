@@ -2,10 +2,13 @@ import { describe, expect, it, vi } from 'vitest'
 import {
   BillingFeatureCode,
   BillingPrivilegeCode,
+  BILLING_USER_MESSAGES,
   BillingConfigurationError,
   BillingExecutionDeniedError,
   BillingRequestError,
+  billingUserMessage,
   createBillingAppsClient,
+  DEFAULT_BILLING_USER_MESSAGE,
   explainDenial,
   friendlyBillingMessage,
   normalizeBillingBaseUrl,
@@ -253,6 +256,31 @@ describe('createBillingAppsClient', () => {
     await expect(client.assertExecutionAllowed('org-1')).rejects.toBeInstanceOf(
       BillingExecutionDeniedError,
     )
+  })
+
+  it('denies execution when entitlement_status is payment_failed', async () => {
+    // Токены есть и фича есть — блокирует именно статус оплаты (payment_failed !== active).
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(
+        JSON.stringify(buildRuntimeState({ entitlementStatus: 'payment_failed' })),
+        { status: 200 },
+      ),
+    )
+    const client = createBillingAppsClient({
+      baseUrl: 'https://billing.example.com',
+      authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
+      fetch: fetchMock as typeof fetch,
+    })
+
+    await expect(
+      client.assertExecutionAllowed('org-1', {
+        feature: BillingFeatureCode.ElevatorCalcAgent,
+      }),
+    ).rejects.toMatchObject({
+      name: 'BillingExecutionDeniedError',
+      reason: 'PAYMENT_FAILED',
+    })
   })
 
   it('allows execution when the required feature is present', async () => {
@@ -588,5 +616,37 @@ describe('explainDenial / BillingExecutionDeniedError / friendlyBillingMessage',
     expect(msg.length).toBeGreaterThan(0)
     // Unknown errors fall back to the generic subscription message.
     expect(friendlyBillingMessage(new Error('boom'))).toContain('подписку')
+  })
+
+  it('names PAYMENT_FAILED for entitlement_status=payment_failed (even with tokens present)', () => {
+    const d = explainDenial(
+      state({ entitlementStatus: 'payment_failed', remainingTotalTokens: 100 }),
+      req,
+    )
+    expect(d?.reason).toBe('PAYMENT_FAILED')
+    expect(d?.detail).toContain('entitlement_status=payment_failed')
+  })
+
+  it('names NO_TOKENS for entitlement_status=no_resources', () => {
+    expect(
+      explainDenial(state({ entitlementStatus: 'no_resources' }), req)?.reason,
+    ).toBe('NO_TOKENS')
+  })
+
+  it('billingUserMessage/friendlyBillingMessage surface the payment-failed copy', () => {
+    const err = new BillingExecutionDeniedError(
+      state({ entitlementStatus: 'payment_failed' }),
+      req,
+    )
+    expect(err.reason).toBe('PAYMENT_FAILED')
+    expect(friendlyBillingMessage(err)).toBe(BILLING_USER_MESSAGES.PAYMENT_FAILED)
+    expect(friendlyBillingMessage(err)).toContain('Платёж не прошёл')
+  })
+
+  it('billingUserMessage accepts a bare reason and falls back to the default', () => {
+    // Агенты используют это для СВОИХ preflight-веток (порог токенов и т.п.), не собирая ошибку.
+    expect(billingUserMessage('NO_TOKENS')).toBe(BILLING_USER_MESSAGES.NO_TOKENS)
+    expect(billingUserMessage('WAT_UNKNOWN')).toBe(DEFAULT_BILLING_USER_MESSAGE)
+    expect(billingUserMessage(undefined)).toBe(DEFAULT_BILLING_USER_MESSAGE)
   })
 })
