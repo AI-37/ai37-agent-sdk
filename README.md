@@ -4,7 +4,7 @@
 # ai37-agent-sdk
 
 ## Описание
-SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
+SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
 
 ## Стек
 - TypeScript (Node ≥ 22), npm, tsup (пакет `@ai37/agent-sdk`).
@@ -15,7 +15,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 ## Схема работы
 Агент получает A2A-запрос с Bearer user-JWT; `AgentContext` (SDK):
 1. `auth.verify` — проверка подписи/iss/aud/exp по JWKS (кэш ключей);
-2. `billing` preflight (`assertExecutionAllowed`) — entitlement, остаток токенов, `llmKey`;
+2. billing preflight (`assertExecutionAllowed`) — entitlement (любое значение `!= 'active'` → отказ; `payment_failed` → `PAYMENT_FAILED` проверяется первым, `no_resources` → `NO_TOKENS`), остаток токенов, `llmKey`. Пользовательский текст отказа берётся из единой карты `BILLING_USER_MESSAGES` / `billing_user_message`;
 3. LLM-вызов с `apiKey = llmKey`;
 4. доменная работа;
 5. `reportUsage` после успеха.
@@ -31,14 +31,20 @@ flowchart LR
   AG -->|a2a.forward user-JWT| S[суб-агент]
 ```
 
+## Структура каталогов
+- `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), коды фич/привилегий, `env.md`.
+- `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`).
+- `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`).
+- `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability).
+
 ## Публичные интерфейсы
-- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`; Python-пакет без CLI (follow-up).
+- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). Python-пакет без CLI (follow-up).
 - **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
 - **Host-слой `@ai37/agent-host`:** A2A, AG-UI, MCP, task-релей, store-backend’ы, observability.
 
 ## Зависимости в экосистеме
 ### Зависит от
-- billing-сервиса (`BILLING_BASE_URL`): preflight, runtime state, usage.
+- billing-сервиса (`BILLING_BASE_URL`): preflight, runtime state, usage; billing кодирует причину отказа в `entitlementStatus` (`active` / `no_resources` / `payment_failed`).
 - JWKS/OIDC issuer (`JWKS_URL`, `ISSUER`, `AUDIENCE`).
 - LLM-шлюза (через `llmKey` из runtime state).
 - Суб-агентов по A2A (forward user-JWT).
@@ -57,6 +63,9 @@ flowchart LR
 
 ## Данные и хранилища
 — У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context).
+
+## Быстрый старт (локально)
+— (в предоставленных материалах нет отдельных команд установки/локального запуска; SDK потребляется как зависимость, а разработка/проверка выполняется через корневые Makefile-таргеты — см. ниже).
 
 ## Как запускать тесты
 ```bash
