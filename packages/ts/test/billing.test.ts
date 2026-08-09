@@ -11,7 +11,6 @@ import {
   DEFAULT_BILLING_USER_MESSAGE,
   explainDenial,
   friendlyBillingMessage,
-  isPaymentBlocked,
   normalizeBillingBaseUrl,
 } from '../src'
 import type { BillingRuntimeState } from '../src'
@@ -259,11 +258,11 @@ describe('createBillingAppsClient', () => {
     )
   })
 
-  it('denies execution when payment is blocked (activePaymentStatus=false)', async () => {
-    // Всё остальное в порядке (active, есть токены и фича) — блокирует именно оплата.
+  it('denies execution when entitlement_status is payment_failed', async () => {
+    // Токены есть и фича есть — блокирует именно статус оплаты (payment_failed !== active).
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
-        JSON.stringify(buildRuntimeState({ activePaymentStatus: false })),
+        JSON.stringify(buildRuntimeState({ entitlementStatus: 'payment_failed' })),
         { status: 200 },
       ),
     )
@@ -281,25 +280,6 @@ describe('createBillingAppsClient', () => {
     ).rejects.toMatchObject({
       name: 'BillingExecutionDeniedError',
       reason: 'PAYMENT_FAILED',
-    })
-  })
-
-  it('allows execution when payment status is healthy or absent', async () => {
-    const fetchMock = vi.fn().mockResolvedValue(
-      new Response(
-        JSON.stringify(buildRuntimeState({ activePaymentStatus: true })),
-        { status: 200 },
-      ),
-    )
-    const client = createBillingAppsClient({
-      baseUrl: 'https://billing.example.com',
-      authToken: 'apps-token',
-      usageIngestToken: 'apps-token',
-      fetch: fetchMock as typeof fetch,
-    })
-
-    await expect(client.assertExecutionAllowed('org-1')).resolves.toMatchObject({
-      billingOrgId: 'org-1',
     })
   })
 
@@ -638,30 +618,24 @@ describe('explainDenial / BillingExecutionDeniedError / friendlyBillingMessage',
     expect(friendlyBillingMessage(new Error('boom'))).toContain('подписку')
   })
 
-  it('names PAYMENT_FAILED first — before entitlement/token/access reasons', () => {
-    // Оплата провалена И entitlement неактивен И токенов нет: побеждает оплата (самое действенное).
+  it('names PAYMENT_FAILED for entitlement_status=payment_failed (even with tokens present)', () => {
     const d = explainDenial(
-      state({
-        activePaymentStatus: false,
-        entitlementStatus: 'no_resources',
-        remainingTotalTokens: 0,
-        features: [],
-      }),
+      state({ entitlementStatus: 'payment_failed', remainingTotalTokens: 100 }),
       req,
     )
     expect(d?.reason).toBe('PAYMENT_FAILED')
-    expect(d?.detail).toContain('active_payment_status=false')
+    expect(d?.detail).toContain('entitlement_status=payment_failed')
   })
 
-  it('isPaymentBlocked reads only an explicit false (absent/true → not blocked)', () => {
-    expect(isPaymentBlocked(state({ activePaymentStatus: false }))).toBe(true)
-    expect(isPaymentBlocked(state({ activePaymentStatus: true }))).toBe(false)
-    expect(isPaymentBlocked(state())).toBe(false)
+  it('names NO_TOKENS for entitlement_status=no_resources', () => {
+    expect(
+      explainDenial(state({ entitlementStatus: 'no_resources' }), req)?.reason,
+    ).toBe('NO_TOKENS')
   })
 
   it('billingUserMessage/friendlyBillingMessage surface the payment-failed copy', () => {
     const err = new BillingExecutionDeniedError(
-      state({ activePaymentStatus: false }),
+      state({ entitlementStatus: 'payment_failed' }),
       req,
     )
     expect(err.reason).toBe('PAYMENT_FAILED')

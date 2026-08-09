@@ -34,14 +34,13 @@ export interface BillingRuntimeState {
   meteredExternalSubscriptionId?: string | null
   currentPlanCode?: string | null
   currentSubscriptionStatus?: string | null
-  entitlementStatus: string
   /**
-   * Здоровье оплаты — резолвится billing-сервисом (уже булев, не строка/`null`).
-   * `false` → последний платёж терминально провалился, доступ блокируется. Отсутствие поля
-   * (старый billing) трактуется как разрешено. Ортогонально `entitlementStatus`
-   * (тот — про доступные функции подписки, не про оплату).
+   * Статус доступа (резолвится billing-сервисом). `active` — всё ок; `no_resources` — кончились
+   * токены; `payment_failed` — терминально провалился платёж. Любое значение `!== 'active'` → отказ
+   * в `assertExecutionAllowed`; по конкретному значению выбирается текст ошибки
+   * (см. `explainDenial` / `BILLING_USER_MESSAGES`).
    */
-  activePaymentStatus?: boolean
+  entitlementStatus: string
   remainingTotalTokens: number
   features: BillingRuntimeFeature[]
   /** Виртуальный ключ LLM-шлюза (v1.2+). Секрет — не логировать. */

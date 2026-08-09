@@ -2,7 +2,6 @@ from .access import (
     BillingDenialReason,
     explain_denial,
     has_required_access,
-    is_payment_blocked,
 )
 from .client import (
     HttpBillingClient,
@@ -31,7 +30,6 @@ __all__ = [
     "HttpBillingClient",
     "create_billing_client",
     "has_required_access",
-    "is_payment_blocked",
     "explain_denial",
     "BillingDenialReason",
     "BillingConfigurationError",

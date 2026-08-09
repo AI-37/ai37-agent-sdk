@@ -3,7 +3,7 @@ export {
   createBillingAppsClient,
   hasRequiredAccess,
 } from './client'
-export { explainDenial, isPaymentBlocked } from './access'
+export { explainDenial } from './access'
 export type { BillingDenialReason } from './access'
 export {
   BILLING_USER_MESSAGES,

@@ -42,7 +42,6 @@ from .billing import (
     explain_denial,
     friendly_billing_message,
     has_required_access,
-    is_payment_blocked,
     normalize_billing_base_url,
 )
 from .codes import BillingFeatureCode, BillingPrivilegeCode
@@ -87,7 +86,6 @@ __all__ = [
     "BILLING_USER_MESSAGES",
     "DEFAULT_BILLING_USER_MESSAGE",
     "has_required_access",
-    "is_payment_blocked",
     "normalize_billing_base_url",
     # a2a
     "A2A_PROTOCOL_VERSION",

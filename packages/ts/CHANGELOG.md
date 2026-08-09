@@ -3,18 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
-## [0.1.0-alpha.14] - 2026-08-08
+## [0.1.0-alpha.14] - 2026-08-09
 
 ### Added
 
-- `activePaymentStatus?: boolean` в `BillingRuntimeState` (+ contract schema): здоровье оплаты,
-  резолвится billing-сервисом. `false` → терминальный провал платежа → доступ блокируется.
-  Ортогонально `entitlementStatus`.
-- Причина отказа `PAYMENT_FAILED` (проверяется первой) в `BillingDenialReason`/`explainDenial`;
-  `assertExecutionAllowed` блокирует при `activePaymentStatus === false`. Хелпер `isPaymentBlocked`.
+- Причина отказа `PAYMENT_FAILED` в `BillingDenialReason`. `explainDenial` теперь маппит значение
+  `entitlementStatus` в причину: `payment_failed` → `PAYMENT_FAILED`, `no_resources` → `NO_TOKENS`,
+  иное `!== 'active'` → `ENTITLEMENT_INACTIVE`. Гейт `assertExecutionAllowed` НЕ менялся
+  (`entitlementStatus !== 'active'` уже блокирует провал платежа) — billing кодирует причину в статусе.
 - Единая карта текстов `BILLING_USER_MESSAGES` + `DEFAULT_BILLING_USER_MESSAGE` +
   `billingUserMessage(reasonOrErr)` — единый источник дружелюбного текста для агентов
   (в т.ч. для их preflight-веток). `friendlyBillingMessage` — тонкая обёртка над ним.
+  Текст `PAYMENT_FAILED` → «Платёж не прошёл — обновите способ оплаты.»
 
 ## [0.1.0-alpha.13] - 2026-08-01
 

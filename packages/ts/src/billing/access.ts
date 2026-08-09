@@ -13,14 +13,6 @@ export type BillingDenialReason =
   | 'MISSING_FEATURE'
   | 'MISSING_PRIVILEGE'
 
-/**
- * Заблокирован ли доступ из-за оплаты. billing-сервис отдаёт `activePaymentStatus` уже булевым;
- * SDK только читает флаг (блокирует лишь явный `false`, отсутствие = разрешено).
- */
-export function isPaymentBlocked(state: BillingRuntimeState): boolean {
-  return state.activePaymentStatus === false
-}
-
 export function isPrivilegeAccessible(privilege: BillingRuntimePrivilege): boolean {
   if (privilege.valueType === 'boolean') {
     return privilege.value === true
@@ -76,14 +68,21 @@ export function explainDenial(
   state: BillingRuntimeState,
   requirement?: BillingExecutionRequirement,
 ): { reason: BillingDenialReason; detail: string } | null {
-  // Оплата проверяется ПЕРВОЙ: провал платежа — самая действенная для пользователя причина
-  // (нужно обновить способ оплаты), она важнее прочих отказов.
-  if (isPaymentBlocked(state)) {
+  // Причина кодируется billing в `entitlement_status`. Провал платежа проверяется ПЕРВЫМ — это
+  // самая действенная для пользователя причина (нужно обновить способ оплаты).
+  if (state.entitlementStatus === 'payment_failed') {
     return {
       reason: 'PAYMENT_FAILED',
       detail:
-        `active_payment_status=false ` +
+        `entitlement_status=payment_failed ` +
         `(plan=${state.currentPlanCode ?? '—'}, subscription_status=${state.currentSubscriptionStatus ?? '—'})`,
+    }
+  }
+
+  if (state.entitlementStatus === 'no_resources' || state.remainingTotalTokens <= 0) {
+    return {
+      reason: 'NO_TOKENS',
+      detail: `remaining_total_tokens=${state.remainingTotalTokens}`,
     }
   }
 
@@ -93,13 +92,6 @@ export function explainDenial(
       detail:
         `entitlement_status=${state.entitlementStatus} ` +
         `(plan=${state.currentPlanCode ?? '—'}, subscription_status=${state.currentSubscriptionStatus ?? '—'})`,
-    }
-  }
-
-  if (state.remainingTotalTokens <= 0) {
-    return {
-      reason: 'NO_TOKENS',
-      detail: `remaining_total_tokens=${state.remainingTotalTokens}`,
     }
   }
 

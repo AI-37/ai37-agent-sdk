@@ -19,12 +19,6 @@ BillingDenialReason = Literal[
 ]
 
 
-def is_payment_blocked(state: BillingRuntimeState) -> bool:
-    """Заблокирован ли доступ из-за оплаты. billing отдаёт active_payment_status уже булевым;
-    SDK лишь читает флаг (блокирует только явный False, None/True = разрешено)."""
-    return state.active_payment_status is False
-
-
 def _code_str(value: object) -> str:
     """Строковый код: .value у str-enum, иначе str (feature/privilege бывают и plain str)."""
     return value.value if isinstance(value, Enum) else str(value)
@@ -76,15 +70,18 @@ def explain_denial(
 
     Различает отсутствие фичи vs непредоставленную привилегию. None — отказа нет (доступ разрешён).
     """
-    # Оплата проверяется ПЕРВОЙ: провал платежа — самая действенная для пользователя причина
-    # (нужно обновить способ оплаты), она важнее прочих отказов.
-    if is_payment_blocked(state):
+    # Причина кодируется billing в entitlement_status. Провал платежа проверяется ПЕРВЫМ — это
+    # самая действенная для пользователя причина (нужно обновить способ оплаты).
+    if state.entitlement_status == "payment_failed":
         return (
             "PAYMENT_FAILED",
-            f"active_payment_status=false "
+            f"entitlement_status=payment_failed "
             f"(plan={state.current_plan_code or '—'}, "
             f"subscription_status={state.current_subscription_status or '—'})",
         )
+
+    if state.entitlement_status == "no_resources" or state.remaining_total_tokens <= 0:
+        return ("NO_TOKENS", f"remaining_total_tokens={state.remaining_total_tokens}")
 
     if state.entitlement_status != "active":
         return (
@@ -93,9 +90,6 @@ def explain_denial(
             f"(plan={state.current_plan_code or '—'}, "
             f"subscription_status={state.current_subscription_status or '—'})",
         )
-
-    if state.remaining_total_tokens <= 0:
-        return ("NO_TOKENS", f"remaining_total_tokens={state.remaining_total_tokens}")
 
     # entitlement активен и токены есть → отказ может быть только по требуемому доступу.
     if (

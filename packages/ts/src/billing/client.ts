@@ -1,7 +1,7 @@
 // billing-клиент: runtime state + metered usage.
 // runtime state несёт llmKey (см. types.ts / contract).
 import { LRUCache } from 'lru-cache'
-import { hasRequiredAccess, isPaymentBlocked } from './access'
+import { hasRequiredAccess } from './access'
 import { BillingExecutionDeniedError } from './errors'
 import {
   ensureOk,
@@ -87,7 +87,6 @@ export function createBillingClient(
   ): Promise<BillingRuntimeState> {
     const state = await getRuntimeStateByBillingOrgId(billingOrgId)
     if (
-      isPaymentBlocked(state) ||
       state.entitlementStatus !== 'active' ||
       state.remainingTotalTokens <= 0 ||
       !hasRequiredAccess(state, requirement)
