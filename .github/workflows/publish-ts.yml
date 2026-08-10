@@ -7,6 +7,11 @@ name: publish · @ai37/agent-sdk (npm)
 # Аутентификация = HTTP Basic через .npmrc в корне репо (коммитится): //npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}.
 # У Verdaccio max_users:-1 → npm login/токены не работают, только _auth (base64 user:pass).
 #
+# ВАЖНО: publish выполняется в working-directory packages/ts (там есть package.json+package-lock.json),
+# поэтому npm берёт project-.npmrc из localPrefix=packages/ts и КОРНЕВОЙ .npmrc НЕ читает → ENEEDAUTH.
+# Лечим через NPM_CONFIG_USERCONFIG=<корень>/.npmrc: грузим корневой .npmrc как user-config
+# независимо от cwd (единственный источник правды не дублируем в подпакеты).
+#
 # Требуемый секрет репозитория:
 #   AI37_NPM_TOKEN — base64("ci-publish:<пароль>") для _auth издателя (право publish на scope @ai37).
 #
@@ -62,8 +67,10 @@ jobs:
         run: npm publish --dry-run
         env:
           AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
       - name: publish
         if: ${{ !inputs.dry_run }}
         run: npm publish --tag alpha
         env:
           AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
