@@ -47,6 +47,13 @@ jobs:
     name: npm publish · @ai37/agent-host
     runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 20
+    # agent-host тянет @ai37/a2ui-catalog-schemas и @ai37/agent-sdk из Verdaccio, поэтому
+    # приватный .npmrc нужен ВСЕМ шагам (в т.ч. npm ci), а не только publish → задаём env на
+    # уровне job: NPM_CONFIG_USERCONFIG грузит корневой .npmrc (см. шапку), AI37_NPM_TOKEN
+    # подставляется в его _auth.
+    env:
+      AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -68,13 +75,7 @@ jobs:
         if: ${{ inputs.dry_run }}
         working-directory: packages/ts-host
         run: npm publish --tag alpha --dry-run
-        env:
-          AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
       - name: publish
         if: ${{ !inputs.dry_run }}
         working-directory: packages/ts-host
         run: npm publish --tag alpha
-        env:
-          AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
-          NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
