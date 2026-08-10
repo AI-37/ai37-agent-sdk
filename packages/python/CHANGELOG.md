@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a7] - 2026-08-10
+
+### Added
+
+- Интент `document_generation` в `AI37_ROUTING_INTENTS` и routing/v1 schema (парити с TS
+  `0.1.0-alpha.15`). Изменение аддитивное: существующие профили карточек остаются валидными.
+
 ## [0.1.0a6] - 2026-08-09
 
 ### Added

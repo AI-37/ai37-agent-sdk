@@ -27,7 +27,8 @@
           "engineering_calculation",
           "parameter_selection",
           "counterparty_verification",
-          "file_processing"
+          "file_processing",
+          "document_generation"
         ]
       }
     },
