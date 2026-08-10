@@ -55,11 +55,11 @@ jobs:
           # единый источник версии рантайма — packages/python-host/.python-version (как локально через pyenv)
           python-version-file: packages/python-host/.python-version
       - name: install poetry
-        run: pipx install poetry
-      # ai37-agent-sdk теперь в приватном индексе → добавляем его как supplemental-источник
-      # (публичный PyPI остаётся основным, ищется первым; приватный — только если не нашлось).
-      - name: add private index as supplemental source
-        run: poetry source add --priority=supplemental ai37 https://pypi.app.sp-ai.ru/simple/
+        # версия закреплена = генератор poetry.lock (иначе install может потребовать re-lock)
+        run: pipx install poetry==2.3.2
+      # Приватный индекс ai37 объявлен в pyproject.toml ([[tool.poetry.source]]) и учтён в poetry.lock.
+      # НЕ добавляем его в рантайме (`poetry source add` менял content-hash → lock рассинхронизировался).
+      # Креды к приватному индексу — на install ниже (POETRY_HTTP_BASIC_AI37_*).
       - name: install deps
         env:
           POETRY_HTTP_BASIC_AI37_USERNAME: ci-read
