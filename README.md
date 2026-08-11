@@ -9,7 +9,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 ## Стек
 - TypeScript (Node ≥ 22), npm, tsup (пакет `@ai37/agent-sdk`).
 - Python (≥ 3.11), poetry, ruff, mypy, pytest (пакет `ai37-agent-sdk`).
-- Общий контракт в `contract/` (JSON Schema, `feature-codes.json`, `env.md`), кодоген `make codegen`.
+- Общий контракт в `contract/` (JSON Schema — runtime state и routing/v1, `feature-codes.json`, `env.md`), кодоген `make codegen`.
 - Host-слой: `packages/ts-host` и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse).
 
 ## Схема работы
@@ -20,7 +20,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 4. доменная работа;
 5. `reportUsage` после успеха.
 
-При вызове суб-агента модуль `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`). Для тестов без сети есть подпакет `testing` (фейки, фикстуры, in-memory billing, тест-токены).
+При вызове суб-агента модуль `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`). В этом же модуле живёт routing/v1 — компактный семантический профиль (`domains`/`intents`/`excludes`), встраиваемый в `capabilities.extensions` Agent Card для реестра агентов; канонический набор intents включает `document_generation` (генерация документов по исходным данным пользователя). Для тестов без сети есть подпакет `testing` (фейки, фикстуры, in-memory billing, тест-токены).
 
 ```mermaid
 flowchart LR
@@ -32,13 +32,13 @@ flowchart LR
 ```
 
 ## Структура каталогов
-- `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), коды фич/привилегий, `env.md`.
+- `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), routing/v1 (`a2a-routing-extension.schema.json`, в т.ч. интент `document_generation`), коды фич/привилегий, `env.md`.
 - `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`).
 - `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`).
 - `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability).
 
 ## Публичные интерфейсы
-- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). Python-пакет без CLI (follow-up).
+- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). В `a2a` — routing/v1: `AI37_ROUTING_EXTENSION_URI`, `AI37_ROUTING_INTENTS`, `buildAgentRoutingExtension`/`build_agent_routing_extension`, `parseAgentRoutingExtension`/`parse_agent_routing_extension`, `normalizeAgentRoutingProfile`/`normalize_agent_routing_profile` (парити TS и Python). Python-пакет без CLI (follow-up).
 - **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
 - **Host-слой `@ai37/agent-host`:** A2A, AG-UI, MCP, task-релей, store-backend’ы, observability.
 
@@ -53,6 +53,7 @@ flowchart LR
 ### От него зависят
 - Агенты AI37, использующие SDK/`AgentContext`.
 - Host-пакеты `@ai37/agent-host` (ts-host/python-host) поверх SDK.
+- Первый потребитель интента `document_generation` — `pdai-doc-gen-agent` (генерация документов 152-ФЗ/187-ФЗ).
 
 ## Конфигурация
 Ключевые параметры (передаются в настройки SDK; см. `contract/env.md`):
