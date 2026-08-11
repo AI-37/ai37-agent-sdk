@@ -51,6 +51,18 @@ def test_profile_is_bounded_and_prompt_safe():
     assert profile["domains"] == ["/agents Лифты"]
 
 
+def test_accepts_document_generation_as_routing_intent():
+    extension = build_agent_routing_extension(
+        {
+            "domains": ["персональные данные"],
+            "intents": ["document_generation"],
+            "excludes": ["не выполняет нормативный поиск"],
+        }
+    )
+    assert extension["params"]["intents"] == ["document_generation"]
+    assert parse_agent_routing_extension([extension]) == extension["params"]
+
+
 def test_rejects_workflow_continue_as_unsupported_intent():
     with pytest.raises(TypeError, match="unsupported routing intent: workflow_continue"):
         normalize_agent_routing_profile(

@@ -31,6 +31,17 @@ describe('AI37 A2A routing extension', () => {
     ).toBeUndefined()
   })
 
+  it('accepts document_generation as a routing intent', () => {
+    const extension = buildAgentRoutingExtension({
+      domains: ['персональные данные'],
+      intents: ['document_generation'],
+      excludes: ['не выполняет нормативный поиск'],
+    })
+
+    expect(extension.params.intents).toEqual(['document_generation'])
+    expect(parseAgentRoutingExtension([extension])).toEqual(extension.params)
+  })
+
   it('rejects workflow_continue as an unsupported intent', () => {
     expect(() =>
       normalizeAgentRoutingProfile({

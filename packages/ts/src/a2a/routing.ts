@@ -18,6 +18,7 @@ export const AI37_ROUTING_INTENTS = [
   'parameter_selection',
   'counterparty_verification',
   'file_processing',
+  'document_generation',
 ] as const
 
 export type AgentRoutingIntent = (typeof AI37_ROUTING_INTENTS)[number]

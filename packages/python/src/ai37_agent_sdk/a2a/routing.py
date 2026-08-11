@@ -16,6 +16,7 @@ AgentRoutingIntent = Literal[
     "parameter_selection",
     "counterparty_verification",
     "file_processing",
+    "document_generation",
 ]
 
 AI37_ROUTING_INTENTS: frozenset[str] = frozenset(
@@ -28,6 +29,7 @@ AI37_ROUTING_INTENTS: frozenset[str] = frozenset(
         "parameter_selection",
         "counterparty_verification",
         "file_processing",
+        "document_generation",
     }
 )
 
