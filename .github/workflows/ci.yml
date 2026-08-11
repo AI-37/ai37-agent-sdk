@@ -46,6 +46,12 @@ jobs:
   ts-host:
     name: ts · @ai37/agent-host
     runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    # @ai37/a2ui-catalog-schemas тянется из приватного Verdaccio (npm.app.sp-ai.ru) → `npm ci`
+    # нужен _auth. Даём его на уровне job (как в publish-ts-host.yml): NPM_CONFIG_USERCONFIG
+    # грузит корневой .npmrc (//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}), AI37_NPM_TOKEN — из secrets.
+    env:
+      AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
