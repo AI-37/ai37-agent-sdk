@@ -1,14 +1,18 @@
 name: publish · ai37-agent-host (PyPI)
 
-# Публикация Python-хоста ai37-agent-host (packages/python-host) в PyPI через poetry.
+# Публикация Python-хоста ai37-agent-host (packages/python-host) в приватный PyPI (pypi.app.sp-ai.ru)
+# через poetry build + twine upload.
 # Версия берётся из packages/python-host/pyproject.toml. Повторная публикация той же версии падает.
 # Зависимость ai37-agent-sdk задана версионным ограничением (>=0.1.0a1,<0.2.0), не path — poetry
-# install/build не требуют сиблинга (тянут опубликованный SDK с PyPI). Верификацию (ruff/mypy/
-# pytest) гоняем явно — паритет с TS-гейтом (у Python нет аналога npm prepublishOnly).
+# install/build не требуют сиблинга (тянут опубликованный SDK). После миграции SDK живёт в
+# приватном индексе, поэтому добавляем его как supplemental-источник poetry (публичный PyPI —
+# основной), с HTTP-basic-кредами ci-read. Верификацию (ruff/mypy/pytest) гоняем явно — паритет
+# с TS-гейтом (у Python нет аналога npm prepublishOnly).
+#
+# Аутентификация публикации = HTTP Basic (TWINE_USERNAME=ci-publish, TWINE_PASSWORD=${AI37_PYPI_TOKEN}).
 #
 # Требуемый секрет репозитория:
-#   PYPI_TOKEN — PyPI API-токен (значение начинается с pypi-); прокидывается как
-#                POETRY_PYPI_TOKEN_PYPI (poetry-соглашение).
+#   AI37_PYPI_TOKEN — пароль pypi-юзера ci-publish; он же (как read) — пароль ci-read для install.
 #
 # Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
 
@@ -51,19 +55,31 @@ jobs:
           # единый источник версии рантайма — packages/python-host/.python-version (как локально через pyenv)
           python-version-file: packages/python-host/.python-version
       - name: install poetry
-        run: pipx install poetry
+        # версия закреплена = генератор poetry.lock (иначе install может потребовать re-lock)
+        run: pipx install poetry==2.3.2
+      # Приватный индекс ai37 объявлен в pyproject.toml ([[tool.poetry.source]]) и учтён в poetry.lock.
+      # НЕ добавляем его в рантайме (`poetry source add` менял content-hash → lock рассинхронизировался).
+      # Креды к приватному индексу — на install ниже (POETRY_HTTP_BASIC_AI37_*).
       - name: install deps
+        env:
+          POETRY_HTTP_BASIC_AI37_USERNAME: ci-read
+          POETRY_HTTP_BASIC_AI37_PASSWORD: ${{ secrets.AI37_PYPI_TOKEN }}
         run: poetry install --with dev --no-interaction
       - name: verify (ruff + mypy + pytest)
         run: |
           poetry run ruff check .
           poetry run mypy src
           poetry run pytest
+      - name: install twine
+        run: pipx install twine
+      - name: build
+        run: poetry build --no-interaction
       - name: publish (dry-run)
         if: ${{ inputs.dry_run }}
-        run: poetry publish --build --dry-run --no-interaction
-      - name: publish to PyPI
+        run: twine check dist/*
+      - name: publish to private PyPI
         if: ${{ !inputs.dry_run }}
         env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish --build --no-interaction
+          TWINE_USERNAME: ci-publish
+          TWINE_PASSWORD: ${{ secrets.AI37_PYPI_TOKEN }}
+        run: twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*

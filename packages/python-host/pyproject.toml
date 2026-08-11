@@ -45,6 +45,16 @@ fakeredis = ">=2.20"
 #   mcp (python mcp SDK), observability (langfuse + opentelemetry),
 #   agui (ag-ui protocol / самописный SSE), files (deepagents CompositeBackend).
 
+# Приватный индекс ai37 (pypi.app.sp-ai.ru) — ai37-agent-sdk и прочие ai37-* тянутся отсюда.
+# supplemental: сначала публичный PyPI, ai37-источник как fallback. Держим ЗДЕСЬ (committed), а не
+# добавляем в CI через `poetry source add` — иначе меняется content-hash pyproject и poetry.lock
+# рассинхронизируется ("pyproject.toml changed significantly since poetry.lock was last generated").
+# Креды в install: POETRY_HTTP_BASIC_AI37_USERNAME/PASSWORD (CI/локально из env).
+[[tool.poetry.source]]
+name = "ai37"
+url = "https://pypi.app.sp-ai.ru/simple/"
+priority = "supplemental"
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

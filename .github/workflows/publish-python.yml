@@ -1,13 +1,15 @@
 name: publish · ai37-agent-sdk (PyPI)
 
-# Публикация Python-ядра ai37-agent-sdk (packages/python) в PyPI через poetry.
+# Публикация Python-ядра ai37-agent-sdk (packages/python) в приватный PyPI (pypi.app.sp-ai.ru)
+# через poetry build + twine upload.
 # Версия берётся из packages/python/pyproject.toml. Повторная публикация той же версии падает.
 # У Python нет аналога npm prepublishOnly, поэтому верификацию (ruff/mypy/pytest) гоняем явно —
 # паритет с TS-гейтом.
 #
+# Аутентификация = HTTP Basic (TWINE_USERNAME=ci-publish, TWINE_PASSWORD=${AI37_PYPI_TOKEN}).
+#
 # Требуемый секрет репозитория:
-#   PYPI_TOKEN — PyPI API-токен (значение начинается с pypi-); прокидывается как
-#                POETRY_PYPI_TOKEN_PYPI (poetry-соглашение).
+#   AI37_PYPI_TOKEN — пароль pypi-юзера ci-publish; прокидывается как TWINE_PASSWORD.
 #
 # Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
 
@@ -58,11 +60,16 @@ jobs:
           poetry run ruff check .
           poetry run mypy src
           poetry run pytest
+      - name: install twine
+        run: pipx install twine
+      - name: build
+        run: poetry build --no-interaction
       - name: publish (dry-run)
         if: ${{ inputs.dry_run }}
-        run: poetry publish --build --dry-run --no-interaction
-      - name: publish to PyPI
+        run: twine check dist/*
+      - name: publish to private PyPI
         if: ${{ !inputs.dry_run }}
         env:
-          POETRY_PYPI_TOKEN_PYPI: ${{ secrets.PYPI_TOKEN }}
-        run: poetry publish --build --no-interaction
+          TWINE_USERNAME: ci-publish
+          TWINE_PASSWORD: ${{ secrets.AI37_PYPI_TOKEN }}
+        run: twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*

@@ -1,12 +1,20 @@
 name: publish · @ai37/agent-host (npm)
 
-# Публикация TS-хоста @ai37/agent-host (packages/ts-host) в npmjs.
+# Публикация TS-хоста @ai37/agent-host (packages/ts-host) в приватный Verdaccio (npm.app.sp-ai.ru).
 # Зависит от @ai37/agent-sdk (file:../ts): его prepublishOnly → tsc --noEmit резолвит типы
 # @ai37/agent-sdk из ../ts/dist, поэтому packages/ts надо собрать ПЕРВЫМ (как в ci.yml).
 # Версия берётся из packages/ts-host/package.json. Повторная публикация той же версии падает.
 #
+# Аутентификация = HTTP Basic через .npmrc в корне репо (коммитится): //npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}.
+# У Verdaccio max_users:-1 → npm login/токены не работают, только _auth (base64 user:pass).
+#
+# ВАЖНО: publish выполняется в working-directory packages/ts-host (там package.json+package-lock.json),
+# поэтому npm берёт project-.npmrc из localPrefix=packages/ts-host и КОРНЕВОЙ .npmrc НЕ читает → ENEEDAUTH.
+# Лечим через NPM_CONFIG_USERCONFIG=<корень>/.npmrc: грузим корневой .npmrc как user-config
+# независимо от cwd (единственный источник правды не дублируем в подпакеты).
+#
 # Требуемый секрет репозитория:
-#   NPM_TOKEN — npm Automation-токен (обходит 2FA/OTP) с правом publish на scope @ai37.
+#   AI37_NPM_TOKEN — base64("ci-publish:<пароль>") для _auth издателя (право publish на scope @ai37).
 #
 # Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
 
@@ -39,12 +47,19 @@ jobs:
     name: npm publish · @ai37/agent-host
     runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
     timeout-minutes: 20
+    # agent-host тянет @ai37/a2ui-catalog-schemas и @ai37/agent-sdk из Verdaccio, поэтому
+    # приватный .npmrc нужен ВСЕМ шагам (в т.ч. npm ci), а не только publish → задаём env на
+    # уровне job: NPM_CONFIG_USERCONFIG грузит корневой .npmrc (см. шапку), AI37_NPM_TOKEN
+    # подставляется в его _auth.
+    env:
+      AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          registry-url: 'https://registry.npmjs.org'   # пишет .npmrc, читающий NODE_AUTH_TOKEN
+          # registry-url не задаём: используем закоммиченный .npmrc в корне репо (Verdaccio + _auth)
           cache: npm
           cache-dependency-path: |
             packages/ts/package-lock.json
@@ -60,11 +75,7 @@ jobs:
         if: ${{ inputs.dry_run }}
         working-directory: packages/ts-host
         run: npm publish --tag alpha --dry-run
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
       - name: publish
         if: ${{ !inputs.dry_run }}
         working-directory: packages/ts-host
         run: npm publish --tag alpha
-        env:
-          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
