@@ -24,6 +24,10 @@ export {
   injectTraceContext,
   withRemoteA2aObservability,
   isLangfuseEnabled,
+  isLangfuseContentCaptured,
+  langfuseContentMask,
+  turnTracePayload,
+  turnOutputPayload,
 } from './observability/langfuse'
 export type { BeginTurnArgs } from './observability/langfuse'
 export { TRACE_SCHEMA_VERSION, traceMetadata } from './observability/trace-v1'
