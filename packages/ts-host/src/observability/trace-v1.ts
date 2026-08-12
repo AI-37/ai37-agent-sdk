@@ -21,7 +21,8 @@ export interface TraceMetadataV1 {
   route?: string
   reasonCode?: string
   confidence?: number
-  payloadMode?: 'inline' | 'inline-truncated' | 'external'
+  /** `redacted` — содержимое хода в трейс не пишется (LANGFUSE_CAPTURE_CONTENT выключен). */
+  payloadMode?: 'inline' | 'inline-truncated' | 'external' | 'redacted'
   [key: string]: unknown
 }
 

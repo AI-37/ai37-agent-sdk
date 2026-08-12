@@ -76,6 +76,93 @@ function envBool(v: string | undefined, dflt: boolean): boolean {
   return v === 'true' || v === '1' || v === 'yes' || v === 'on'
 }
 
+/**
+ * Писать ли в трейс СОДЕРЖИМОЕ хода — текст пользователя, промпты, ответы модели, готовый результат.
+ * По умолчанию НЕТ.
+ *
+ * Причина: хост общий, и агенты на нём обрабатывают персональные данные третьих лиц (работники и
+ * клиенты организации-заказчика). Трейс привязан к `userId` и `sessionId`, то есть содержимое хода
+ * становится профилируемым по конкретному человеку, и уезжает туда, где стоит Langfuse — в том числе
+ * в SaaS за пределами РФ. Безопасный дефолт для SDK: структура и тайминги — да, содержимое — нет.
+ *
+ * Включать осознанно: `LANGFUSE_CAPTURE_CONTENT=true` — только там, где Langfuse развёрнут в своём
+ * контуре и обработка содержимого хода имеет правовое основание.
+ */
+export function isLangfuseContentCaptured(): boolean {
+  return envBool(process.env.LANGFUSE_CAPTURE_CONTENT, false)
+}
+
+/** Метка вместо содержимого: сам факт и объём сохраняем — они нужны для диагностики. */
+function redactedMarker(data: unknown): unknown {
+  if (data === undefined || data === null) return data
+  const chars = typeof data === 'string' ? data.length : safeJsonLength(data)
+  return { redacted: true, ...(chars === undefined ? {} : { chars }) }
+}
+
+function safeJsonLength(data: unknown): number | undefined {
+  try {
+    return JSON.stringify(data)?.length
+  } catch {
+    return undefined
+  }
+}
+
+/**
+ * Наша служебная метаданная хода (`traceMetadata`) — не содержимое: turnId, статус, канал, тенант.
+ * Отличаем по стабильному маркеру схемы, потому что процессор Langfuse применяет маску не только к
+ * input/output, но и к metadata — без этой проверки трейс лишился бы всего, ради чего он нужен.
+ */
+function isOwnTraceMetadata(data: unknown): boolean {
+  if (typeof data === 'string') {
+    return data.includes(`"schemaVersion":"${TRACE_SCHEMA_VERSION}"`)
+  }
+  return (
+    typeof data === 'object' &&
+    data !== null &&
+    (data as Record<string, unknown>).schemaVersion === TRACE_SCHEMA_VERSION
+  )
+}
+
+/**
+ * Маска процессора: применяется ко ВСЕМ спанам перед экспортом, включая те, что создаёт
+ * `@langfuse/langchain` (промпты и ответы модели) — их хост не строит и иначе не контролирует.
+ * Служебную метаданную пропускаем, остальное заменяем меткой.
+ *
+ * Побочный эффект, осознанный: метаданная LangChain-спанов тоже редактируется. Токены и тайминги
+ * при этом сохраняются — они лежат в отдельных атрибутах (`gen_ai.usage.*`), маской не затрагиваемых.
+ */
+export function langfuseContentMask({ data }: { data: unknown }): unknown {
+  return isOwnTraceMetadata(data) ? data : redactedMarker(data)
+}
+
+/**
+ * Полезная нагрузка turn-спана. Отдельная чистая функция — чтобы правило «в трейс не уходит
+ * содержимое» проверялось тестом, а не соглашением.
+ */
+export function turnTracePayload(
+  text: string | undefined,
+  captureContent = isLangfuseContentCaptured(),
+): { input?: Record<string, unknown> } {
+  if (text === undefined) return {}
+  return captureContent
+    ? { input: { text } }
+    : { input: { textLen: text.length } }
+}
+
+/** То же для результата хода: при выключенном захвате наружу идёт только статус и объём. */
+export function turnOutputPayload(
+  output: { status?: string; message?: string } | undefined,
+  captureContent = isLangfuseContentCaptured(),
+): { status?: string; message?: string; messageLen?: number } | undefined {
+  if (!output) return output
+  if (captureContent) return output
+  const { message, ...rest } = output
+  return {
+    ...rest,
+    ...(message === undefined ? {} : { messageLen: message.length }),
+  }
+}
+
 /** Включена ли трассировка прямо сейчас (после первой инициализации). */
 export function isLangfuseEnabled(): boolean {
   return !!getOtelHandle()
@@ -118,6 +205,11 @@ async function ensureOtel(): Promise<OtelHandle | null> {
       ...(process.env.LANGFUSE_RELEASE
         ? { release: process.env.LANGFUSE_RELEASE }
         : {}),
+      // Вторая линия обороны при выключенном захвате содержимого: маска применяется процессором
+      // ко ВСЕМ спанам перед экспортом, включая те, что создаёт @langfuse/langchain (промпты и
+      // ответы модели). Turn-спан и без неё не пишет содержимое (см. turnTracePayload), но
+      // LangChain-спаны хост не строит — их закрывает только маска.
+      ...(isLangfuseContentCaptured() ? {} : { mask: langfuseContentMask }),
     })
 
     const NodeSDK = sdkNode.NodeSDK as new (opts: Record<string, unknown>) => {
@@ -234,14 +326,20 @@ export async function withTurnObservability<T>(
       runId: args.taskId,
       status: 'working',
       intent: args.metadata.intent?.skill,
-      payloadMode: args.text === undefined ? 'inline' : 'inline-truncated',
+      // Честная метка режима: по умолчанию содержимое хода в трейс не пишется вовсе.
+      payloadMode:
+        args.text === undefined
+          ? 'inline'
+          : isLangfuseContentCaptured()
+            ? 'inline-truncated'
+            : 'redacted',
       channel: args.metadata.channel,
       app_id: args.metadata.app_id,
       billing_org_id: args.billingOrgId,
       tenant: args.metadata.tenant,
     })
     span.update({
-      ...(args.text !== undefined ? { input: { text: args.text } } : {}),
+      ...turnTracePayload(args.text),
       ...(args.contextId ? { sessionId: args.contextId } : {}),
       ...(args.claims?.sub ? { userId: args.claims.sub } : {}),
       ...(tags.length > 0 ? { tags } : {}),
@@ -268,7 +366,8 @@ export async function withTurnObservability<T>(
       }
     }
     result = await run()
-    const output = toOutput?.(result)
+    const rawOutput = toOutput?.(result)
+    const output = turnOutputPayload(rawOutput)
     span.update({
       ...(output ? { output } : {}),
       metadata: {
