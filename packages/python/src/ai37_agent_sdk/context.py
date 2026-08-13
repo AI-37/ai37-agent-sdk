@@ -48,6 +48,61 @@ class AgentContextSettings:
     billing: BillingSettings
 
 
+# Кэш верификаторов без вытеснения: один живой экземпляр на процесс на каждый уникальный
+# состав auth-настроек — кэш ключей PyJWKClient внутри доживает до следующих запросов.
+# Уникальных конфигов на процесс — единицы; смена настроек в рантайме даёт новый ключ.
+_VERIFIER_CACHE: dict[tuple[Any, ...], JwtVerifier] = {}
+
+
+def _verifier_cache_key(auth: AuthSettings) -> tuple[Any, ...]:
+    """Полный состав настроек, влияющих на проверку токена; ``required`` не влияет."""
+    audience = tuple(auth.audience) if isinstance(auth.audience, list) else (auth.audience,)
+    return (
+        auth.issuer,
+        audience,
+        auth.jwks_url,
+        auth.leeway,
+        auth.introspection_url,
+        auth.introspection_token,
+        auth.introspection_cache_ttl_ms,
+    )
+
+
+def _build_verifier(auth: AuthSettings) -> JwtVerifier | None:
+    jwt_verifier: JwtVerifier | None = None
+    if auth.jwks_url:
+        jwt_verifier = JwksJwtVerifier(
+            issuer=auth.issuer,
+            audience=auth.audience,
+            jwks_url=auth.jwks_url,
+            leeway=auth.leeway if auth.leeway is not None else 60,
+        )
+    if jwt_verifier is None and not auth.introspection_url:
+        return None
+    return create_composite_verifier(
+        jwt=jwt_verifier,
+        introspection_url=auth.introspection_url,
+        introspection_token=auth.introspection_token,
+        introspection_cache_ttl_ms=auth.introspection_cache_ttl_ms,
+    )
+
+
+def _get_or_build_verifier(auth: AuthSettings) -> JwtVerifier | None:
+    """Мемоизация верификатора по составу настроек; явный ``verifier=`` сюда не попадает.
+
+    ``setdefault`` атомарен под GIL: гонка потоков guard'ов может собрать два экземпляра,
+    но каноническим (живущим дальше) в кэше останется один.
+    """
+    key = _verifier_cache_key(auth)
+    cached = _VERIFIER_CACHE.get(key)
+    if cached is not None:
+        return cached
+    built = _build_verifier(auth)
+    if built is None:
+        return None
+    return _VERIFIER_CACHE.setdefault(key, built)
+
+
 class AgentContext:
     """Sugar для агентов: verify JWT → claims → billing client → preflight/usage.
 
@@ -78,23 +133,11 @@ class AgentContext:
         token = extract_bearer(headers)
         required = settings.auth.required
 
+        # Мемоизация по составу настроек: кэш ключей PyJWKClient внутри верификатора
+        # доживает до следующих запросов вместо похода за JWKS на каждый.
         active_verifier = verifier
         if active_verifier is None:
-            jwt_verifier: JwtVerifier | None = None
-            if settings.auth.jwks_url:
-                jwt_verifier = JwksJwtVerifier(
-                    issuer=settings.auth.issuer,
-                    audience=settings.auth.audience,
-                    jwks_url=settings.auth.jwks_url,
-                    leeway=settings.auth.leeway if settings.auth.leeway is not None else 60,
-                )
-            if jwt_verifier is not None or settings.auth.introspection_url:
-                active_verifier = create_composite_verifier(
-                    jwt=jwt_verifier,
-                    introspection_url=settings.auth.introspection_url,
-                    introspection_token=settings.auth.introspection_token,
-                    introspection_cache_ttl_ms=settings.auth.introspection_cache_ttl_ms,
-                )
+            active_verifier = _get_or_build_verifier(settings.auth)
 
         claims: Claims | None = None
         if token:
