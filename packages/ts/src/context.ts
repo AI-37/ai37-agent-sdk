@@ -8,6 +8,7 @@ import {
 } from './auth/introspection'
 import { extractBearer } from './auth/headers'
 import { AuthError } from './auth/errors'
+import { getOrBuildVerifier } from './auth/verifierCache'
 import { createBillingClient } from './billing/client'
 import type {
   BillingClient,
@@ -134,7 +135,10 @@ export class AgentContext {
     const token = extractBearer(headers)
     const required = settings.auth.required ?? true
 
-    const verifier = overrides.verifier ?? buildVerifier(settings.auth)
+    // Мемоизация по составу настроек: JWKS-кэш jose внутри верификатора доживает до
+    // следующих запросов вместо похода за ключами на каждый (см. auth/verifierCache).
+    const verifier =
+      overrides.verifier ?? getOrBuildVerifier(settings.auth, buildVerifier)
 
     let claims: Claims | undefined
     if (token) {
