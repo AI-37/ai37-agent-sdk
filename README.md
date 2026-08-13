@@ -14,7 +14,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 
 ## Схема работы
 Агент получает A2A-запрос с Bearer user-JWT; `AgentContext` (SDK):
-1. `auth.verify` — проверка подписи/iss/aud/exp по JWKS (кэш ключей);
+1. `auth.verify` — проверка подписи/iss/aud/exp по JWKS (кэш ключей). Верификатор мемоизируется в `AgentContext.fromRequest`: один живой экземпляр на процесс на каждый уникальный состав auth-настроек (issuer/audience/jwksUrl/leeway/introspection; `required` в ключ не входит), поэтому кэш JWKS-ключей внутри верификатора переживает запросы, и повторный вызов с тем же составом настроек не ходит за ключами. Явный override (`verifier=` / `overrides.verifier`) и несериализуемые конфиги (локальные `jwks`-ключи или `keyResolver`-функция в `issuers[]` у TS) собирают свежий экземпляр в обход кэша.
 2. billing preflight (`assertExecutionAllowed`) — entitlement (любое значение `!= 'active'` → отказ; `payment_failed` → `PAYMENT_FAILED` проверяется первым, `no_resources` → `NO_TOKENS`), остаток токенов, `llmKey`. Пользовательский текст отказа берётся из единой карты `BILLING_USER_MESSAGES` / `billing_user_message`;
 3. LLM-вызов с `apiKey = llmKey`;
 4. доменная работа;
@@ -33,8 +33,8 @@ flowchart LR
 
 ## Структура каталогов
 - `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), routing/v1 (`a2a-routing-extension.schema.json`, в т.ч. интент `document_generation`), коды фич/привилегий, `env.md`.
-- `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`).
-- `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`).
+- `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`); `src/auth/verifierCache.ts` — мемоизация JWT-верификатора, тесты в `test/verifierCache.test.ts`.
+- `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`); мемоизация верификатора в `src/ai37_agent_sdk/context.py` (`_VERIFIER_CACHE`), тесты в `tests/test_verifier_cache.py`.
 - `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability).
 
 ## Публичные интерфейсы
@@ -58,8 +58,9 @@ flowchart LR
 ## Конфигурация
 Ключевые runtime-параметры (передаются в настройки SDK; см. `contract/env.md`):
 - `ISSUER`, `AUDIENCE`, `JWKS_URL` — auth (JWT-verify).
+- `leeway`, introspection (`url`/`appsToken`/`cacheTtlMs`) — параметры верификации; входят в ключ мемоизации верификатора.
 - `BILLING_BASE_URL` — billing.
-- `required` — обязательность проверки auth/billing.
+- `required` — обязательность проверки auth/billing (на ключ мемоизации не влияет).
 - `llmKey` — из runtime state billing, не из env/JWT; не логировать.
 
 CI/публикация (секреты репозитория):
@@ -73,7 +74,7 @@ CI/публикация (секреты репозитория):
 — У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context).
 
 ## Быстрый старт (локально)
-— (в предоставленных материалах нет отдельных команд установки/локального запуска; SDK потребляется как зависимость, а разработка/проверка выполняется через корневые Makefile-таргеты — см. ниже).
+— SDK потребляется как зависимость (npm/PyPI), отдельного сервиса/локального раннапа в репозитории нет. Разработка и проверка — через корневые Makefile-таргеты (см. «Как запускать тесты»); параметры окружения описаны в `contract/env.md`. Шаблона `.env` и health/smoke-эндпоинта в материалах нет.
 
 ## Как запускать тесты
 ```bash
@@ -84,7 +85,7 @@ make verify    # codegen-парити + оба пакета
 ```
 
 ## Деплой
-Библиотека, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки).
+Библиотека, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии SDK: `@ai37/agent-sdk` — `0.1.0-alpha.16` (TS), `ai37-agent-sdk` — `0.1.0a8` (Python).
 
 - **npm (`@ai37/agent-sdk`, `@ai37/agent-host`)** — приватный Verdaccio `https://npm.app.sp-ai.ru/` (workflows `.github/workflows/publish-ts.yml`, `.github/workflows/publish-ts-host.yml`). Аутентификация — HTTP Basic через закоммиченный корневой `.npmrc` (`@ai37:registry=https://npm.app.sp-ai.ru/`, `//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}`, `always-auth=true`); `registry-url` в `setup-node` не задаётся. Чтобы npm читал корневой `.npmrc` при работе из `packages/ts` / `packages/ts-host`, в CI (`publish-ts-host.yml` и джоба `ts-host` в `ci.yml`) задаётся `NPM_CONFIG_USERCONFIG=${{ github.workspace }}/.npmrc`. В `package.json` обоих npm-пакетов `publishConfig`: `registry=https://npm.app.sp-ai.ru/`, `tag=alpha`. Перед publish `prepublishOnly` выполняет `npm run verify` (в т.ч. при `--dry-run`); `@ai37/agent-host` собирается после `@ai37/agent-sdk` (зависимость `file:../ts`).
 - **PyPI (`ai37-agent-sdk`, `ai37-agent-host`)** — приватный PyPI `https://pypi.app.sp-ai.ru/` (workflows `.github/workflows/publish-python.yml`, `.github/workflows/publish-python-host.yml`). Сборка: `poetry build --no-interaction`; dry-run: `twine check dist/*`; публикация: `twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*` с `TWINE_USERNAME=ci-publish` и `TWINE_PASSWORD=${{ secrets.AI37_PYPI_TOKEN }}`. Для `python-host` приватный источник описан в `pyproject.toml` (`[[tool.poetry.source]]` name=`ai37`, `priority=supplemental`); на install используются `POETRY_HTTP_BASIC_AI37_USERNAME=ci-read` / `POETRY_HTTP_BASIC_AI37_PASSWORD`. В `publish-python-host.yml` poetry зафиксирована `==2.3.2` (как генератор `poetry.lock`).
