@@ -144,8 +144,9 @@ flowchart LR
 ```bash
 make codegen     # contract/feature-codes.json → codes.ts + codes.py
 make ts          # сборка/тесты TS-пакета
+make ts-docx     # локальный markdown → DOCX рендерер @ai37/docx
 make py          # сборка/тесты Python-пакета (Python 3.11+ / poetry)
-make verify      # codegen-парити + оба пакета
+make verify      # codegen-парити + TS/Python SDK + @ai37/docx
 ```
 
 Статус: **0.1.0-alpha**.

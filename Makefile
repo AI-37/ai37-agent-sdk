@@ -1,4 +1,4 @@
-.PHONY: codegen ts py verify clean
+.PHONY: codegen ts ts-docx py verify clean
 
 # Кодоген кодов фич/привилегий из contract/ в оба пакета
 codegen:
@@ -7,6 +7,10 @@ codegen:
 # TS-пакет: линт + тесты + сборка
 ts:
 	cd packages/ts && npm ci && npm run lint && npm run test && npm run build
+
+# Детерминированный markdown → DOCX рендерер
+ts-docx:
+	cd packages/ts-docx && npm ci && npm run lint && npm run test && npm run build
 
 # Python-пакет: линт + типы + тесты
 py:
@@ -17,8 +21,9 @@ verify: codegen
 	@git diff --exit-code -- packages/ts/src/codes.ts packages/python/src/ai37_agent_sdk/codes.py \
 		|| (echo "codes.ts/codes.py не соответствуют contract/ — запусти make codegen и закоммить" && exit 1)
 	$(MAKE) ts
+	$(MAKE) ts-docx
 	$(MAKE) py
-	@echo "verify: OK (TS + Python)."
+	@echo "verify: OK (TS + DOCX + Python)."
 
 clean:
-	rm -rf packages/ts/dist packages/ts/node_modules packages/python/dist-python
+	rm -rf packages/ts/dist packages/ts/node_modules packages/ts-docx/dist packages/ts-docx/node_modules packages/python/dist-python
