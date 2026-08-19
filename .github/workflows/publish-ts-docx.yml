@@ -1,0 +1,51 @@
+name: publish · @ai37/docx (npm)
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for publish job
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
+      dry_run:
+        description: Dry run (сборка + валидация, без заливки в npm)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-ts-docx-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: npm publish · @ai37/docx
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/ts-docx
+    env:
+      AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
+      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: packages/ts-docx/package-lock.json
+      - run: npm ci
+      - name: publish (dry-run)
+        if: ${{ inputs.dry_run }}
+        run: npm publish --tag alpha --dry-run
+      - name: publish
+        if: ${{ !inputs.dry_run }}
+        run: npm publish --tag alpha

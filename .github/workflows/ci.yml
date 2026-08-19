@@ -22,6 +22,25 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # ───────────────────────── @ai37/docx (TS) ─────────────────────────
+  ts-docx:
+    name: ts · @ai37/docx
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: packages/ts-docx
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+          cache-dependency-path: packages/ts-docx/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - run: npm test
+      - run: npm run build
+
   # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
   ts:
     name: ts · @ai37/agent-sdk

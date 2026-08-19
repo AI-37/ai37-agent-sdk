@@ -1,0 +1,52 @@
+{
+  "name": "@ai37/docx",
+  "version": "0.1.0-alpha.1",
+  "description": "Deterministic markdown-to-DOCX renderer for AI37 agents",
+  "type": "module",
+  "license": "Apache-2.0",
+  "sideEffects": false,
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    }
+  },
+  "packageManager": "npm@10.9.8",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "publishConfig": {
+    "registry": "https://npm.app.sp-ai.ru/",
+    "tag": "alpha"
+  },
+  "scripts": {
+    "build": "tsup",
+    "clean": "rm -rf dist",
+    "lint": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "verify": "npm run lint && npm run test && npm run build",
+    "prepublishOnly": "npm run verify"
+  },
+  "dependencies": {
+    "docx": "^9.7.1",
+    "markdown-it": "^15.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.11.0",
+    "@vitest/coverage-v8": "^4.1.11",
+    "fflate": "^0.8.2",
+    "tsup": "^8.5.0",
+    "typescript": "^5.9.3",
+    "vitest": "^4.0.8"
+  }
+}
