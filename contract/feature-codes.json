@@ -12,6 +12,16 @@
       "name": "Minstroy agent"
     },
     {
+      "code": "pdai-doc-152fz",
+      "constant": "PdaiDoc152Fz",
+      "name": "PD-AI Personal Data Documents (152-FZ)"
+    },
+    {
+      "code": "pdai-doc-187fz",
+      "constant": "PdaiDoc187Fz",
+      "name": "PD-AI Critical Infrastructure Documents (187-FZ)"
+    },
+    {
       "code": "thermal-calc-agent",
       "constant": "ThermalCalcAgent",
       "name": "Thermal Calculation Agent"
@@ -27,6 +37,16 @@
       "code": "minstroy-check-inn",
       "constant": "MinstroyCheckInn",
       "name": "Minstroy check INN"
+    },
+    {
+      "code": "pdai-doc-152fz-allowed",
+      "constant": "PdaiDoc152FzAllowed",
+      "name": "PD-AI 152-FZ Documents Allowed"
+    },
+    {
+      "code": "pdai-doc-187fz-allowed",
+      "constant": "PdaiDoc187FzAllowed",
+      "name": "PD-AI 187-FZ Documents Allowed"
     },
     {
       "code": "thermal-calc-allowed",
