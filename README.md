@@ -4,13 +4,13 @@
 # ai37-agent-sdk
 
 ## Описание
-SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
+SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). Host сам включает Langfuse-трассировку, но по умолчанию содержимое хода в трейс не пишется: только структура, тайминги, идентификаторы и объёмы. SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
 
 ## Стек
 - TypeScript (Node ≥ 22), npm, tsup (пакет `@ai37/agent-sdk`).
 - Python (≥ 3.11), poetry, ruff, mypy, pytest (пакет `ai37-agent-sdk`).
 - Общий контракт в `contract/` (JSON Schema — runtime state и routing/v1, `feature-codes.json`, `env.md`), кодоген `make codegen`.
-- Host-слой: `packages/ts-host` и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse).
+- Host-слой: `packages/ts-host` (текущая версия `0.1.0-alpha.38`) и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse).
 
 ## Схема работы
 Агент получает A2A-запрос с Bearer user-JWT; `AgentContext` (SDK):
@@ -21,6 +21,8 @@ SDK для агентов экосистемы AI37: закрывает скво
 5. `reportUsage` после успеха.
 
 При вызове суб-агента модуль `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`). В этом же модуле живёт routing/v1 — компактный семантический профиль (`domains`/`intents`/`excludes`), встраиваемый в `capabilities.extensions` Agent Card для реестра агентов; канонический набор intents включает `document_generation` (генерация документов по исходным данным пользователя). Для тестов без сети есть подпакет `testing` (фейки, фикстуры, in-memory billing, тест-токены).
+
+В host-слое `withTurnObservability` открывает turn-спан (Langfuse v5/OTel; env: `LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY`/`LANGFUSE_BASE_URL`; без ключей — полный no-op). По умолчанию содержимое хода не пишется: вместо `input.text` — `input.textLen`, вместо `output.message` — `status` и `messageLen`, а `payloadMode` помечается как `redacted`. При `LANGFUSE_CAPTURE_CONTENT=true` возвращается прежнее поведение. При выключенном захвате процессору передаётся `mask`, которая закрывает в т.ч. спаны `@langfuse/langchain` (промпты и ответы модели); служебная метаданная `trace.v1` пропускается по маркеру `schemaVersion`.
 
 ```mermaid
 flowchart LR
@@ -35,12 +37,12 @@ flowchart LR
 - `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), routing/v1 (`a2a-routing-extension.schema.json`, в т.ч. интент `document_generation`), коды фич/привилегий, `env.md`.
 - `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`); `src/auth/verifierCache.ts` — мемоизация JWT-верификатора, тесты в `test/verifierCache.test.ts`.
 - `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`); мемоизация верификатора в `src/ai37_agent_sdk/context.py` (`_VERIFIER_CACHE`), тесты в `tests/test_verifier_cache.py`.
-- `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability).
+- `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability/Langfuse; в `packages/ts-host/src/observability/langfuse.ts` — захват/маскирование содержимого, тест `test/langfuse-content.test.ts`).
 
 ## Публичные интерфейсы
 - **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). В `a2a` — routing/v1: `AI37_ROUTING_EXTENSION_URI`, `AI37_ROUTING_INTENTS`, `buildAgentRoutingExtension`/`build_agent_routing_extension`, `parseAgentRoutingExtension`/`parse_agent_routing_extension`, `normalizeAgentRoutingProfile`/`normalize_agent_routing_profile` (парити TS и Python). Python-пакет без CLI (follow-up).
 - **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
-- **Host-слой `@ai37/agent-host`:** A2A, AG-UI, MCP, task-релей, store-backend’ы, observability. Конверт `metadata.ai37` (`Ai37Metadata`) дополнен опциональным булевым флагом `rerun_last_turn`: клиент перепрогоняет последний ход треда («Заново» под ответом) вместо нового вопроса. Флаг читает оркестратор (откат хвоста последнего хода, чтобы вопрос не задвоился); вниз сабагентам не форвардится; носитель — только AG-UI (`forwardedProps.ai37`, как у `acceptedOutputModes`). Аддитивно — старые клиенты и агенты не затронуты.
+- **Host-слой `@ai37/agent-host`:** `createAgentHost(...)` собирает Express-приложение; HTTP: `/.well-known/agent-card.json` (Agent Card), `/a2a/v1` (A2A JSON-RPC), `/agui` (AG-UI SSE), `/api/v1/health`, `/api/v1/version`, `/metrics` (Prometheus), `/mcp` (опция `mcp`, StreamableHTTP + OAuth-discovery). Публичные Langfuse-хелперы `isLangfuseContentCaptured`, `langfuseContentMask`, `turnTracePayload`, `turnOutputPayload`; в `TraceMetadataV1` у `payloadMode` добавлено значение `'redacted'` (содержимое хода не пишется при выключенном `LANGFUSE_CAPTURE_CONTENT`). Конверт `metadata.ai37` (`Ai37Metadata`) дополнен опциональным булевым флагом `rerun_last_turn`: клиент перепрогоняет последний ход треда («Заново» под ответом) вместо нового вопроса. Флаг читает оркестратор (откат хвоста последнего хода, чтобы вопрос не задвоился); вниз сабагентам не форвардится; носитель — только AG-UI (`forwardedProps.ai37`, как у `acceptedOutputModes`). Аддитивно — старые клиенты и агенты не затронуты.
 
 ## Зависимости в экосистеме
 ### Зависит от
@@ -49,6 +51,7 @@ flowchart LR
 - LLM-шлюза (через `llmKey` из runtime state).
 - Суб-агентов по A2A (forward user-JWT).
 - Redis — только для host-слоя.
+- Langfuse — опционально, только для host-слоя (env-ключи; без них — no-op).
 
 ### От него зависят
 - Агенты AI37, использующие SDK/`AgentContext`.
@@ -63,6 +66,11 @@ flowchart LR
 - `required` — обязательность проверки auth/billing (на ключ мемоизации не влияет).
 - `llmKey` — из runtime state billing, не из env/JWT; не логировать.
 
+Трассировка host-слоя (env):
+- `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_BASE_URL` (или `LANGFUSE_HOST`) — включение Langfuse; без ключей — no-op.
+- `LANGFUSE_CAPTURE_CONTENT` (default `false`) — `true` вернуть запись содержимого хода (текст пользователя, промпты, результат) в трейс; включать осознанно, где обработка содержимого имеет правовое основание.
+- `LANGFUSE_TRACING_ENABLED` (default `true`), `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_RELEASE` — параметры включения/окружения/релиза трассировки.
+
 CI/публикация (секреты репозитория):
 - `AI37_NPM_TOKEN` — base64(`ci-publish:<пароль>`) для `_auth` в корневом `.npmrc` (приватный Verdaccio `npm.app.sp-ai.ru`).
 - `AI37_PYPI_TOKEN` — пароль пользователя `ci-publish` (публикация) и `ci-read` (install) приватного PyPI `pypi.app.sp-ai.ru`.
@@ -74,7 +82,7 @@ CI/публикация (секреты репозитория):
 — У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context).
 
 ## Быстрый старт (локально)
-— SDK потребляется как зависимость (npm/PyPI), отдельного сервиса/локального раннапа в репозитории нет. Разработка и проверка — через корневые Makefile-таргеты (см. «Как запускать тесты»); параметры окружения описаны в `contract/env.md`. Шаблона `.env` и health/smoke-эндпоинта в материалах нет.
+— Отдельного сервиса/локального раннапа в репозитории нет: SDK и host — библиотеки. Host ставится из приватного Verdaccio: `npm i @ai37/agent-host @ai37/agent-sdk`; минимальное использование — `createAgentHost({ card, handler, agentContext })` → `app.listen(8080)` (пример в README `packages/ts-host`). У хоста есть health-эндпоинт `/api/v1/health` (и `/api/v1/version`). Параметры окружения описаны в `contract/env.md`; шаблона `.env`/smoke-проверки в материалах нет.
 
 ## Как запускать тесты
 ```bash
@@ -83,13 +91,14 @@ make ts        # TS: lint + test + build
 make py        # Python: ruff + mypy + pytest
 make verify    # codegen-парити + оба пакета
 ```
+Для `packages/ts-host` дополнительно (package.json): `npm test` (vitest, включая `test/langfuse-content.test.ts`) и `npm run verify` (`lint` + `test` + `build`).
 
 ## Деплой
-Библиотека, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии SDK: `@ai37/agent-sdk` — `0.1.0-alpha.16` (TS), `ai37-agent-sdk` — `0.1.0a8` (Python).
+Библиотеки, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии: `@ai37/agent-sdk` — `0.1.0-alpha.16` (TS), `ai37-agent-sdk` — `0.1.0a8` (Python), `@ai37/agent-host` — `0.1.0-alpha.38` (публикуется независимо от SDK).
 
 - **npm (`@ai37/agent-sdk`, `@ai37/agent-host`)** — приватный Verdaccio `https://npm.app.sp-ai.ru/` (workflows `.github/workflows/publish-ts.yml`, `.github/workflows/publish-ts-host.yml`). Аутентификация — HTTP Basic через закоммиченный корневой `.npmrc` (`@ai37:registry=https://npm.app.sp-ai.ru/`, `//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}`, `always-auth=true`); `registry-url` в `setup-node` не задаётся. Чтобы npm читал корневой `.npmrc` при работе из `packages/ts` / `packages/ts-host`, в CI (`publish-ts-host.yml` и джоба `ts-host` в `ci.yml`) задаётся `NPM_CONFIG_USERCONFIG=${{ github.workspace }}/.npmrc`. В `package.json` обоих npm-пакетов `publishConfig`: `registry=https://npm.app.sp-ai.ru/`, `tag=alpha`. Перед publish `prepublishOnly` выполняет `npm run verify` (в т.ч. при `--dry-run`); `@ai37/agent-host` собирается после `@ai37/agent-sdk` (зависимость `file:../ts`).
 - **PyPI (`ai37-agent-sdk`, `ai37-agent-host`)** — приватный PyPI `https://pypi.app.sp-ai.ru/` (workflows `.github/workflows/publish-python.yml`, `.github/workflows/publish-python-host.yml`). Сборка: `poetry build --no-interaction`; dry-run: `twine check dist/*`; публикация: `twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*` с `TWINE_USERNAME=ci-publish` и `TWINE_PASSWORD=${{ secrets.AI37_PYPI_TOKEN }}`. Для `python-host` приватный источник описан в `pyproject.toml` (`[[tool.poetry.source]]` name=`ai37`, `priority=supplemental`); на install используются `POETRY_HTTP_BASIC_AI37_USERNAME=ci-read` / `POETRY_HTTP_BASIC_AI37_PASSWORD`. В `publish-python-host.yml` poetry зафиксирована `==2.3.2` (как генератор `poetry.lock`).
-- Версия `@ai37/agent-host` — `0.1.0-alpha.37`; зависимость `@ai37/a2ui-catalog-schemas` обновлена `^0.4.0` → `^0.10.0`.
+- `@ai37/agent-host` `0.1.0-alpha.38`: зависимость `@ai37/a2ui-catalog-schemas` — `^0.10.0`.
 
 ## Связанные документы
 - `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
