@@ -22,6 +22,11 @@
       "name": "PD-AI Critical Infrastructure Documents (187-FZ)"
     },
     {
+      "code": "pdai-site-check",
+      "constant": "PdaiSiteCheck",
+      "name": "PD-AI Website Compliance Check"
+    },
+    {
       "code": "thermal-calc-agent",
       "constant": "ThermalCalcAgent",
       "name": "Thermal Calculation Agent"
@@ -47,6 +52,11 @@
       "code": "pdai-doc-187fz-allowed",
       "constant": "PdaiDoc187FzAllowed",
       "name": "PD-AI 187-FZ Documents Allowed"
+    },
+    {
+      "code": "pdai-site-check-allowed",
+      "constant": "PdaiSiteCheckAllowed",
+      "name": "PD-AI Website Check Allowed"
     },
     {
       "code": "thermal-calc-allowed",
