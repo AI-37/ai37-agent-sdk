@@ -46,6 +46,7 @@ def create_agent_host(
     catalog_id: str | list[str] | None = None,
     build_info: dict[str, Any] | None = None,
     task_store: Any = None,
+    checkpointer: Any = None,
 ) -> FastAPI:
     """FastAPI-приложение агента: health + agent-card + A2A JSON-RPC/REST за guard'ом."""
     app = FastAPI()
@@ -111,5 +112,8 @@ def create_agent_host(
         required=agent_context.auth.required,
         guarded_prefixes=[base_path, "/agui", "/mcp"],
         service=service,
+        # Host-предоставленный LangGraph-checkpointer (durable графовое состояние по thread_id) →
+        # turn-scope; когниция агента берёт его через current_checkpointer(). Не задан → None.
+        checkpointer=checkpointer,
     )
     return app

@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.1.0-alpha.38",
+  "version": "0.1.0-alpha.39",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -69,12 +69,20 @@
   "peerDependencies": {
     "@ai37/agent-sdk": ">=0.1.0-alpha.5",
     "@langchain/core": ">=0.3.8",
+    "@langchain/langgraph-checkpoint": ">=1.1.2",
+    "@langchain/langgraph-checkpoint-postgres": ">=1.0.0",
     "@langchain/openai": ">=1.0.0",
     "@modelcontextprotocol/sdk": ">=1.26.0",
     "zod": "^3.25 || ^4.0"
   },
   "peerDependenciesMeta": {
     "@langchain/core": {
+      "optional": true
+    },
+    "@langchain/langgraph-checkpoint": {
+      "optional": true
+    },
+    "@langchain/langgraph-checkpoint-postgres": {
       "optional": true
     },
     "@langchain/openai": {
@@ -90,6 +98,8 @@
   "devDependencies": {
     "@ai37/agent-sdk": "file:../ts",
     "@langchain/core": "^1.1.0",
+    "@langchain/langgraph-checkpoint": "^1.1.5",
+    "@langchain/langgraph-checkpoint-postgres": "^1.0.5",
     "@langchain/openai": "^1.4.7",
     "@modelcontextprotocol/sdk": "^1.29.0",
     "zod": "^4.4.3",

@@ -1,5 +1,8 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
 import type { AgentContext } from '@ai37/agent-sdk'
+// `import type` — тип стирается при сборке, поэтому als.ts НЕ тянет @langchain/langgraph-checkpoint
+// в рантайм (пакет — optional peer). Держит als.ts «лёгким», как и langfuse-типы (`unknown`).
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 
 /**
  * Request-scope: JWT-guard кладёт сюда verified `AgentContext`, executor/handler
@@ -34,6 +37,14 @@ export interface HostScope {
    * про Langfuse. Типы намеренно `unknown` — чтобы ts-host не тянул @langchain/core в сборку.
    */
   langfuse?: HostLangfuseScope
+  /**
+   * LangGraph-чекпоинтер, предоставленный ХОСТОМ (durable графовое состояние по `thread_id`).
+   * Host кладёт его в scope из `AgentHostOptions.checkpointer` (через jwtGuard), а когниция агента
+   * забирает через `currentCheckpointer()` и передаёт в свой граф: `graph.compile({ checkpointer })`
+   * (или в deepagents). Не задан хостом → undefined (агент строит граф без durable-состояния).
+   * Это ДРУГОЙ уровень, чем A2A `taskStore` (состояние хода/HITL): checkpointer — состояние графа.
+   */
+  checkpointer?: BaseCheckpointSaver
 }
 
 /** Срез Langfuse одного хода (см. observability/langfuse.ts). */
@@ -66,6 +77,15 @@ export const currentAcceptedOutputModes = (): string[] | undefined =>
 
 export const currentSupportedCatalogIds = (): string[] | undefined =>
   requestScope.getStore()?.supportedCatalogIds
+
+/**
+ * LangGraph-чекпоинтер текущего хода, предоставленный хостом (durable графовое состояние), или
+ * undefined, если host не сконфигурирован с `checkpointer` (dev/агент без durable-графа). Когниция
+ * агента передаёт его в свой граф: `graph.compile({ checkpointer: currentCheckpointer() })`. Читается
+ * из turn-scope (как `currentCtx()`), поэтому вне запроса вернёт undefined.
+ */
+export const currentCheckpointer = (): BaseCheckpointSaver | undefined =>
+  requestScope.getStore()?.checkpointer
 
 /**
  * Постоянная инструкция владельца/партнёра текущего хода (`metadata.ai37.instructions`) или

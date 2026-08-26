@@ -3,6 +3,23 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.39]
+
+### Added
+- **Шов durable-чекпоинтера на уровне хоста.** Новое опциональное поле `AgentHostOptions.checkpointer`
+  (`BaseCheckpointSaver`): host кладёт saver в turn-scope, а когниция агента забирает его через новый
+  `currentCheckpointer()` и цепляет в свой граф (`graph.compile({ checkpointer })` / deepagents). Это
+  ДРУГОЙ уровень состояния, чем A2A `taskStore` (тот держит состояние хода/HITL в `task.metadata`);
+  checkpointer — durable графовое состояние LangGraph по `thread_id`. Не задан → `currentCheckpointer()`
+  вернёт `undefined` (агент строит граф без durable-состояния). Аддитивно: дефолтное поведение не
+  меняется. Зеркально в `ai37-agent-host` (Python): `create_agent_host(checkpointer=...)` +
+  `current_checkpointer()`.
+- **Фабрика `createCheckpointer({ databaseUrl })`.** `databaseUrl` задан → `PostgresSaver.fromConnString`
+  + `setup()` (durable, переживает рестарт/мульти-под); иначе → `MemorySaver` (dev). Пакеты
+  `@langchain/langgraph-checkpoint*` — **optional peers** и импортируются **лениво** (dynamic import),
+  поэтому обычный `import '@ai37/agent-host'` их не требует: ставит их только агент, реально зовущий
+  `createCheckpointer`. Ретенция старых тредов — вне пакета (k8s CronJob в `agent-template-js`).
+
 ## [0.1.0-alpha.38]
 
 ### Changed
