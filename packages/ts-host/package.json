@@ -23,12 +23,20 @@
       "types": "./dist/relay/index.d.ts",
       "import": "./dist/relay/index.js",
       "require": "./dist/relay/index.cjs"
+    },
+    "./skills": {
+      "types": "./dist/skills/index.d.ts",
+      "import": "./dist/skills/index.js",
+      "require": "./dist/skills/index.cjs"
     }
   },
   "typesVersions": {
     "*": {
       "relay": [
         "./dist/relay/index.d.ts"
+      ],
+      "skills": [
+        "./dist/skills/index.d.ts"
       ]
     }
   },
