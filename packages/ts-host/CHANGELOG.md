@@ -3,7 +3,7 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
-## [0.1.0-alpha.39]
+## [0.1.0-alpha.40]
 
 ### Added
 - **Шов durable-чекпоинтера на уровне хоста.** Новое опциональное поле `AgentHostOptions.checkpointer`
@@ -19,6 +19,12 @@
   `@langchain/langgraph-checkpoint*` — **optional peers** и импортируются **лениво** (dynamic import),
   поэтому обычный `import '@ai37/agent-host'` их не требует: ставит их только агент, реально зовущий
   `createCheckpointer`. Ретенция старых тредов — вне пакета (k8s CronJob в `agent-template-js`).
+
+## [0.1.0-alpha.39]
+
+### Added
+- **Генерик-механизм скиллов агента** — subpath-экспорт `@ai37/agent-host/skills` (loader/registry/
+  dispatch/compose-card). Запись добавлена задним числом при merge (PR #62 забампил версию без записи).
 
 ## [0.1.0-alpha.38]
 
