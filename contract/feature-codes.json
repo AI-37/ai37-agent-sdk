@@ -7,6 +7,11 @@
       "name": "Elevator Calculation Agent"
     },
     {
+      "code": "hvac-calc-agent",
+      "constant": "HvacCalcAgent",
+      "name": "HVAC Calculation Agent"
+    },
+    {
       "code": "minstroy-agent",
       "constant": "MinstroyAgent",
       "name": "Minstroy agent"
@@ -37,6 +42,11 @@
       "code": "elevator-calc-allowed",
       "constant": "ElevatorCalcAllowed",
       "name": "Elevator Calculation Allowed"
+    },
+    {
+      "code": "hvac-calc-allowed",
+      "constant": "HvacCalcAllowed",
+      "name": "HVAC Calculation Allowed"
     },
     {
       "code": "minstroy-check-inn",
