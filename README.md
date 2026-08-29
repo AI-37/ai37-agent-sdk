@@ -14,6 +14,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 - Общий контракт в `contract/` (JSON Schema — runtime state и routing/v1, `feature-codes.json`, `env.md`), кодоген `make codegen`. В `feature-codes.json` — коды фич и привилегий биллинга: `elevator-calc-agent`/`elevator-calc-allowed` (расчёт лифтов), `hvac-calc-agent`/`hvac-calc-allowed` (расчёт HVAC), `minstroy-agent`/`minstroy-check-inn`, `thermal-calc-agent`/`thermal-calc-allowed` (теплотехнический расчёт), а также PD-AI: `pdai-doc-152fz`/`pdai-doc-152fz-allowed`, `pdai-doc-187fz`/`pdai-doc-187fz-allowed`, `pdai-site-check`/`pdai-site-check-allowed` (документы 152-ФЗ/187-ФЗ и проверка сайта на соответствие).
 - Host-слой: `packages/ts-host` (текущая версия `0.1.0-alpha.41`, subpath `@ai37/agent-host/skills`) и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse; версия `0.1.0a13`).
 - LangGraph-checkpointer: `@langchain/langgraph-checkpoint` (>=1.1.2) и `@langchain/langgraph-checkpoint-postgres` (>=1.0.0) — optional peers host-слоя, импортируются лениво (dynamic import) только при использовании `createCheckpointer`/`checkpointer`.
+- `@ai37/docx` — TS-пакет из `packages/ts-docx` (проверяется в CI: `npm run lint`, `npm test`, `npm run build`), публикуется в приватный npm-реестр (см. «Деплой»).
 
 ## Схема работы
 
@@ -58,6 +59,7 @@ flowchart LR
 - `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`); мемоизация верификатора в `src/ai37_agent_sdk/context.py` (`_VERIFIER_CACHE`), тесты в `tests/test_verifier_cache.py`.
 - `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability/Langfuse; в `packages/ts-host/src/observability/langfuse.ts` — захват/маскирование содержимого, тест `test/langfuse-content.test.ts`; в `packages/ts-host/src/createCheckpointer.ts` — фабрика durable LangGraph-чекпоинтера, шов в turn-scope — `als.ts`/`auth-guard.ts`/`createAgentHost.ts`; тесты шва — `packages/ts-host/test/checkpointer.test.ts` и `packages/python-host/tests/test_checkpointer.py`).
 - `packages/ts-host/src/skills/` — генерик-механизм скиллов агента (subpath `@ai37/agent-host/skills`): `types.ts` (контракт `SkillProvider`, `SkillIoSchemas`, `SkillRoutingContribution`), `registry.ts` (валидация и фильтр включения), `dispatch.ts` (корневой handler-диспетчер, `SKILL_STATE_KEY`), `compose-card.ts` (сборка Agent Card из скиллов, блок `x-ai37`), `loader.ts` (env-загрузчик: `AGENT_SKILL_MODULES` / `AGENT_ENABLED_SKILLS`), `index.ts` (точка входа subpath). Тесты — `test/skills.test.ts`, фикстуры — `test/fixtures/fake-skill-module.mjs` и `test/fixtures/broken-skill-module.mjs`.
+- `packages/ts-docx/` — TS-пакет `@ai37/docx` (проверяется в CI: lint + test + build).
 
 ## Публичные интерфейсы
 
@@ -140,14 +142,17 @@ createAgentHost({
 ```bash
 make codegen   # кодоген codes.ts/codes.py из contract/
 make ts        # TS: lint + test + build
+make ts-docx   # TS: @ai37/docx (lint + test + build)
 make py        # Python: ruff + mypy + pytest
-make verify    # codegen-парити + оба пакета
+make verify    # codegen-парити + все перечисленные пакеты
 ```
 Для `packages/ts-host` дополнительно (package.json): `npm test` (vitest, включая `test/langfuse-content.test.ts`, `test/skills.test.ts` и новый `test/checkpointer.test.ts`) и `npm run verify` (`lint` + `test` + `build`). Для `packages/python-host` — pytest (testpaths в `pyproject.toml`: `tests`; новый тест шва — `tests/test_checkpointer.py`).
 
 ## Деплой
 
-Библиотеки, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии: `@ai37/agent-sdk` — `0.1.0-alpha.19` (TS), `ai37-agent-sdk` — `0.1.0a11` (Python), `@ai37/agent-host` — `0.1.0-alpha.41` (публикуется независимо от SDK; в состав пакета входит subpath `./skills` — `dist/skills/index.js/.cjs/.d.ts`), `ai37-agent-host` — `0.1.0a13` (Python).
+Библиотеки, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии: `@ai37/agent-sdk` — `0.1.0-alpha.19` (TS), `ai37-agent-sdk` — `0.1.0a11` (Python), `@ai37/agent-host` — `0.1.0-alpha.41` (публикуется независимо от SDK; в состав пакета входит subpath `./skills` — `dist/skills/index.js/.cjs/.d.ts`), `ai37-agent-host` — `0.1.0a13` (Python). Пакет `@ai37/docx` также публикуется в npm.
+
+В CI (`.github/workflows/ci.yml`) добавлен агрегатный джоба `ci-green`: единое имя «зелёного» статуса для org/branch ruleset и триггера doc-bot ревью; джоба зависит от всех основных джоб (`ts-docx`, `ts`, `ts-host`, `python`, `python-host`, `codegen-parity`) и падает, если любая из них завершилась failure/cancelled.
 
 - **npm (`@ai37/agent-sdk`, `@ai37/agent-host`)** — приватный Verdaccio `https://npm.app.sp-ai.ru/` (workflows `.github/workflows/publish-ts.yml`, `.github/workflows/publish-ts-host.yml`). Аутентификация — HTTP Basic через закоммиченный корневой `.npmrc` (`@ai37:registry=https://npm.app.sp-ai.ru/`, `//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}`, `always-auth=true`); `registry-url` в `setup-node` не задаётся. Чтобы npm читал корневой `.npmrc` при работе из `packages/ts` / `packages/ts-host`, в CI (`publish-ts-host.yml` и джоба `ts-host` в `ci.yml`) задаётся `NPM_CONFIG_USERCONFIG=${{ github.workspace }}/.npmrc`. В `package.json` обоих npm-пакетов `publishConfig`: `registry=https://npm.app.sp-ai.ru/`, `tag=alpha`. Перед publish `prepublishOnly` выполняет `npm run verify` (в т.ч. при `--dry-run`); `@ai37/agent-host` собирается после `@ai37/agent-sdk` (зависимость `file:../ts`).
 - **PyPI (`ai37-agent-sdk`, `ai37-agent-host`)** — приватный PyPI `https://pypi.app.sp-ai.ru/` (workflows `.github/workflows/publish-python.yml`, `.github/workflows/publish-python-host.yml`). Сборка: `poetry build --no-interaction`; dry-run: `twine check dist/*`; публикация: `twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*` с `TWINE_USERNAME=ci-publish` и `TWINE_PASSWORD=${{ secrets.AI37_PYPI_TOKEN }}`. Для `python-host` приватный источник описан в `pyproject.toml` (`[[tool.poetry.source]]` name=`ai37`, `priority=supplemental`); на install используются `POETRY_HTTP_BASIC_AI37_USERNAME=ci-read` / `POETRY_HTTP_BASIC_AI37_PASSWORD`. В `publish-python-host.yml` poetry зафиксирована `==2.3.2` (как генератор `poetry.lock`).
