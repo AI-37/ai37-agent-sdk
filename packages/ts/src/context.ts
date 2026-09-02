@@ -45,6 +45,12 @@ export interface AgentContextSettings {
     baseUrl: string
     /** Legacy apps-token (используется, если нет user-JWT). */
     appsAuthToken?: string
+    /**
+     * Продукт агент-хоста (multiproduct v2.3). Прокидывается chat-backend'ом из env
+     * (persona/`REMOTE_A2A_CONFIG`) → `/state?product=` вернёт runtime state и
+     * LiteLLM-ключ подписки ЭТОГО продукта. Не задан → org-wide (backward-compat).
+     */
+    product?: string
     timeoutMs?: number
     runtimeStateCacheTtlMs?: number
   }
@@ -165,6 +171,7 @@ export class AgentContext {
         baseUrl: settings.billing.baseUrl,
         authToken: forwardToken ?? '',
         usageIngestToken: settings.billing.appsAuthToken ?? '',
+        product: settings.billing.product,
         timeoutMs: settings.billing.timeoutMs,
         runtimeStateCacheTtlMs: settings.billing.runtimeStateCacheTtlMs,
       })

@@ -74,6 +74,15 @@ export interface BillingClientOptions {
    * отдельно от {@link authToken} и обязателен.
    */
   usageIngestToken: string
+  /**
+   * Продукт (`sp-ai` / `pd-ai` / `graphema`), от имени которого работает агент-хост
+   * (multiproduct v2.3). Передаётся в `/state?product=` → billing отдаёт runtime state
+   * и LiteLLM-ключ подписки ЭТОГО продукта, а не org-wide (иначе pd-ai/graphema
+   * потребляли бы квоту sp-ai). Инвариант на инстанс: один клиент = один продукт,
+   * поэтому кэш state ключуется billingOrgId (продукт постоянен). Не задан →
+   * легаси org-wide путь (backward-compat).
+   */
+  product?: string
   timeoutMs?: number
   runtimeStateCacheTtlMs?: number
   fetch?: BillingFetch

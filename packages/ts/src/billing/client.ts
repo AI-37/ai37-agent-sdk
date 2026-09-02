@@ -31,6 +31,8 @@ export function createBillingClient(
   // usage-ingest — под apps-token (этот эндпоинт user-JWT не принимает).
   const authToken = options.authToken
   const usageIngestToken = options.usageIngestToken
+  // Продукт постоянен на инстанс клиента → кэш state ключуется billingOrgId (не композитим).
+  const product = options.product
   const timeoutMs = options.timeoutMs ?? 5000
   const runtimeStateCacheTtlMs = options.runtimeStateCacheTtlMs ?? 5000
   const fetchImpl = resolveFetch(options.fetch)
@@ -44,8 +46,12 @@ export function createBillingClient(
   async function fetchRuntimeStateByBillingOrgId(
     billingOrgId: string,
   ): Promise<BillingRuntimeState> {
+    // ?product= → billing отдаёт state/ключ подписки этого продукта (multiproduct v2.3).
+    const productQuery = product
+      ? `?product=${encodeURIComponent(product)}`
+      : ''
     const response = await fetchImpl(
-      `${baseUrl}/api/v1/billing/customers/by-billing-org/${encodeURIComponent(billingOrgId)}/state`,
+      `${baseUrl}/api/v1/billing/customers/by-billing-org/${encodeURIComponent(billingOrgId)}/state${productQuery}`,
       {
         method: 'GET',
         headers: {
