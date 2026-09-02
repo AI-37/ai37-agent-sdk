@@ -125,6 +125,26 @@ describe('createBillingAppsClient', () => {
     )
   })
 
+  it('appends ?product= to state fetch when product is set (multiproduct v2.3)', async () => {
+    const fetchMock = vi.fn().mockResolvedValue(
+      new Response(JSON.stringify(buildRuntimeState({})), { status: 200 }),
+    )
+    const client = createBillingAppsClient({
+      baseUrl: 'https://billing.example.com/api/v1/',
+      authToken: 'apps-token',
+      usageIngestToken: 'apps-token',
+      product: 'pd-ai',
+      fetch: fetchMock as typeof fetch,
+    })
+
+    await client.getRuntimeStateByBillingOrgId('org-1')
+
+    expect(fetchMock).toHaveBeenCalledWith(
+      'https://billing.example.com/api/v1/billing/customers/by-billing-org/org-1/state?product=pd-ai',
+      expect.objectContaining({ method: 'GET' }),
+    )
+  })
+
   it('reuses cached billing state for repeated calls within ttl', async () => {
     const fetchMock = vi.fn().mockResolvedValue(
       new Response(
