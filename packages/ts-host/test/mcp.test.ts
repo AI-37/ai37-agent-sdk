@@ -34,7 +34,9 @@ const handler: AgentHandler = {
 
 const calcTool: McpToolDef = {
   name: 'calc_lifts',
+  title: 'Расчёт лифтов по ГОСТ',
   description: 'Расчёт лифтов',
+  annotations: { readOnlyHint: true, idempotentHint: true },
   handler: (args) => ({
     content: [{ type: 'text', text: `got:${String(args.query)}` }],
   }),
@@ -140,6 +142,17 @@ describe('mcp resource server — tools через in-memory клиент', () =
     const list = await client.listTools()
     expect(list.tools.map((t) => t.name)).toContain('calc_lifts')
 
+    // ecosystem/v5/03-tool-contract.md §6, пункты 1-3: заголовок обязателен, отдаётся в ОБЕИХ
+    // позициях с одинаковым значением и не повторяет `name`. Портал подачи Anthropic сверяет
+    // список инструментов с живым сервером и блокирует те, у кого заголовка нет.
+    const listed = list.tools.find((t) => t.name === 'calc_lifts')
+    expect(listed?.title).toBe('Расчёт лифтов по ГОСТ')
+    expect(listed?.annotations?.title).toBe('Расчёт лифтов по ГОСТ')
+    expect(listed?.title).not.toBe(listed?.name)
+    // Хинты автора доезжают рядом с заголовком, а не затираются им.
+    expect(listed?.annotations?.readOnlyHint).toBe(true)
+    expect(listed?.annotations?.idempotentHint).toBe(true)
+
     const res = await client.callTool({
       name: 'calc_lifts',
       arguments: { query: 'дом 10 этажей' },
@@ -206,9 +219,17 @@ describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () 
     }
     const tool = bridgeHandlerToMcpTool(dialogHandler, {
       name: 'calc_lifts',
+      title: 'Расчёт лифтов по ГОСТ',
       description: 'расчёт',
+      annotations: { readOnlyHint: true },
       textModes: ['text/plain'],
     })
+    // Мост обязан донести заголовок и хинты до McpToolDef — иначе агент, собранный
+    // через bridgeHandlerToMcpTool, отдаст в tools/list инструмент без title (v5/03 §2).
+    expect(tool.title).toBe('Расчёт лифтов по ГОСТ')
+    expect(tool.title).not.toBe(tool.name)
+    expect(tool.annotations?.readOnlyHint).toBe(true)
+
     const res = await tool.handler({ query: 'дом 12 этажей' }, undefined)
     expect(seen).toBe('дом 12 этажей')
     expect(res.content[0].text).toBe('эхо:дом 12 этажей:org=none')
@@ -224,6 +245,7 @@ describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () 
     }
     const tool = bridgeHandlerToMcpTool(failing, {
       name: 't',
+      title: 'Тестовый инструмент',
       description: 'd',
       renderResult: (r) => `status=${r.status}`,
     })

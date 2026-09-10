@@ -2,13 +2,17 @@ import { randomUUID } from 'node:crypto'
 import type { ZodRawShape } from 'zod'
 import { negotiateOutput } from '../output-modes'
 import type { AgentHandler, AgentResult } from '../types'
-import type { McpToolDef } from './types'
+import type { McpToolAnnotations, McpToolDef } from './types'
 
 export interface BridgeToolOptions {
   /** Имя MCP-tool (напр. `calc_lifts`). */
   name: string
+  /** Человекочитаемый заголовок (`v5/03` §2). Обязателен, как и в `McpToolDef`. */
+  title: string
   /** Описание для внешней LLM — что делает и что передавать в `query`. */
   description: string
+  /** Хинты поведения. Мост оборачивает когницию агента — по умолчанию не read-only. */
+  annotations?: McpToolAnnotations
   /** Zod raw shape входа; по умолчанию `{ query: string }`. */
   inputSchema?: ZodRawShape
   /** Форматы текста агента (обычно `card.defaultOutputModes`) — для негоциации текста. */
@@ -41,7 +45,9 @@ export function bridgeHandlerToMcpTool(
 ): McpToolDef {
   return {
     name: opts.name,
+    title: opts.title,
     description: opts.description,
+    ...(opts.annotations ? { annotations: opts.annotations } : {}),
     ...(opts.inputSchema ? { inputSchema: opts.inputSchema } : {}),
     handler: async (args, ctx) => {
       const query =

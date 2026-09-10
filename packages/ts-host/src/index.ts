@@ -60,6 +60,7 @@ export {
 } from './mcp'
 export type {
   McpOptions,
+  McpToolAnnotations,
   McpToolDef,
   McpToolResult,
   McpToolSet,

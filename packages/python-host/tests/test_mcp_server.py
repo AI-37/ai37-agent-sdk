@@ -12,6 +12,7 @@ import pytest
 
 from ai37_agent_host.mcp import (
     McpOptions,
+    McpToolAnnotations,
     McpToolDef,
     McpToolResult,
     McpToolSet,
@@ -28,6 +29,7 @@ _MCP_INSTALLED = importlib.util.find_spec("mcp") is not None
 def _tool(name: str) -> McpToolDef:
     return McpToolDef(
         name=name,
+        title=f"Заголовок {name}",
         description="d",
         handler=lambda _args, _ctx: McpToolResult(content=[{"type": "text", "text": name}]),
     )
@@ -88,6 +90,7 @@ async def test_resolve_tools_receives_ctx():
 async def test_run_tool_supports_sync_and_async_handlers():
     sync_tool = McpToolDef(
         name="s",
+        title="Заголовок s",
         description="d",
         handler=lambda _a, _c: McpToolResult(content=[{"type": "text", "text": "sync"}]),
     )
@@ -95,7 +98,7 @@ async def test_run_tool_supports_sync_and_async_handlers():
     async def _ah(_a: object, _c: object) -> McpToolResult:
         return McpToolResult(content=[{"type": "text", "text": "async"}])
 
-    async_tool = McpToolDef(name="a", description="d", handler=_ah)
+    async_tool = McpToolDef(name="a", title="Заголовок a", description="d", handler=_ah)
 
     r1 = await mcp_server_mod._run_tool(sync_tool, {}, None)
     r2 = await mcp_server_mod._run_tool(async_tool, {}, None)
@@ -110,3 +113,55 @@ async def test_call_release_swallows_errors_and_handles_none():
         raise RuntimeError("nope")
 
     await mcp_server_mod._call_release(boom)  # проглочено, не бросает
+
+
+class _FakeToolAnnotations:
+    """Двойник ``mcp.types.ToolAnnotations``: запоминает kwargs, которыми его собрали."""
+
+    def __init__(self, **kwargs: object) -> None:
+        self.kwargs = kwargs
+
+
+class _FakeMcpTypes:
+    """Достаточный кусок ``mcp.types`` для проверки сборки аннотаций без установленного SDK."""
+
+    ToolAnnotations = _FakeToolAnnotations
+
+
+def test_tool_annotations_кладёт_title_и_пробрасывает_хинты() -> None:
+    """``v5/03`` §6 п.2: заголовок обязан уехать и в ``annotations.title``.
+
+    Хост берёт его из ``McpToolDef.title`` (в ``McpToolAnnotations`` поля ``title`` нет намеренно —
+    у строки один источник правды), а хинты автора при этом не должны теряться.
+    """
+    tool = McpToolDef(
+        name="calc_lifts",
+        title="Расчёт лифтов по ГОСТ",
+        description="d",
+        annotations=McpToolAnnotations(read_only_hint=True, idempotent_hint=True),
+        handler=lambda _args, _ctx: McpToolResult(content=[]),
+    )
+
+    ann = mcp_server_mod._tool_annotations(_FakeMcpTypes, tool)
+
+    assert ann.kwargs["title"] == "Расчёт лифтов по ГОСТ"
+    assert ann.kwargs["title"] != tool.name  # заголовок не повторяет машинное имя (§3)
+    assert ann.kwargs["readOnlyHint"] is True
+    assert ann.kwargs["idempotentHint"] is True
+    assert ann.kwargs["destructiveHint"] is None
+    assert ann.kwargs["openWorldHint"] is None
+
+
+def test_tool_annotations_без_хинтов_всё_равно_несёт_title() -> None:
+    """``annotations`` необязательны, ``title`` — нет: заголовок уезжает и без единого хинта."""
+    tool = McpToolDef(
+        name="t",
+        title="Заголовок инструмента",
+        description="d",
+        handler=lambda _args, _ctx: McpToolResult(content=[]),
+    )
+
+    ann = mcp_server_mod._tool_annotations(_FakeMcpTypes, tool)
+
+    assert ann.kwargs["title"] == "Заголовок инструмента"
+    assert ann.kwargs["readOnlyHint"] is None

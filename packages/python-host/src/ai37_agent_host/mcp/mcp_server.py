@@ -34,6 +34,24 @@ _DEFAULT_INPUT_SCHEMA: dict[str, Any] = {
 }
 
 
+def _tool_annotations(mcp_types: Any, t: McpToolDef) -> Any:
+    """``ToolAnnotations`` инструмента: хинты автора + заголовок из ``t.title``.
+
+    Заголовок кладётся хостом, а не автором (в :class:`McpToolAnnotations` поля ``title`` нет) —
+    иначе у одной строки было бы два источника правды. ``mcp_types`` приходит из
+    :func:`_import_mcp` вызывающей стороны — свой импорт здесь обошёл бы понятную
+    :class:`MissingMcpDependencyError`.
+    """
+    a = t.annotations
+    return mcp_types.ToolAnnotations(
+        title=t.title,
+        readOnlyHint=a.read_only_hint if a else None,
+        destructiveHint=a.destructive_hint if a else None,
+        idempotentHint=a.idempotent_hint if a else None,
+        openWorldHint=a.open_world_hint if a else None,
+    )
+
+
 class MissingMcpDependencyError(RuntimeError):
     """MCP-экспорт запрошен, но пакет ``mcp`` не установлен (optional-группа ``mcp``)."""
 
@@ -122,7 +140,12 @@ def build_mcp_server(server_info: ServerInfo, opts: McpOptions) -> Any:
             return [
                 mcp_types.Tool(
                     name=t.name,
+                    # ecosystem/v5/03-tool-contract.md §6, пункт 2: заголовок отдаётся И верхним
+                    # полем, И в annotations.title. Раскладываем ОДИН авторский title в обе
+                    # позиции здесь — чтобы у строки был единственный источник правды.
+                    title=t.title,
                     description=t.description,
+                    annotations=_tool_annotations(mcp_types, t),
                     inputSchema=t.input_schema or _DEFAULT_INPUT_SCHEMA,
                 )
                 for t in tools

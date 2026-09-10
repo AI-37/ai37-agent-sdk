@@ -2,6 +2,7 @@
 // OAuth-discovery (protected-resource-metadata) и той же проверкой токена, что A2A/AG-UI.
 export type {
   McpOptions,
+  McpToolAnnotations,
   McpToolDef,
   McpToolResult,
   McpToolSet,
