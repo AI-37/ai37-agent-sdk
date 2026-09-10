@@ -3,6 +3,22 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [Unreleased]
+
+### Changed
+- **BREAKING: `title` — обязательное поле `McpToolDef`** (TS и python-зеркало), плюс опциональные
+  `annotations` (`readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint`).
+  Требование `ecosystem/v5/03-tool-contract.md` §2/§6: выставленный наружу MCP-инструмент — публичный
+  API, и портал подачи Anthropic сверяет `tools/list` с живым сервером, блокируя инструменты без
+  заголовка. То же поле добавлено в `BridgeToolOptions`.
+
+  Заголовок задаётся **один раз** в `title`; в `annotations` поля `title` нет намеренно. Хост
+  (`buildMcpServer` / python `_list_tools`) сам раскладывает его в обе позиции ответа `tools/list` —
+  верхним полем и в `annotations.title`, — чтобы у строки был единственный источник правды.
+
+  **Миграция:** добавить `title` в каждое определение инструмента. Заголовок не должен повторять
+  `name` и дублировать `description` (`v5/03` §3-§5).
+
 ## [0.1.0-alpha.37]
 
 ### Added

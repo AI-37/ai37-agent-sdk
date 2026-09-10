@@ -30,7 +30,12 @@ export async function buildMcpServer(
     server.registerTool(
       t.name,
       {
+        // `ecosystem/v5/03-tool-contract.md` §6, пункт 2: заголовок отдаётся И верхним полем, И в
+        // `annotations.title`. Раскладываем ОДИН авторский `title` в обе позиции здесь — чтобы у
+        // строки был единственный источник правды (в `McpToolDef.annotations` поля `title` нет).
+        title: t.title,
         description: t.description,
+        annotations: { ...(t.annotations ?? {}), title: t.title },
         inputSchema: t.inputSchema ?? defaultInputSchema,
       },
       async (args: Record<string, unknown>) => {

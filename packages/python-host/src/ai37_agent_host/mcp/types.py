@@ -36,6 +36,20 @@ McpToolHandler = Callable[
 
 
 @dataclass
+class McpToolAnnotations:
+    """Хинты поведения инструмента (``ToolAnnotations`` MCP-спеки) — БЕЗ ``title``.
+
+    Заголовок сюда не кладут: он живёт в :attr:`McpToolDef.title` и раскладывается в обе
+    позиции ответа ``tools/list`` самим хостом. Зеркало TS ``McpToolAnnotations``.
+    """
+
+    read_only_hint: bool | None = None
+    destructive_hint: bool | None = None
+    idempotent_hint: bool | None = None
+    open_world_hint: bool | None = None
+
+
+@dataclass
 class McpToolDef:
     """Определение MCP-tool, экспонируемого хостом наружу.
 
@@ -47,8 +61,14 @@ class McpToolDef:
     """
 
     name: str
+    #: Человекочитаемый заголовок. ОБЯЗАТЕЛЕН (``ecosystem/v5/03-tool-contract.md`` §2/§6):
+    #: выставленный наружу инструмент — публичный API, и портал подачи Anthropic блокирует
+    #: инструменты без заголовка. Не повторяет ``name`` и не дублирует ``description``.
+    title: str
     description: str
     handler: McpToolHandler
+    #: Хинты поведения. Заголовок — в :attr:`title`, не здесь.
+    annotations: McpToolAnnotations | None = None
     input_schema: dict[str, Any] | None = None
 
 

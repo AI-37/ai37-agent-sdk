@@ -25,7 +25,7 @@ class _EchoHandler:
 async def test_bridge_maps_query_and_returns_text():
     handler = _EchoHandler(AgentResult(status="completed"))
     tool = bridge_handler_to_mcp_tool(
-        handler, BridgeToolOptions(name="calc", description="считает")
+        handler, BridgeToolOptions(name="calc", title="Заголовок calc", description="считает")
     )
     assert tool.name == "calc"
     assert tool.description == "считает"
@@ -43,7 +43,7 @@ async def test_bridge_maps_query_and_returns_text():
 
 async def test_bridge_non_string_query_serialized_to_json():
     handler = _EchoHandler(AgentResult(status="completed"))
-    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", description="d"))
+    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", title="Заголовок t", description="d"))
     await tool.handler({"foo": 1, "bar": "x"}, None)
     assert handler.last_request is not None
     text = handler.last_request.input.text
@@ -54,14 +54,14 @@ async def test_bridge_default_render_prefers_message_then_result_then_status():
     # message
     tool = bridge_handler_to_mcp_tool(
         _EchoHandler(AgentResult(status="completed", message="привет")),
-        BridgeToolOptions(name="t", description="d"),
+        BridgeToolOptions(name="t", title="Заголовок t", description="d"),
     )
     assert (await tool.handler({"query": "x"}, None)).content[0]["text"] == "привет"
 
     # structured result (dict → JSON)
     tool = bridge_handler_to_mcp_tool(
         _EchoHandler(AgentResult(status="completed", result={"n": 3})),
-        BridgeToolOptions(name="t", description="d"),
+        BridgeToolOptions(name="t", title="Заголовок t", description="d"),
     )
     out = (await tool.handler({"query": "x"}, None)).content[0]["text"]
     assert '"n": 3' in out
@@ -69,7 +69,7 @@ async def test_bridge_default_render_prefers_message_then_result_then_status():
     # failed без message/result → статусный текст + is_error
     tool = bridge_handler_to_mcp_tool(
         _EchoHandler(AgentResult(status="failed", message="сломалось")),
-        BridgeToolOptions(name="t", description="d"),
+        BridgeToolOptions(name="t", title="Заголовок t", description="d"),
     )
     res = await tool.handler({"query": "x"}, None)
     assert res.is_error is True
@@ -81,6 +81,7 @@ async def test_bridge_custom_render_result():
         _EchoHandler(AgentResult(status="completed", result={"kw": 12})),
         BridgeToolOptions(
             name="t",
+            title="Заголовок t",
             description="d",
             render_result=lambda r: f"kw={r.result['kw']}",
         ),
@@ -90,7 +91,7 @@ async def test_bridge_custom_render_result():
 
 async def test_bridge_passes_ctx_claims_and_billing_org():
     handler = _EchoHandler(AgentResult(status="completed", message="ok"))
-    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", description="d"))
+    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", title="Заголовок t", description="d"))
 
     class _Ctx:
         claims: dict[str, Any] = {"sub": "u1"}
@@ -108,6 +109,6 @@ async def test_bridge_input_schema_forwarded():
     schema = {"type": "object", "properties": {"a": {"type": "number"}}, "required": ["a"]}
     tool = bridge_handler_to_mcp_tool(
         _EchoHandler(AgentResult(status="completed", message="ok")),
-        BridgeToolOptions(name="t", description="d", input_schema=schema),
+        BridgeToolOptions(name="t", title="Заголовок t", description="d", input_schema=schema),
     )
     assert tool.input_schema == schema

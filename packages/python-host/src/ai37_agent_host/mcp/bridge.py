@@ -22,7 +22,7 @@ from ..types import (
     AgentResult,
     Ai37Metadata,
 )
-from .types import McpToolDef, McpToolResult
+from .types import McpToolAnnotations, McpToolDef, McpToolResult
 
 
 @dataclass
@@ -31,8 +31,12 @@ class BridgeToolOptions:
 
     #: Имя MCP-tool (напр. ``calc_lifts``).
     name: str
+    #: Человекочитаемый заголовок (``v5/03`` §2). Обязателен, как и в :class:`McpToolDef`.
+    title: str
     #: Описание для внешней LLM — что делает и что передавать в ``query``.
     description: str
+    #: Хинты поведения. Мост оборачивает когницию агента — по умолчанию не read-only.
+    annotations: McpToolAnnotations | None = None
     #: JSON Schema входа; по умолчанию ``{query: string}``.
     input_schema: dict[str, object] | None = None
     #: Форматы текста агента (обычно ``card.defaultOutputModes``) — для негоциации текста.
@@ -90,7 +94,9 @@ def bridge_handler_to_mcp_tool(
 
     return McpToolDef(
         name=opts.name,
+        title=opts.title,
         description=opts.description,
+        annotations=opts.annotations,
         handler=_handle,
         input_schema=opts.input_schema,
     )

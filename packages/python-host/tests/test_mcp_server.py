@@ -28,6 +28,7 @@ _MCP_INSTALLED = importlib.util.find_spec("mcp") is not None
 def _tool(name: str) -> McpToolDef:
     return McpToolDef(
         name=name,
+        title=f"Заголовок {name}",
         description="d",
         handler=lambda _args, _ctx: McpToolResult(content=[{"type": "text", "text": name}]),
     )
@@ -88,6 +89,7 @@ async def test_resolve_tools_receives_ctx():
 async def test_run_tool_supports_sync_and_async_handlers():
     sync_tool = McpToolDef(
         name="s",
+        title="Заголовок s",
         description="d",
         handler=lambda _a, _c: McpToolResult(content=[{"type": "text", "text": "sync"}]),
     )
@@ -95,7 +97,7 @@ async def test_run_tool_supports_sync_and_async_handlers():
     async def _ah(_a: object, _c: object) -> McpToolResult:
         return McpToolResult(content=[{"type": "text", "text": "async"}])
 
-    async_tool = McpToolDef(name="a", description="d", handler=_ah)
+    async_tool = McpToolDef(name="a", title="Заголовок a", description="d", handler=_ah)
 
     r1 = await mcp_server_mod._run_tool(sync_tool, {}, None)
     r2 = await mcp_server_mod._run_tool(async_tool, {}, None)

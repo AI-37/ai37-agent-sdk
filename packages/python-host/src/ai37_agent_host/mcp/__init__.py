@@ -32,6 +32,7 @@ from .resource_metadata import (
 )
 from .types import (
     McpOptions,
+    McpToolAnnotations,
     McpToolDef,
     McpToolHandler,
     McpToolResult,
@@ -42,6 +43,7 @@ from .types import (
 __all__ = [
     # types
     "McpOptions",
+    "McpToolAnnotations",
     "McpToolDef",
     "McpToolHandler",
     "McpToolResult",
