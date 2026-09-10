@@ -43,7 +43,9 @@ async def test_bridge_maps_query_and_returns_text():
 
 async def test_bridge_non_string_query_serialized_to_json():
     handler = _EchoHandler(AgentResult(status="completed"))
-    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", title="Заголовок t", description="d"))
+    tool = bridge_handler_to_mcp_tool(
+        handler, BridgeToolOptions(name="t", title="Заголовок t", description="d")
+    )
     await tool.handler({"foo": 1, "bar": "x"}, None)
     assert handler.last_request is not None
     text = handler.last_request.input.text
@@ -91,7 +93,9 @@ async def test_bridge_custom_render_result():
 
 async def test_bridge_passes_ctx_claims_and_billing_org():
     handler = _EchoHandler(AgentResult(status="completed", message="ok"))
-    tool = bridge_handler_to_mcp_tool(handler, BridgeToolOptions(name="t", title="Заголовок t", description="d"))
+    tool = bridge_handler_to_mcp_tool(
+        handler, BridgeToolOptions(name="t", title="Заголовок t", description="d")
+    )
 
     class _Ctx:
         claims: dict[str, Any] = {"sub": "u1"}
