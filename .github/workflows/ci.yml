@@ -157,3 +157,16 @@ jobs:
             packages/ts/src/codes.ts \
             packages/python/src/ai37_agent_sdk/codes.py \
           || (echo "::error::codes.* рассинхронизированы с contract/ — запустите make codegen и закоммитьте" && exit 1)
+
+  # Aggregate "green" check with a UNIFORM name across all AI-37 repos, so one org/branch ruleset can
+  # require a single context (`ci-green`) regardless of each repo's job names, and the doc-bot review
+  # trigger keys off it. Fails if any real CI job above failed or was cancelled.
+  ci-green:
+    if: always()
+    needs: [ts-docx, ts, ts-host, python, python-host, codegen-parity]
+    runs-on: ubuntu-latest
+    steps:
+      - name: gate
+        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
+        run: |
+          echo "one or more required CI jobs did not succeed"; exit 1

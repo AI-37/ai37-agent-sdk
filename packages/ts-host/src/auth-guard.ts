@@ -6,6 +6,7 @@ import {
   type AgentContextOverrides,
   type AgentContextSettings,
 } from '@ai37/agent-sdk'
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { readClientCapabilities } from './output-modes'
 import { requestScope } from './als'
 import { recordAuthFailure } from './metrics'
@@ -58,12 +59,17 @@ function readInstructions(body: unknown): string | undefined {
  *
  * `overrides` (verifier/billingClient) — точка внедрения dev-режима
  * (`buildDevContextOverrides` из `@ai37/agent-sdk/dev`); по умолчанию пусто → прод-поведение.
+ *
+ * `checkpointer` (опц.) — host-предоставленный LangGraph-saver: кладём его в turn-scope, чтобы
+ * когниция агента взяла его через `currentCheckpointer()` (единая точка обоих путей — A2A и AG-UI
+ * идут через guard). Не задан → в scope undefined (агент строит граф без durable-состояния).
  */
 export function jwtGuard(
   settings: AgentContextSettings,
   required: boolean,
   overrides: AgentContextOverrides = {},
   service: string = 'unknown',
+  checkpointer?: BaseCheckpointSaver,
 ) {
   return async (
     req: Request,
@@ -82,6 +88,7 @@ export function jwtGuard(
           acceptedOutputModes,
           supportedCatalogIds,
           instructions,
+          checkpointer,
         },
         () => next(),
       )
@@ -98,6 +105,7 @@ export function jwtGuard(
           acceptedOutputModes,
           supportedCatalogIds,
           instructions,
+          checkpointer,
         },
         () => next(),
       )

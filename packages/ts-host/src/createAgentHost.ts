@@ -15,6 +15,7 @@ import {
   buildDevContextOverrides,
   isDevModeRequested,
 } from '@ai37/agent-sdk/dev'
+import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -47,6 +48,14 @@ export interface AgentHostOptions {
    * (per-process, не переживает рестарт/реплики) — для durable передайте свой стор.
    */
   taskStore?: TaskStore
+  /**
+   * LangGraph-чекпоинтер (durable графовое состояние по `thread_id`) — ДРУГОЙ уровень, чем
+   * `taskStore` (тот держит состояние хода/HITL в `task.metadata`). Host кладёт saver в turn-scope,
+   * а когниция агента забирает его через `currentCheckpointer()` и цепляет в свой граф
+   * (`graph.compile({ checkpointer })` / deepagents). Собирается фабрикой `createCheckpointer(...)`.
+   * Не задан → `currentCheckpointer()` вернёт undefined (агент строит граф без durable-состояния).
+   */
+  checkpointer?: BaseCheckpointSaver
   /**
    * «Экспорт» агента как MCP Resource Server: монтирует `/mcp` (StreamableHTTP) +
    * protected-resource-metadata (OAuth-discovery на Authentik) за тем же токен-guard'ом,
@@ -118,7 +127,13 @@ export function createAgentHost(opts: AgentHostOptions): Express {
         'Не использовать в проде.',
     )
   }
-  const guard = jwtGuard(opts.agentContext, required, devOverrides, service)
+  const guard = jwtGuard(
+    opts.agentContext,
+    required,
+    devOverrides,
+    service,
+    opts.checkpointer,
+  )
   const base = opts.basePath ?? '/a2a/v1'
 
   app.use(

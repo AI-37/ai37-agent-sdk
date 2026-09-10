@@ -32,6 +32,7 @@ class AuthGuardMiddleware:
         guarded_prefixes: list[str],
         overrides: dict[str, Any] | None = None,
         service: str = "unknown",
+        checkpointer: Any = None,
     ) -> None:
         self.app = app
         self._settings = settings
@@ -39,6 +40,8 @@ class AuthGuardMiddleware:
         self._prefixes = tuple(guarded_prefixes)
         self._overrides = overrides or {}
         self._service = service
+        # Host-предоставленный LangGraph-checkpointer → в turn-scope (см. current_checkpointer).
+        self._checkpointer = checkpointer
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http" or not self._is_guarded(scope.get("path", "")):
@@ -57,7 +60,7 @@ class AuthGuardMiddleware:
                 return
             # required=false → пропускаем без ctx (миграция).
 
-        token = set_scope(HostScope(ctx=ctx, bearer=bearer))
+        token = set_scope(HostScope(ctx=ctx, bearer=bearer, checkpointer=self._checkpointer))
         try:
             await self.app(scope, receive, send)
         finally:

@@ -35,6 +35,13 @@ class HostScope:
     accepted_output_modes: list[str] | None = None
     #: Каталоги A2UI клиента (``a2uiClientCapabilities.v0.9.supportedCatalogIds``).
     supported_catalog_ids: list[str] | None = None
+    #: LangGraph-чекпоинтер, предоставленный ХОСТОМ (durable графовое состояние по ``thread_id``).
+    #: Host кладёт его из ``create_agent_host(checkpointer=...)`` через ``AuthGuardMiddleware``;
+    #: когниция агента забирает через :func:`current_checkpointer` и цепляет в свой граф
+    #: (``graph.compile(checkpointer=...)``). Типизирован ``Any`` — чтобы host НЕ тянул langgraph в
+    #: обязательные deps (как ``langfuse``/``task_store``). Это ДРУГОЙ уровень, чем A2A task-store
+    #: (состояние хода/HITL): checkpointer — состояние графа.
+    checkpointer: Any = None
     langfuse: HostLangfuseScope | None = None
 
 
@@ -84,6 +91,16 @@ def current_accepted_output_modes() -> list[str] | None:
 def current_supported_catalog_ids() -> list[str] | None:
     scope = _request_scope.get()
     return scope.supported_catalog_ids if scope else None
+
+
+def current_checkpointer() -> Any:
+    """LangGraph-чекпоинтер текущего хода (host-предоставленный) или ``None``.
+
+    Когниция агента цепляет его в свой граф: ``graph.compile(checkpointer=current_checkpointer())``.
+    Вне turn-scope (или host без ``checkpointer``) → ``None`` (граф без durable-состояния).
+    """
+    scope = _request_scope.get()
+    return scope.checkpointer if scope else None
 
 
 def current_trace_id() -> str | None:

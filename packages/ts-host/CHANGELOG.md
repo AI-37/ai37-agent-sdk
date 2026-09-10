@@ -19,6 +19,55 @@
   **Миграция:** добавить `title` в каждое определение инструмента. Заголовок не должен повторять
   `name` и дублировать `description` (`v5/03` §3-§5).
 
+## [0.1.0-alpha.40]
+
+### Added
+- **Шов durable-чекпоинтера на уровне хоста.** Новое опциональное поле `AgentHostOptions.checkpointer`
+  (`BaseCheckpointSaver`): host кладёт saver в turn-scope, а когниция агента забирает его через новый
+  `currentCheckpointer()` и цепляет в свой граф (`graph.compile({ checkpointer })` / deepagents). Это
+  ДРУГОЙ уровень состояния, чем A2A `taskStore` (тот держит состояние хода/HITL в `task.metadata`);
+  checkpointer — durable графовое состояние LangGraph по `thread_id`. Не задан → `currentCheckpointer()`
+  вернёт `undefined` (агент строит граф без durable-состояния). Аддитивно: дефолтное поведение не
+  меняется. Зеркально в `ai37-agent-host` (Python): `create_agent_host(checkpointer=...)` +
+  `current_checkpointer()`.
+- **Фабрика `createCheckpointer({ databaseUrl })`.** `databaseUrl` задан → `PostgresSaver.fromConnString`
+  + `setup()` (durable, переживает рестарт/мульти-под); иначе → `MemorySaver` (dev). Пакеты
+  `@langchain/langgraph-checkpoint*` — **optional peers** и импортируются **лениво** (dynamic import),
+  поэтому обычный `import '@ai37/agent-host'` их не требует: ставит их только агент, реально зовущий
+  `createCheckpointer`. Ретенция старых тредов — вне пакета (k8s CronJob в `agent-template-js`).
+
+## [0.1.0-alpha.39]
+
+### Added
+- **Генерик-механизм скиллов агента** — subpath-экспорт `@ai37/agent-host/skills` (loader/registry/
+  dispatch/compose-card). Запись добавлена задним числом при merge (PR #62 забампил версию без записи).
+
+## [0.1.0-alpha.38]
+
+### Changed
+- **Содержимое хода больше не пишется в трассировку по умолчанию.** `withTurnObservability` клал в
+  turn-спан `input: { text }` — сырой текст пользователя — и `output: { message }`, где `message` у
+  доменных агентов равен целиком сгенерированному документу. Спан привязан к `userId` и `sessionId`,
+  то есть содержимое становилось профилируемым по конкретному человеку и уезжало туда, где развёрнут
+  Langfuse (в примерах платформы по умолчанию предлагается SaaS вне РФ).
+
+  Теперь по умолчанию в спан идут `input: { textLen }` и `output: { status, messageLen }`;
+  `payloadMode` в метаданной честно помечается как `redacted`. Идентификаторы, статусы, тайминги,
+  `sessionId`/`userId` и токены сохраняются — структура трейса не страдает.
+
+  Вернуть прежнее поведение: `LANGFUSE_CAPTURE_CONTENT=true`. Включать осознанно — там, где Langfuse
+  стоит в своём контуре и обработка содержимого хода имеет правовое основание.
+
+### Added
+- **Маска процессора при выключенном захвате содержимого.** `LangfuseSpanProcessor` получает
+  `mask`, которая применяется ко всем спанам перед экспортом — включая те, что строит
+  `@langfuse/langchain` (промпты и ответы модели): их хост не создаёт и иначе не контролирует.
+  Служебная метаданная `trace.v1` пропускается по маркеру `schemaVersion` — Langfuse применяет маску
+  и к metadata, поэтому без явного пропуска трейс потерял бы `turnId`, статус, канал и тенант.
+  Токены и тайминги не затрагиваются: они лежат в отдельных атрибутах `gen_ai.usage.*`.
+- Публичные хелперы `isLangfuseContentCaptured`, `langfuseContentMask`, `turnTracePayload`,
+  `turnOutputPayload` — чтобы правило проверялось тестом, а не соглашением.
+
 ## [0.1.0-alpha.37]
 
 ### Added

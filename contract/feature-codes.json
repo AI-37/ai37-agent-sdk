@@ -7,9 +7,29 @@
       "name": "Elevator Calculation Agent"
     },
     {
+      "code": "hvac-calc-agent",
+      "constant": "HvacCalcAgent",
+      "name": "HVAC Calculation Agent"
+    },
+    {
       "code": "minstroy-agent",
       "constant": "MinstroyAgent",
       "name": "Minstroy agent"
+    },
+    {
+      "code": "pdai-doc-152fz",
+      "constant": "PdaiDoc152Fz",
+      "name": "PD-AI Personal Data Documents (152-FZ)"
+    },
+    {
+      "code": "pdai-doc-187fz",
+      "constant": "PdaiDoc187Fz",
+      "name": "PD-AI Critical Infrastructure Documents (187-FZ)"
+    },
+    {
+      "code": "pdai-site-check",
+      "constant": "PdaiSiteCheck",
+      "name": "PD-AI Website Compliance Check"
     },
     {
       "code": "thermal-calc-agent",
@@ -24,9 +44,29 @@
       "name": "Elevator Calculation Allowed"
     },
     {
+      "code": "hvac-calc-allowed",
+      "constant": "HvacCalcAllowed",
+      "name": "HVAC Calculation Allowed"
+    },
+    {
       "code": "minstroy-check-inn",
       "constant": "MinstroyCheckInn",
       "name": "Minstroy check INN"
+    },
+    {
+      "code": "pdai-doc-152fz-allowed",
+      "constant": "PdaiDoc152FzAllowed",
+      "name": "PD-AI 152-FZ Documents Allowed"
+    },
+    {
+      "code": "pdai-doc-187fz-allowed",
+      "constant": "PdaiDoc187FzAllowed",
+      "name": "PD-AI 187-FZ Documents Allowed"
+    },
+    {
+      "code": "pdai-site-check-allowed",
+      "constant": "PdaiSiteCheckAllowed",
+      "name": "PD-AI Website Check Allowed"
     },
     {
       "code": "thermal-calc-allowed",
