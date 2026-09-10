@@ -5,7 +5,7 @@
 
 ## Описание
 
-SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`): поверх SDK хост добавляет A2A/AG-UI/MCP-сервер, JWT-guard, генерик-механизм скиллов (subpath `@ai37/agent-host/skills`) — агент собирается из скиллов (запись карточки, typed I/O, routing-вклад, per-skill биллинг, матчер, handler) — и шов durable LangGraph-чекпоинтера (`AgentHostOptions.checkpointer`, фабрика `createCheckpointer`, accessor `currentCheckpointer()` в turn-scope): durable графовое состояние по `thread_id` как отдельный от A2A task-store уровень. Host сам включает Langfuse-трассировку, но по умолчанию содержимое хода в трейс не пишется: только структура, тайминги, идентификаторы и объёмы. SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
+SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`): поверх SDK хост добавляет A2A/AG-UI/MCP-сервер, JWT-guard, генерик-механизм скиллов (subpath `@ai37/agent-host/skills`) — агент собирается из скиллов (запись карточки, typed I/O, routing-вклад, per-skill биллинг, матчер, handler) — и шов durable LangGraph-чекпоинтера (`AgentHostOptions.checkpointer`, фабрика `createCheckpointer`, accessor `currentCheckpointer()` в turn-scope): durable графовое состояние по `thread_id` как отдельный от A2A task-store уровень. Host сам включает Langfuse-трассировку, но по умолчанию содержимое хода в трейс не пишется: только структура, тайминги, идентификаторы и объёмы. MCP-экспорт агента следует контракту инструмента: у каждого выставленного наружу инструмента обязателен человекочитаемый `title` (не повторяющий `name` и не дублирующий `description`) плюс опциональные хинты поведения (`annotations`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
 
 ## Стек
 
@@ -13,6 +13,7 @@ SDK для агентов экосистемы AI37: закрывает скво
 - Python (≥ 3.11), poetry, ruff, mypy, pytest (пакет `ai37-agent-sdk`).
 - Общий контракт в `contract/` (JSON Schema — runtime state и routing/v1, `feature-codes.json`, `env.md`), кодоген `make codegen`. В `feature-codes.json` — коды фич и привилегий биллинга: `elevator-calc-agent`/`elevator-calc-allowed` (расчёт лифтов), `hvac-calc-agent`/`hvac-calc-allowed` (расчёт HVAC), `minstroy-agent`/`minstroy-check-inn`, `thermal-calc-agent`/`thermal-calc-allowed` (теплотехнический расчёт), а также PD-AI: `pdai-doc-152fz`/`pdai-doc-152fz-allowed`, `pdai-doc-187fz`/`pdai-doc-187fz-allowed`, `pdai-site-check`/`pdai-site-check-allowed` (документы 152-ФЗ/187-ФЗ и проверка сайта на соответствие).
 - Host-слой: `packages/ts-host` (текущая версия `0.1.0-alpha.41`, subpath `@ai37/agent-host/skills`) и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse; версия `0.1.0a13`).
+- MCP-экспорт host-слоя: `@modelcontextprotocol/sdk` + `zod` (TS, optional-peer, динамический импорт) и официальный python `mcp` SDK (optional-группа `mcp`, soft-import с `MissingMcpDependencyError`).
 - LangGraph-checkpointer: `@langchain/langgraph-checkpoint` (>=1.1.2) и `@langchain/langgraph-checkpoint-postgres` (>=1.0.0) — optional peers host-слоя, импортируются лениво (dynamic import) только при использовании `createCheckpointer`/`checkpointer`.
 - `@ai37/docx` — TS-пакет из `packages/ts-docx` (проверяется в CI: `npm run lint`, `npm test`, `npm run build`), публикуется в приватный npm-реестр (см. «Деплой»).
 
@@ -33,6 +34,8 @@ SDK для агентов экосистемы AI37: закрывает скво
 
 Ещё один уровень host-слоя — durable графовое состояние: опциональный `AgentHostOptions.checkpointer` (`BaseCheckpointSaver`) хост кладёт в turn-scope через `jwtGuard` (единая точка обоих путей — A2A и AG-UI), а когниция агента забирает его через `currentCheckpointer()` и цепляет в свой граф (`graph.compile({ checkpointer })` / deepagents). Это ДРУГОЙ уровень состояния, чем A2A `taskStore` (тот держит состояние хода/HITL в `task.metadata`): checkpointer — durable графовое состояние LangGraph по `thread_id`. Не задан хостом → `currentCheckpointer()` вернёт undefined (TS) / None (Python) — агент строит граф без durable-состояния. Фабрика `createCheckpointer({ databaseUrl })`: `databaseUrl` задан → `PostgresSaver.fromConnString` + идемпотентный `setup()` (durable, переживает рестарт/мульти-под; при первом старте создаёт таблицы `checkpoints`/`checkpoint_blobs`/`checkpoint_writes`/`checkpoint_migrations`); пусто/undefined → `MemorySaver` (dev). Пакеты `@langchain/langgraph-checkpoint*` — optional peers и импортируются лениво (dynamic import), поэтому обычный `import '@ai37/agent-host'` их не требует: их ставит только агент, реально зовущий `createCheckpointer`. Ретенция старых тредов — вне пакета (k8s CronJob в шаблоне `agent-template-js`).
 
+MCP-экспорт host-слоя превращает агента в MCP Resource Server (StreamableHTTP, stateless): опция `mcp: { tools, scopes?, serverName? }` монтирует `/mcp` + OAuth-discovery (`.well-known/oauth-protected-resource`, RFC 9728) за тем же verified auth, что A2A/AG-UI. Набор инструментов — статический список `McpToolDef[]` либо per-request резолвер `(ctx) => McpToolDef[] | McpToolSet` (per-user набор; `release` вызывается по завершении запроса — в TS на `res.on('close')`, в Python `try/finally` вокруг tool-вызова). Контракт инструмента: `title` (человекочитаемый заголовок, **обязателен**) и опциональные `annotations` (хинты `readOnlyHint`/`destructiveHint`/`idempotentHint`/`openWorldHint`); поля `title` в самих `annotations` нет — заголовок живёт один раз в `McpToolDef.title`, а хост раскладывает его в обе позиции ответа `tools/list` (верхним полем и в `annotations.title`), чтобы у строки был единственный источник правды. Мост `bridgeHandlerToMcpTool` / `bridge_handler_to_mcp_tool` оборачивает когницию A2A-агента в один MCP-tool со схемой `{query}` и обязан донести `title` и `annotations` до `McpToolDef`. Для агентов, экспортируемых как MCP-инструменты, это breaking-изменение контракта (см. CHANGELOG `@ai37/agent-host`, `[Unreleased]`).
+
 ```mermaid
 flowchart LR
   C[UI / другой агент] -->|A2A Bearer user-JWT| AG[Агент / AgentContext]
@@ -52,6 +55,14 @@ flowchart LR
   S1 -->|billing preflight| P[assertExecutionAllowed]
 ```
 
+```mermaid
+flowchart LR
+  MC[MCP-клиент Claude/Cursor] -->|POST /mcp| H[buildMcpServer]
+  H -->|tools/list| T[McpToolDef: name + title + annotations]
+  T -->|title в двух позициях| L2[tools/list: title + annotations.title]
+  H -->|tools/call| BR[bridgeHandlerToMcpTool → handler.run]
+```
+
 ## Структура каталогов
 
 - `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), routing/v1 (`a2a-routing-extension.schema.json`, в т.ч. интент `document_generation`), коды фич (`elevator-calc-agent`, `hvac-calc-agent`, `minstroy-agent`, `thermal-calc-agent`, `pdai-doc-152fz`, `pdai-doc-187fz`, `pdai-site-check`) и привилегий (`elevator-calc-allowed`, `hvac-calc-allowed`, `minstroy-check-inn`, `thermal-calc-allowed`, `pdai-doc-152fz-allowed`, `pdai-doc-187fz-allowed`, `pdai-site-check-allowed`), `env.md`.
@@ -59,13 +70,21 @@ flowchart LR
 - `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`); мемоизация верификатора в `src/ai37_agent_sdk/context.py` (`_VERIFIER_CACHE`), тесты в `tests/test_verifier_cache.py`.
 - `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability/Langfuse; в `packages/ts-host/src/observability/langfuse.ts` — захват/маскирование содержимого, тест `test/langfuse-content.test.ts`; в `packages/ts-host/src/createCheckpointer.ts` — фабрика durable LangGraph-чекпоинтера, шов в turn-scope — `als.ts`/`auth-guard.ts`/`createAgentHost.ts`; тесты шва — `packages/ts-host/test/checkpointer.test.ts` и `packages/python-host/tests/test_checkpointer.py`).
 - `packages/ts-host/src/skills/` — генерик-механизм скиллов агента (subpath `@ai37/agent-host/skills`): `types.ts` (контракт `SkillProvider`, `SkillIoSchemas`, `SkillRoutingContribution`), `registry.ts` (валидация и фильтр включения), `dispatch.ts` (корневой handler-диспетчер, `SKILL_STATE_KEY`), `compose-card.ts` (сборка Agent Card из скиллов, блок `x-ai37`), `loader.ts` (env-загрузчик: `AGENT_SKILL_MODULES` / `AGENT_ENABLED_SKILLS`), `index.ts` (точка входа subpath). Тесты — `test/skills.test.ts`, фикстуры — `test/fixtures/fake-skill-module.mjs` и `test/fixtures/broken-skill-module.mjs`.
+- `packages/ts-host/src/mcp/` — MCP Resource Server слой: `types.ts` (`McpOptions`, `McpToolDef` с обязательным `title` и опциональными `annotations`, `McpToolAnnotations` без поля `title`, `McpToolResult`, `McpToolSet`, `McpToolsResolver`), `mcp-server.ts` (`buildMcpServer` — раскладка `title` в верхнее поле и `annotations.title`; `mcpHttpHandler`), `bridge.ts` (`bridgeHandlerToMcpTool`, `BridgeToolOptions` с обязательным `title`), `resource-metadata.ts`, `challenge-guard.ts`, `mount.ts`, `index.ts`. Тесты — `test/mcp.test.ts`.
+- `packages/python-host/src/ai37_agent_host/mcp/` — python-зеркало MCP-слоя: `types.py` (`McpToolAnnotations`, `McpToolDef` с обязательным `title`), `mcp_server.py` (`_tool_annotations` + `build_mcp_server`, soft-import `mcp` SDK), `bridge.py` (`bridge_handler_to_mcp_tool`, `BridgeToolOptions`), `__init__.py` (реэкспорт). Тесты — `tests/test_mcp_server.py`, `tests/test_mcp_bridge.py`.
 - `packages/ts-docx/` — TS-пакет `@ai37/docx` (проверяется в CI: lint + test + build).
 
 ## Публичные интерфейсы
 
 - **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). В `a2a` — routing/v1: `AI37_ROUTING_EXTENSION_URI`, `AI37_ROUTING_INTENTS`, `buildAgentRoutingExtension`/`build_agent_routing_extension`, `parseAgentRoutingExtension`/`parse_agent_routing_extension`, `normalizeAgentRoutingProfile`/`normalize_agent_routing_profile` (парити TS и Python). В `codes` — `BillingFeatureCode`/`BillingPrivilegeCode` (TS) и одноимённые Enum (Python): `ElevatorCalcAgent`, `HvacCalcAgent`, `MinstroyAgent`, `PdaiDoc152Fz`, `PdaiDoc187Fz`, `PdaiSiteCheck`, `ThermalCalcAgent` и привилегии `ElevatorCalcAllowed`, `HvacCalcAllowed`, `MinstroyCheckInn`, `PdaiDoc152FzAllowed`, `PdaiDoc187FzAllowed`, `PdaiSiteCheckAllowed`, `ThermalCalcAllowed`. Python-пакет без CLI (follow-up).
 - **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
-- **Host-слой `@ai37/agent-host`:** `createAgentHost(...)` (в опциях — `checkpointer?: BaseCheckpointSaver`) собирает Express-приложение; HTTP: `/.well-known/agent-card.json` (Agent Card), `/a2a/v1` (A2A JSON-RPC), `/agui` (AG-UI SSE), `/api/v1/health`, `/api/v1/version`, `/metrics` (Prometheus), `/mcp` (опция `mcp`, StreamableHTTP + OAuth-discovery). Шов durable-состояния: `currentCheckpointer()` — LangGraph-saver текущего хода из turn-scope (или undefined); `createCheckpointer({ databaseUrl? })` + тип `CreateCheckpointerOptions` — фабрика durable-saver (`PostgresSaver` + `setup()` при заданном `databaseUrl`, иначе `MemorySaver`); оба экспортируются из корня пакета (index.ts). Публичные Langfuse-хелперы `isLangfuseContentCaptured`, `langfuseContentMask`, `turnTracePayload`, `turnOutputPayload`; в `TraceMetadataV1` у `payloadMode` добавлено значение `'redacted'` (содержимое хода не пишется при выключенном `LANGFUSE_CAPTURE_CONTENT`). Конверт `metadata.ai37` (`Ai37Metadata`) дополнен опциональным булевым флагом `rerun_last_turn`: клиент перепрогоняет последний ход треда («Заново» под ответом) вместо нового вопроса. Флаг читает оркестратор (откат хвоста последнего хода, чтобы вопрос не задвоился); вниз сабагентам не форвардится; носитель — только AG-UI (`forwardedProps.ai37`, как у `acceptedOutputModes`). Аддитивно — старые клиенты и агенты не затронуты. В `exports`/`typesVersions` пакета добавлен subpath `./skills`.
+- **Host-слой `@ai37/agent-host`:** `createAgentHost(...)` (в опциях — `checkpointer?: BaseCheckpointSaver`, `mcp?: McpOptions`) собирает Express-приложение; HTTP: `/.well-known/agent-card.json` (Agent Card), `/a2a/v1` (A2A JSON-RPC), `/agui` (AG-UI SSE), `/api/v1/health`, `/api/v1/version`, `/metrics` (Prometheus), `/mcp` (опция `mcp`, StreamableHTTP + OAuth-discovery). Шов durable-состояния: `currentCheckpointer()` — LangGraph-saver текущего хода из turn-scope (или undefined); `createCheckpointer({ databaseUrl? })` + тип `CreateCheckpointerOptions` — фабрика durable-saver (`PostgresSaver` + `setup()` при заданном `databaseUrl`, иначе `MemorySaver`); оба экспортируются из корня пакета (index.ts). Публичные Langfuse-хелперы `isLangfuseContentCaptured`, `langfuseContentMask`, `turnTracePayload`, `turnOutputPayload`; в `TraceMetadataV1` у `payloadMode` добавлено значение `'redacted'` (содержимое хода не пишется при выключенном `LANGFUSE_CAPTURE_CONTENT`). Конверт `metadata.ai37` (`Ai37Metadata`) дополнен опциональным булевым флагом `rerun_last_turn`: клиент перепрогоняет последний ход треда («Заново» под ответом) вместо нового вопроса. Флаг читает оркестратор (откат хвоста последнего хода, чтобы вопрос не задвоился); вниз сабагентам не форвардится; носитель — только AG-UI (`forwardedProps.ai37`, как у `acceptedOutputModes`). Аддитивно — старые клиенты и агенты не затронуты. В `exports`/`typesVersions` пакета добавлен subpath `./skills`.
+- **MCP-контракт инструмента (TS `packages/ts-host/src/mcp/types.ts`, Python `ai37_agent_host/mcp/types.py`, парити):**
+  - `McpToolDef` — `name`, **обязательный `title`** (человекочитаемый заголовок; не повторяет `name` и не дублирует `description`), `description`, опциональные `annotations?: McpToolAnnotations`, `inputSchema` (TS — zod raw shape; Python — JSON Schema), `handler`.
+  - `McpToolAnnotations` — хинты поведения без `title`: `readOnlyHint` / `destructiveHint` / `idempotentHint` / `openWorldHint` (TS camelCase, Python snake_case). Экспортируется из корня `@ai37/agent-host` (`index.ts`) и из `ai37_agent_host.mcp`.
+  - Раскладка заголовка в ответе `tools/list` — за хостом: `buildMcpServer` (TS) / `_tool_annotations` + `_list_tools` (Python) кладут один авторский `title` и верхним полем `Tool`, и в `ToolAnnotations.title`.
+  - `BridgeToolOptions` (мост `bridgeHandlerToMcpTool` / `bridge_handler_to_mcp_tool`) — `name`, **обязательный `title`**, `description`, опциональные `annotations`, `inputSchema`/`input_schema`, `textModes`/`text_modes`, `renderResult`/`render_result`; мост обязан пробросить `title` и `annotations` в результирующий `McpToolDef`.
+  - **BREAKING (CHANGELOG `@ai37/agent-host`, `[Unreleased]`):** `title` стал обязательным полем `McpToolDef` и `BridgeToolOptions` в TS и python-зеркале. Миграция — добавить `title` в каждое определение инструмента.
 - **Python host (`ai37-agent-host`):** `create_agent_host(..., checkpointer=...)` и `current_checkpointer()` — зеркало TS-шва (saver типизирован `Any`, чтобы host не тянул langgraph в обязательные deps; вне turn-scope или без checkpointer → `None`).
 - **Subpath `@ai37/agent-host/skills`:** `createSkillRegistry` (+ `SkillRegistryError`, типы `SkillRegistry`, `SkillRegistryOptions`), `createSkillDispatchHandler` и константа `SKILL_STATE_KEY`, `composeCardWithSkills` (+ типы `ComposedAgentCard`, `Ai37SkillsCardBlock` — блок `x-ai37.skills[id].billing` и `x-ai37.skillsIo[id]` в карточке), env-загрузчик `buildSkillRegistryFromEnv` / `loadSkillProvidersFromEnv` (+ `SkillLoaderError`, константы `SKILL_MODULES_ENV` = `AGENT_SKILL_MODULES`, `ENABLED_SKILLS_ENV` = `AGENT_ENABLED_SKILLS`), типы `SkillProvider`, `SkillCardEntry`, `SkillIoSchemas`, `SkillRoutingContribution`.
 
@@ -80,11 +99,13 @@ flowchart LR
 - Redis — только для host-слоя.
 - Langfuse — опционально, только для host-слоя (env-ключи; без них — no-op).
 - `@langchain/langgraph-checkpoint` / `@langchain/langgraph-checkpoint-postgres` — optional peers host-слоя (`>=1.1.2` / `>=1.0.0`), только при использовании `createCheckpointer`/`checkpointer`.
+- `@modelcontextprotocol/sdk` + `zod` (TS) и python `mcp` SDK (optional-группа `mcp`) — только при использовании MCP-экспорта; грузятся динамически/soft-import, поэтому не-MCP потребители их не тянут. Отсутствие `mcp` (Python) → `MissingMcpDependencyError` с инструкцией `poetry install --with mcp`.
 - Postgres — только в durable-режиме чекпоинтера (своя БД на агента).
 
 ### От него зависят
 - Агенты AI37, использующие SDK/`AgentContext`.
 - Host-пакеты `@ai37/agent-host` (ts-host/python-host) поверх SDK.
+- Агенты, экспортирующие себя как MCP Resource Server (внешние клиенты Claude/Cursor и агрегатор оркестратора): их определения `McpToolDef` теперь обязаны нести `title`.
 - Первый потребитель интента `document_generation` — `pdai-doc-gen-agent` (генерация документов 152-ФЗ/187-ФЗ).
 - Первый потребитель генерик-механизма скиллов — `document-service` (образец потребления в `src/skills/index.ts`; кастомные скиллы перенесены из него в хост).
 
@@ -118,7 +139,7 @@ CI/публикация (секреты репозитория):
 
 ## Данные и хранилища
 
-— У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context). Многоходовка скилла помечает владельца в `taskState` (ключ `__ai37_skill`, см. `SKILL_STATE_KEY`), который host хранит в task store. Опциональный durable LangGraph-чекпоинтер пишет графовое состояние в Postgres: `PostgresSaver.setup()` при первом старте создаёт таблицы `checkpoints`/`checkpoint_blobs`/`checkpoint_writes`/`checkpoint_migrations` (идемпотентно); ретенция старых тредов — вне пакета (k8s CronJob в шаблоне `agent-template-js`).
+— У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context). Многоходовка скилла помечает владельца в `taskState` (ключ `__ai37_skill`, см. `SKILL_STATE_KEY`), который host хранит в task store. Опциональный durable LangGraph-чекпоинтер пишет графовое состояние в Postgres: `PostgresSaver.setup()` при первом старте создаёт таблицы `checkpoints`/`checkpoint_blobs`/`checkpoint_writes`/`checkpoint_migrations` (идемпотентно); ретенция старых тредов — вне пакета (k8s CronJob в шаблоне `agent-template-js`). MCP-экспорт собственного хранилища не заводит (stateless-транспорт).
 
 ## Быстрый старт (локально)
 
@@ -135,6 +156,27 @@ createAgentHost({
 
 Для durable графового состояния в `createAgentHost` передаётся `checkpointer`, собранный фабрикой `createCheckpointer({ databaseUrl })` (задан `databaseUrl` → `PostgresSaver` + `setup()`; пусто → `MemorySaver` dev); когниция агента забирает saver через `currentCheckpointer()`.
 
+MCP-экспорт включается опцией `mcp` у `createAgentHost` — каждому инструменту обязателен `title` (и опционально `annotations`):
+
+```ts
+createAgentHost({
+  card,
+  handler,
+  mcp: {
+    tools: [
+      {
+        name: 'calc_lifts',
+        title: 'Расчёт лифтов по ГОСТ',
+        description: 'Расчёт лифтов',
+        annotations: { readOnlyHint: true, idempotentHint: true },
+        handler: (args) => ({ content: [{ type: 'text', text: String(args.query) }] }),
+      },
+    ],
+    scopes: ['mcp'],
+  },
+})
+```
+
 У хоста есть health-эндпоинт `/api/v1/health` (и `/api/v1/version`). Параметры окружения описаны в `contract/env.md`; шаблона `.env`/smoke-проверки в материалах нет.
 
 ## Как запускать тесты
@@ -146,11 +188,11 @@ make ts-docx   # TS: @ai37/docx (lint + test + build)
 make py        # Python: ruff + mypy + pytest
 make verify    # codegen-парити + все перечисленные пакеты
 ```
-Для `packages/ts-host` дополнительно (package.json): `npm test` (vitest, включая `test/langfuse-content.test.ts`, `test/skills.test.ts` и новый `test/checkpointer.test.ts`) и `npm run verify` (`lint` + `test` + `build`). Для `packages/python-host` — pytest (testpaths в `pyproject.toml`: `tests`; новый тест шва — `tests/test_checkpointer.py`).
+Для `packages/ts-host` дополнительно (package.json): `npm test` (vitest, включая `test/langfuse-content.test.ts`, `test/skills.test.ts`, `test/checkpointer.test.ts` и `test/mcp.test.ts` — в т.ч. поведенческие ассерты `title` в `tools/list` и проброса через `bridgeHandlerToMcpTool`) и `npm run verify` (`lint` + `test` + `build`). Для `packages/python-host` — pytest (testpaths в `pyproject.toml`: `tests`; тесты шва — `tests/test_checkpointer.py`, MCP — `tests/test_mcp_server.py` (в т.ч. `_tool_annotations`: `title` + проброс хинтов) и `tests/test_mcp_bridge.py` (проброс `title`/`annotations` через мост)).
 
 ## Деплой
 
-Библиотеки, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии: `@ai37/agent-sdk` — `0.1.0-alpha.19` (TS), `ai37-agent-sdk` — `0.1.0a11` (Python), `@ai37/agent-host` — `0.1.0-alpha.41` (публикуется независимо от SDK; в состав пакета входит subpath `./skills` — `dist/skills/index.js/.cjs/.d.ts`), `ai37-agent-host` — `0.1.0a13` (Python). Пакет `@ai37/docx` также публикуется в npm.
+Библиотеки, не сервис: Helm/terraform не используются; публикация — в приватные реестры AI37 через GitHub Actions вручную (`workflow_dispatch`, опция `dry_run` — сборка и проверки без заливки). Текущие версии: `@ai37/agent-sdk` — `0.1.0-alpha.19` (TS), `ai37-agent-sdk` — `0.1.0a11` (Python), `@ai37/agent-host` — `0.1.0-alpha.41` (публикуется независимо от SDK; в состав пакета входит subpath `./skills` — `dist/skills/index.js/.cjs/.d.ts`), `ai37-agent-host` — `0.1.0a13` (Python). Пакет `@ai37/docx` также публикуется в npm. В CHANGELOG `@ai37/agent-host` уже есть запись `[Unreleased]` с BREAKING-требованием обязательного `title` у `McpToolDef`/`BridgeToolOptions` — она уедет в следующую публикацию пакета (TS и python-зеркало).
 
 В CI (`.github/workflows/ci.yml`) добавлен агрегатный джоба `ci-green`: единое имя «зелёного» статуса для org/branch ruleset и триггера doc-bot ревью; джоба зависит от всех основных джоб (`ts-docx`, `ts`, `ts-host`, `python`, `python-host`, `codegen-parity`) и падает, если любая из них завершилась failure/cancelled.
 
@@ -161,6 +203,7 @@ make verify    # codegen-парити + все перечисленные пак
 ## Связанные документы
 
 - `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
+- `ecosystem/v5/03-tool-contract.md` — контракт MCP-инструмента (§2 — `title` обязателен; §6 п.2 — заголовок отдаётся и верхним полем, и в `annotations.title`; §3-§5 — требования к заголовку; `title` / `annotations` в `McpToolDef` и `BridgeToolOptions`).
 <!-- ai37:card:end -->
 
 <!-- Ниже — только уникальный человеческий контекст (замысел, инварианты, грабли).
