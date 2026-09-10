@@ -3,7 +3,7 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
-## [Unreleased]
+## [0.1.0-alpha.42]
 
 ### Changed
 - **BREAKING: `title` — обязательное поле `McpToolDef`** (TS и python-зеркало), плюс опциональные
