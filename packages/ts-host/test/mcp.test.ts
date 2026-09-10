@@ -221,8 +221,15 @@ describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () 
       name: 'calc_lifts',
       title: 'Расчёт лифтов по ГОСТ',
       description: 'расчёт',
+      annotations: { readOnlyHint: true },
       textModes: ['text/plain'],
     })
+    // Мост обязан донести заголовок и хинты до McpToolDef — иначе агент, собранный
+    // через bridgeHandlerToMcpTool, отдаст в tools/list инструмент без title (v5/03 §2).
+    expect(tool.title).toBe('Расчёт лифтов по ГОСТ')
+    expect(tool.title).not.toBe(tool.name)
+    expect(tool.annotations?.readOnlyHint).toBe(true)
+
     const res = await tool.handler({ query: 'дом 12 этажей' }, undefined)
     expect(seen).toBe('дом 12 этажей')
     expect(res.content[0].text).toBe('эхо:дом 12 этажей:org=none')
