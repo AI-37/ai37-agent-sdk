@@ -54,6 +54,11 @@
       "name": "Minstroy check INN"
     },
     {
+      "code": "minstroy-price-monitoring",
+      "constant": "MinstroyPriceMonitoring",
+      "name": "Minstroy price monitoring"
+    },
+    {
       "code": "pdai-doc-152fz-allowed",
       "constant": "PdaiDoc152FzAllowed",
       "name": "PD-AI 152-FZ Documents Allowed"
