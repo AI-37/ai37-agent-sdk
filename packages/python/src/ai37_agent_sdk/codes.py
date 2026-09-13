@@ -5,6 +5,7 @@ class BillingFeatureCode(str, Enum):
     ElevatorCalcAgent = "elevator-calc-agent"
     HvacCalcAgent = "hvac-calc-agent"
     MinstroyAgent = "minstroy-agent"
+    OrgLimits = "org-limits"
     PdaiDoc152Fz = "pdai-doc-152fz"
     PdaiDoc187Fz = "pdai-doc-187fz"
     PdaiSiteCheck = "pdai-site-check"
@@ -14,6 +15,8 @@ class BillingFeatureCode(str, Enum):
 class BillingPrivilegeCode(str, Enum):
     ElevatorCalcAllowed = "elevator-calc-allowed"
     HvacCalcAllowed = "hvac-calc-allowed"
+    MaxApiKeys = "max-api-keys"
+    MaxUsers = "max-users"
     MinstroyCheckInn = "minstroy-check-inn"
     MinstroyPriceMonitoring = "minstroy-price-monitoring"
     PdaiDoc152FzAllowed = "pdai-doc-152fz-allowed"

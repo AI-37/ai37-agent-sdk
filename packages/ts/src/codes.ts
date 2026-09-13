@@ -4,6 +4,7 @@ export enum BillingFeatureCode {
   ElevatorCalcAgent = 'elevator-calc-agent',
   HvacCalcAgent = 'hvac-calc-agent',
   MinstroyAgent = 'minstroy-agent',
+  OrgLimits = 'org-limits',
   PdaiDoc152Fz = 'pdai-doc-152fz',
   PdaiDoc187Fz = 'pdai-doc-187fz',
   PdaiSiteCheck = 'pdai-site-check',
@@ -13,6 +14,8 @@ export enum BillingFeatureCode {
 export enum BillingPrivilegeCode {
   ElevatorCalcAllowed = 'elevator-calc-allowed',
   HvacCalcAllowed = 'hvac-calc-allowed',
+  MaxApiKeys = 'max-api-keys',
+  MaxUsers = 'max-users',
   MinstroyCheckInn = 'minstroy-check-inn',
   MinstroyPriceMonitoring = 'minstroy-price-monitoring',
   PdaiDoc152FzAllowed = 'pdai-doc-152fz-allowed',
