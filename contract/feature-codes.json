@@ -17,6 +17,11 @@
       "name": "Minstroy agent"
     },
     {
+      "code": "org-limits",
+      "constant": "OrgLimits",
+      "name": "Organization Limits"
+    },
+    {
       "code": "pdai-doc-152fz",
       "constant": "PdaiDoc152Fz",
       "name": "PD-AI Personal Data Documents (152-FZ)"
@@ -47,6 +52,16 @@
       "code": "hvac-calc-allowed",
       "constant": "HvacCalcAllowed",
       "name": "HVAC Calculation Allowed"
+    },
+    {
+      "code": "max-api-keys",
+      "constant": "MaxApiKeys",
+      "name": "Max Active API Keys"
+    },
+    {
+      "code": "max-users",
+      "constant": "MaxUsers",
+      "name": "Max Organization Members"
     },
     {
       "code": "minstroy-check-inn",
