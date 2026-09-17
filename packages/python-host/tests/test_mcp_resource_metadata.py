@@ -68,9 +68,7 @@ def test_routes_serve_both_root_and_suffix():
 
 def test_routes_single_when_root_resource():
     routes = protected_resource_metadata_routes(
-        ProtectedResourceMetadataOptions(
-            resource="https://h/", authorization_servers=[]
-        )
+        ProtectedResourceMetadataOptions(resource="https://h/", authorization_servers=[])
     )
     paths = [r.path for r in routes]
     assert paths == ["/.well-known/oauth-protected-resource"]

@@ -42,9 +42,7 @@ class InMemoryRemoteTaskStore:
     async def get(self, parent_context_id: str, agent_id: str) -> RemoteTaskRef | None:
         return self._map.get(self._key(parent_context_id, agent_id))
 
-    async def set(
-        self, parent_context_id: str, agent_id: str, task_id: str, state: str
-    ) -> None:
+    async def set(self, parent_context_id: str, agent_id: str, task_id: str, state: str) -> None:
         self._map[self._key(parent_context_id, agent_id)] = RemoteTaskRef(
             task_id=task_id, state=state
         )

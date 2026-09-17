@@ -22,7 +22,7 @@ def context_file_path(ref: str) -> str | None:
     """chat-attachment:<id> → /chat-attachments/<id> (аналогично project); None — не файл."""
     for prefix, anchor in _REF_ANCHORS:
         if ref.startswith(prefix):
-            return f"/{anchor}/{ref[len(prefix):]}"
+            return f"/{anchor}/{ref[len(prefix) :]}"
     return None
 
 

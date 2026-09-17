@@ -3,7 +3,7 @@ import type {
   ExecutionEventBus,
   RequestContext,
 } from '@a2a-js/sdk/server'
-import type { AgentEvent } from './types'
+import { A2aProgress } from './a2a-progress'
 import { negotiateOutput } from './output-modes'
 import {
   currentCtx,
@@ -49,11 +49,6 @@ export class HostExecutor implements AgentExecutor {
       supportedCatalogIds,
       agentCatalogIds: this.agentCatalogIds,
     })
-    // Состояние прошлого хода: A2A-SDK грузит прошлый Task по message.taskId,
-    // host прокидывает его в handler (server-side multi-turn/HITL).
-    const priorState = (
-      rc.task?.metadata as Record<string, unknown> | undefined
-    )?.state as Record<string, unknown> | undefined
     const input: AgentInput = {
       text: parsed.text,
       data: parsed.data,
@@ -63,44 +58,13 @@ export class HostExecutor implements AgentExecutor {
       taskId: rc.taskId,
       contextId: rc.contextId,
       negotiation,
-      // A2UI-действие (клик/submit), форварднутое оркестратором — симметрия с AG-UI-путём.
-      ...(parsed.action ? { action: parsed.action } : {}),
-      ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
-      ...(supportedCatalogIds !== undefined ? { supportedCatalogIds } : {}),
-      ...(priorState !== undefined ? { taskState: priorState } : {}),
+      ...optionalInputFields(rc, parsed, accepted, supportedCatalogIds),
     }
 
-    // Промежуточный прогресс/COT агента → A2A `status-update` события (стримятся клиенту на
-    // `message/stream`; на блокирующем `message/send` сворачиваются ResultManager'ом в финальный
-    // Task — поведение прежнее). Лениво публикуем initial working-Task на ПЕРВОМ emit, чтобы у
-    // status-update был совпадающий по id таск; агенты, которые ничего не эмитят, ничего лишнего
-    // не публикуют (нулевое изменение поведения). Форвардим только `node`/`reasoning`
-    // (text/a2ui едут в финальном Task; `tool` — событие оркестратора, не leaf-агента).
-    let workingTaskStarted = false
-    const emit = (e: AgentEvent): void => {
-      if (e.type !== 'node' && e.type !== 'reasoning') return
-      if (!workingTaskStarted) {
-        workingTaskStarted = true
-        bus.publish({
-          kind: 'task',
-          id: rc.taskId,
-          contextId: rc.contextId,
-          status: { state: 'working', timestamp: new Date().toISOString() },
-          history: [],
-          metadata: {},
-        })
-      }
-      const metadata =
-        e.type === 'node' ? { 'ai37/node': e.node } : { 'ai37/reasoning': e.delta }
-      bus.publish({
-        kind: 'status-update',
-        taskId: rc.taskId,
-        contextId: rc.contextId,
-        status: { state: 'working', timestamp: new Date().toISOString() },
-        final: false,
-        metadata,
-      })
-    }
+    // Progress stays native: node/reasoning → status-update, text → artifact-update.
+    // The final Task retains the canonical complete message for send/persistence.
+    const progress = new A2aProgress(rc.taskId, rc.contextId, bus)
+    const emit = progress.emit
 
     // Langfuse v4: turn-спан `{service}:a2a` (slug card.name) — в UI видно, какой агент.
     // Активен на время когниции (LangChain-спаны нестятся под него).
@@ -134,9 +98,28 @@ export class HostExecutor implements AgentExecutor {
     observeTurn(this.service, 'a2a', normFinalState(result.status), (Date.now() - startedAt) / 1000)
 
     // Enforcement: A2UI в Task только если клиент запросил A2UI-mode (иначе — только текст).
+    progress.finish()
     bus.publish(toTask(result, rc.taskId, rc.contextId, negotiation))
     bus.finished()
   }
 
   cancelTask = async (): Promise<void> => {}
+}
+
+/** Preserve negotiated capabilities, A2UI action and server-owned HITL state. */
+function optionalInputFields(
+  rc: RequestContext,
+  parsed: ReturnType<typeof parseA2AMessage>,
+  accepted: string[] | undefined,
+  supportedCatalogIds: string[] | undefined,
+): Pick<AgentInput, 'action' | 'acceptedOutputModes' | 'supportedCatalogIds' | 'taskState'> {
+  const priorState = (
+    rc.task?.metadata as Record<string, unknown> | undefined
+  )?.state as Record<string, unknown> | undefined
+  return {
+    ...(parsed.action ? { action: parsed.action } : {}),
+    ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),
+    ...(supportedCatalogIds !== undefined ? { supportedCatalogIds } : {}),
+    ...(priorState !== undefined ? { taskState: priorState } : {}),
+  }
 }

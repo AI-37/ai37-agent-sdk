@@ -255,9 +255,7 @@ def _parse_path(path: str) -> _Parsed:
             return _Parsed("project", project_slug=project_slug)
         if seg[i + 2] == "threads":
             if i + 3 < len(seg):
-                return _Parsed(
-                    "project-thread", project_slug=project_slug, thread_slug=seg[i + 3]
-                )
+                return _Parsed("project-thread", project_slug=project_slug, thread_slug=seg[i + 3])
             return _Parsed("project-threads", project_slug=project_slug)
         return _Parsed("unknown")
     if i + 1 < len(seg):

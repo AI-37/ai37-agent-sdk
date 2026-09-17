@@ -414,9 +414,7 @@ class _Emitter:
                 )
             )
             self._put(
-                ReasoningEndEvent(
-                    type=EventType.REASONING_END, message_id=self._reasoning_block_id
-                )
+                ReasoningEndEvent(type=EventType.REASONING_END, message_id=self._reasoning_block_id)
             )
             self._reasoning_message_id = None
             self._reasoning_block_id = None
@@ -444,9 +442,7 @@ class _Emitter:
             self._put(ToolCallEndEvent(type=EventType.TOOL_CALL_END, tool_call_id=tool_id))
             if event.result is not None:
                 content = (
-                    event.result
-                    if isinstance(event.result, str)
-                    else json.dumps(event.result)
+                    event.result if isinstance(event.result, str) else json.dumps(event.result)
                 )
                 self._put(
                     ToolCallResultEvent(
@@ -576,9 +572,7 @@ async def _run_turn(
             )
         else:
             queue.put_nowait(
-                RunFinishedEvent(
-                    type=EventType.RUN_FINISHED, thread_id=thread_id, run_id=run_id
-                )
+                RunFinishedEvent(type=EventType.RUN_FINISHED, thread_id=thread_id, run_id=run_id)
             )
         return result
 
