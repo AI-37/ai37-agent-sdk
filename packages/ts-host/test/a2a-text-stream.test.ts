@@ -88,11 +88,49 @@ describe('native A2A answer stream', () => {
         emit({ type: 'node', node: 'work' })
         emit({ type: 'reasoning', delta: 'checking' })
         emit({ type: 'text', delta: '' })
+        emit({ type: 'tool', phase: 'start', name: 'lookup' })
         return { status: 'completed', message: 'final' }
       },
     }).execute(requestContext, bus)
     expect(events.filter((event) => event.kind === 'artifact-update')).toEqual([])
     expect(events.filter((event) => event.kind === 'status-update')).toHaveLength(2)
     expect(events.at(-1)).toMatchObject({ status: { message: { parts: [{ kind: 'text', text: 'final' }] } } })
+  })
+
+  it('keeps simultaneous executions live and their answer artifacts independent', async () => {
+    const first = testBus()
+    const second = testBus()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => { release = resolve })
+    const executor = new HostExecutor({
+      async run({ input, emit }) {
+        emit({ type: 'text', delta: input.taskId })
+        await gate
+        return { status: 'completed', message: input.taskId }
+      },
+    })
+    const executions = [
+      executor.execute(requestContext, first.bus),
+      executor.execute({ ...requestContext, taskId: 'task-other', contextId: 'chat-other' }, second.bus),
+    ]
+    try {
+      await vi.waitFor(() => {
+        for (const { events, finished } of [first, second]) {
+          expect(events.filter((event) => event.kind === 'artifact-update' && event.append)).toHaveLength(1)
+          expect(finished).not.toHaveBeenCalled()
+        }
+      })
+    } finally {
+      release()
+      await Promise.all(executions)
+    }
+    for (const [index, { events }] of [first, second].entries()) {
+      const taskId = index === 0 ? 'task-stream' : 'task-other'
+      const chunks = events.filter((event) => event.kind === 'artifact-update')
+      expect(chunks).toHaveLength(3)
+      expect(chunks.every((event) => event.artifact.artifactId === `answer-${taskId}`)).toBe(true)
+      expect(chunks[1].artifact.parts).toEqual([{ kind: 'text', text: taskId }])
+      expect(chunks[2].lastChunk).toBe(true)
+    }
   })
 })

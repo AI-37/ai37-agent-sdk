@@ -3,7 +3,7 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
-## [Unreleased]
+## [0.1.0-alpha.43]
 
 ### Fixed
 - A2A now forwards `AgentEvent.text` as native `artifact-update` append deltas

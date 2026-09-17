@@ -127,7 +127,7 @@ class AgentInput:
     task_state: dict[str, Any] | None = None
 
 
-# --- AgentEvent: дискриминированный union для стрима прогресса/COT (AG-UI) ---
+# --- AgentEvent: дискриминированный union для стрима прогресса/COT (A2A и AG-UI) ---
 
 
 @dataclass
@@ -182,7 +182,7 @@ class AgentResult:
 @dataclass
 class AgentRequest:
     input: AgentInput
-    #: стрим промежуточных событий (AG-UI). Для A2A non-stream — no-op.
+    #: Стрим промежуточных событий (A2A и AG-UI); итоговый message остаётся каноническим.
     emit: Callable[[AgentEvent], None]
     #: verified context из ai37-agent-sdk (claims + billing). ``None`` при auth.required=false.
     ctx: AgentContext | None = None

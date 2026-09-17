@@ -11,11 +11,12 @@
   * ``node``/``reasoning`` → ``update_status(WORKING, metadata={'ai37/node'|'ai37/reasoning'})``
     (стрим-событие ``TaskStatusUpdateEvent``); persist-state — в data-part финального артефакта
     (``TaskStatus`` не имеет metadata; ``TaskUpdater`` не пишет ``Task.metadata``).
+  * ``text`` → нативные append-дельты артефакта ``answer`` до завершения handler'а;
+    финальный ``status.message`` сохраняет полный канонический ответ.
 """
 
 from __future__ import annotations
 
-import asyncio
 import time
 from typing import Any
 
@@ -26,14 +27,13 @@ from a2a.types import Task, TaskState, TaskStatus
 from ai37_agent_sdk import BillingExecutionDeniedError
 from google.protobuf.json_format import MessageToDict
 
+from .a2a_progress import A2aProgress
 from .als import current_accepted_output_modes, current_ctx
 from .build_task import data_part, resolve_result_a2ui, text_part
 from .metrics import norm_final_state, observe_turn, record_billing_denied
 from .output_modes import negotiate_output
 from .parse import parse_a2a_message
-from .types import AgentEvent, AgentHandler, AgentInput, AgentRequest, AgentResult
-
-_STOP = object()
+from .types import AgentHandler, AgentInput, AgentRequest, AgentResult
 
 
 class HostExecutor(AgentExecutor):
@@ -130,35 +130,11 @@ class HostExecutor(AgentExecutor):
             task_state=_read_prior_state(context),
         )
 
-        # sync emit → async TaskUpdater: очередь + фоновый drain (порядок сохраняется).
-        queue: asyncio.Queue[Any] = asyncio.Queue()
-
-        def emit(event: AgentEvent) -> None:
-            if getattr(event, "type", None) in ("node", "reasoning"):
-                queue.put_nowait(event)
-
-        async def drain() -> None:
-            started = False
-            while True:
-                event = await queue.get()
-                if event is _STOP:
-                    return
-                if not started:
-                    started = True
-                    await updater.start_work()
-                metadata = (
-                    {"ai37/node": event.node}
-                    if event.type == "node"
-                    else {"ai37/reasoning": event.delta}
-                )
-                await updater.update_status(TaskState.TASK_STATE_WORKING, metadata=metadata)
-
-        drain_task = asyncio.create_task(drain())
+        progress = A2aProgress(updater, task_id)
         try:
-            result = await self._run_handler(agent_input, ctx, emit)
+            result = await self._run_handler(agent_input, ctx, progress.emit)
         finally:
-            queue.put_nowait(_STOP)
-            await drain_task
+            await progress.finish()
 
         await self._finalize(updater, result, negotiation)
         # RED-метрики хода (a2a): rate + errors + duration + terminal-state.
