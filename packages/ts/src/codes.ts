@@ -1,6 +1,7 @@
 // СГЕНЕРИРОВАНО scripts/codegen.mjs из contract/feature-codes.json. НЕ редактировать вручную.
 
 export enum BillingFeatureCode {
+  DaylightCalcAgent = 'daylight-calc-agent',
   ElevatorCalcAgent = 'elevator-calc-agent',
   HvacCalcAgent = 'hvac-calc-agent',
   MinstroyAgent = 'minstroy-agent',
@@ -12,6 +13,7 @@ export enum BillingFeatureCode {
 }
 
 export enum BillingPrivilegeCode {
+  DaylightCalcAllowed = 'daylight-calc-allowed',
   ElevatorCalcAllowed = 'elevator-calc-allowed',
   HvacCalcAllowed = 'hvac-calc-allowed',
   MaxApiKeys = 'max-api-keys',
