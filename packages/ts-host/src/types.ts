@@ -198,7 +198,8 @@ export interface AgentInput {
  *  - `text` → `TEXT_MESSAGE_CONTENT`; `a2ui` → `ACTIVITY_SNAPSHOT('a2ui-surface')`.
  *
  * На A2A-пути (`a2a-executor.ts`) `node`/`reasoning` форвардятся вверх как `status-update`
- * с `metadata['ai37/node'|'ai37/reasoning']` (стрим-relay их поднимает в emit оркестратора).
+ * с `metadata['ai37/node'|'ai37/reasoning']`; `text` — как `artifact-update` с `append:true`.
+ * Стрим-relay поднимает эти события в emit оркестратора; финальный Task хранит готовый message.
  */
 export type AgentEvent =
   | { type: 'node'; node: string }

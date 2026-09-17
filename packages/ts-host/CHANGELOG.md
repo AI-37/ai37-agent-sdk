@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [Unreleased]
+
+### Fixed
+- A2A now forwards `AgentEvent.text` as native `artifact-update` append deltas
+  before handler completion, with one stable answer artifact and a final chunk.
+  The terminal Task keeps the canonical complete message for persistence and
+  non-streaming callers; relay extraction does not duplicate the answer.
+
 ## [0.1.0-alpha.42]
 
 ### Changed
