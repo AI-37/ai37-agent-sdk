@@ -52,8 +52,10 @@ def client_supports_catalog(
     supported_catalog_ids: Sequence[str] | None,
     agent_catalog_id: str | None,
 ) -> bool:
-    return bool(agent_catalog_id) and isinstance(supported_catalog_ids, list | tuple) and (
-        agent_catalog_id in supported_catalog_ids
+    return (
+        bool(agent_catalog_id)
+        and isinstance(supported_catalog_ids, list | tuple)
+        and (agent_catalog_id in supported_catalog_ids)
     )
 
 

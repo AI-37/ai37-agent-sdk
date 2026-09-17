@@ -106,9 +106,7 @@ async def test_list_filters_by_status(store: RedisTaskStore) -> None:
     ctx = _ctx("alice")
     await store.save(_task("t1", state=a2a_pb2.TASK_STATE_WORKING), ctx)
     await store.save(_task("t2", state=a2a_pb2.TASK_STATE_COMPLETED), ctx)
-    resp = await store.list(
-        a2a_pb2.ListTasksRequest(status=a2a_pb2.TASK_STATE_COMPLETED), ctx
-    )
+    resp = await store.list(a2a_pb2.ListTasksRequest(status=a2a_pb2.TASK_STATE_COMPLETED), ctx)
     assert [t.id for t in resp.tasks] == ["t2"]
 
 

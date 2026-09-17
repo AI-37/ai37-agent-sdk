@@ -47,9 +47,7 @@ def _agent_card() -> AgentCard:
         name="test-agent",
         description="test",
         version="0.0.0",
-        supported_interfaces=[
-            AgentInterface(url="http://local/a2a", protocol_binding="JSONRPC")
-        ],
+        supported_interfaces=[AgentInterface(url="http://local/a2a", protocol_binding="JSONRPC")],
         capabilities=AgentCapabilities(streaming=True),
         default_input_modes=["text/plain"],
         default_output_modes=["text/markdown", "text/plain"],
@@ -66,9 +64,7 @@ def _message() -> Message:
 
 async def _stream_states() -> list[str]:
     handler = DefaultRequestHandlerV2(
-        agent_executor=HostExecutor(
-            _Completed(), agent_text_modes=["text/markdown", "text/plain"]
-        ),
+        agent_executor=HostExecutor(_Completed(), agent_text_modes=["text/markdown", "text/plain"]),
         task_store=InMemoryTaskStore(),
         agent_card=_agent_card(),
     )
@@ -117,9 +113,7 @@ class _TwoStep:
 
 async def _resume_task_events() -> list[dict[str, Any]]:
     handler = DefaultRequestHandlerV2(
-        agent_executor=HostExecutor(
-            _TwoStep(), agent_text_modes=["text/markdown", "text/plain"]
-        ),
+        agent_executor=HostExecutor(_TwoStep(), agent_text_modes=["text/markdown", "text/plain"]),
         task_store=InMemoryTaskStore(),
         agent_card=_agent_card(),
     )
