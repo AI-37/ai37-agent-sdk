@@ -16,7 +16,6 @@ class BillingPrivilegeCode(str, Enum):
     DaylightCalcAllowed = "daylight-calc-allowed"
     ElevatorCalcAllowed = "elevator-calc-allowed"
     HvacCalcAllowed = "hvac-calc-allowed"
-    HvacCalcAllowed = "hvac-calc-allowed"
     MinstroyCheckInn = "minstroy-check-inn"
     MinstroyPriceMonitoring = "minstroy-price-monitoring"
     PdaiDoc152FzAllowed = "pdai-doc-152fz-allowed"
