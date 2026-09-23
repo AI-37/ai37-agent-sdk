@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.22] - 2026-09-23
+
+### Added
+
+- Фича `daylight-calc-agent` и привилегия `daylight-calc-allowed` в `BillingFeatureCode` /
+  `BillingPrivilegeCode` — биллинг агента расчёта КЕО (план docs#361).
+
 ## [0.1.0-alpha.21] - 2026-09-23
 
 ### Added

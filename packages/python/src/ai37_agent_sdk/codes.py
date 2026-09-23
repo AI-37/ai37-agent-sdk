@@ -2,6 +2,7 @@
 from enum import Enum
 
 class BillingFeatureCode(str, Enum):
+    DaylightCalcAgent = "daylight-calc-agent"
     ElevatorCalcAgent = "elevator-calc-agent"
     HvacCalcAgent = "hvac-calc-agent"
     MinstroyAgent = "minstroy-agent"
@@ -13,6 +14,7 @@ class BillingFeatureCode(str, Enum):
 
 
 class BillingPrivilegeCode(str, Enum):
+    DaylightCalcAllowed = "daylight-calc-allowed"
     ElevatorCalcAllowed = "elevator-calc-allowed"
     HvacCalcAllowed = "hvac-calc-allowed"
     MaxApiKeys = "max-api-keys"
