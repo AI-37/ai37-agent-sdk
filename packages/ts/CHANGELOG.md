@@ -3,6 +3,52 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.21] - 2026-09-23
+
+### Added
+
+- Код фичи `org-limits` и привилегии `max-users` / `max-api-keys` в `BillingFeatureCode` /
+  `BillingPrivilegeCode` — источник истины для тарифных лимитов на участников организации и
+  активные API-ключи (план `spai-org-limits-and-ip-tariff.md`, §3.6). Кода, который читает
+  константы, в SDK нет: серверный гейт делается отдельно, значения по планам — в `infra`.
+
+## [0.1.0-alpha.20] - 2026-09-12
+
+### Added
+
+- Привилегия `minstroy-price-monitoring` в `BillingPrivilegeCode` — мониторинг цен агента Минстроя.
+
+## [0.1.0-alpha.19] - 2026-08-27
+
+### Added
+
+- Фича `hvac-calc-agent` и привилегия `hvac-calc-allowed` — биллинг агента расчёта ОВиК.
+
+## [0.1.0-alpha.18] - 2026-08-20
+
+### Added
+
+- Фича `pdai-site-check` и привилегия `pdai-site-check-allowed` — проверка сайта на соответствие
+  требованиям (PD-AI).
+
+## [0.1.0-alpha.17] - 2026-08-20
+
+### Added
+
+- Фичи `pdai-doc-152fz` / `pdai-doc-187fz` и привилегии `pdai-doc-152fz-allowed` /
+  `pdai-doc-187fz-allowed` — генерация документов PD-AI по 152-ФЗ и 187-ФЗ.
+
+## [0.1.0-alpha.16] - 2026-08-13
+
+### Changed
+
+- JWT-верификатор мемоизируется между запросами (`auth/verifierCache.ts`): один экземпляр на
+  процесс на каждый уникальный состав auth-настроек, ключ кэша — детерминированный JSON из
+  `issuer`/`audience`/`jwksUrl`/`issuers[]`/`introspection`/`leeway`. JWKS-кэш `jose` живёт в
+  замыкании key-резолвера, поэтому долгоживущий верификатор убирает поход за JWKS на каждый
+  запрос. Несериализуемые конфиги (`jwks`-набор или `keyResolver` в `issuers[]`) не кэшируются
+  и собираются заново — это тестовые и инъекционные пути, в сеть они не ходят.
+
 ## [0.1.0-alpha.15] - 2026-08-10
 
 ### Added
