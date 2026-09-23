@@ -40,6 +40,15 @@ export interface JwtVerifierOptions {
   jwks?: JSONWebKeySet
   /** Готовый key-resolver jose (инъекция; имеет приоритет). */
   keyResolver?: JWTVerifyGetKey
+  /**
+   * Какие claim обязаны присутствовать строкой. По умолчанию `['sub','org_id','billing_org_id']` —
+   * арендаторский токен без организации бессмыслен.
+   *
+   * Набор задаёт вызывающий, потому что не у всякого субъекта есть организация: платформенный
+   * оператор объявляет платформенную область вместо арендаторской, и требовать с него `org_id`
+   * значило бы изготавливать фиктивную организацию ради прохода верификатора.
+   */
+  requiredClaims?: readonly string[]
 }
 
 export interface JwtVerifier {
@@ -60,4 +69,6 @@ export interface MultiIssuerVerifierOptions {
   issuers: IssuerConfig[]
   /** Допуск по времени (сек), применяется ко всем issuer'ам. По умолчанию 60. */
   leeway?: number
+  /** Обязательные claim, применяются ко всем issuer'ам. См. `JwtVerifierOptions.requiredClaims`. */
+  requiredClaims?: readonly string[]
 }

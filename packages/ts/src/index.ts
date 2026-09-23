@@ -12,3 +12,4 @@ export type {
   ReportUsageInput,
 } from './context'
 export * from './output-modes'
+export * from './policy'

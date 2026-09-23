@@ -33,7 +33,7 @@ async function setup() {
   }
 
   const verifier = createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, jwks })
-  return { sign, verifier }
+  return { sign, verifier, jwks }
 }
 
 const baseClaims = {
@@ -42,6 +42,43 @@ const baseClaims = {
   billing_org_id: 'org-1',
   app_id: 'sp-ai',
 }
+
+describe('JwtVerifier: requiredClaims', () => {
+  it('по умолчанию требует арендаторские claim — поведение не изменилось', async () => {
+    const { sign, verifier } = await setup()
+    const token = await sign({ sub: 'operator-1' })
+    await expect(verifier.verify(token)).rejects.toMatchObject({
+      name: 'AuthError',
+      code: 'missing_claim',
+    })
+  })
+
+  it('платформенному оператору достаточно sub: организации у него нет', async () => {
+    const { sign, jwks } = await setup()
+    const admin = createJwtVerifier({
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      jwks,
+      requiredClaims: ['sub'],
+    })
+    const claims = await admin.verify(await sign({ sub: 'operator-1', platform_role: 'operator' }))
+    expect(claims.sub).toBe('operator-1')
+    expect(claims.platform_role).toBe('operator')
+  })
+
+  it('сокращённый набор не отменяет проверку самого набора', async () => {
+    const { sign, jwks } = await setup()
+    const admin = createJwtVerifier({
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      jwks,
+      requiredClaims: ['sub', 'platform_role'],
+    })
+    await expect(admin.verify(await sign({ sub: 'operator-1' }))).rejects.toMatchObject({
+      code: 'missing_claim',
+    })
+  })
+})
 
 describe('JwtVerifier', () => {
   it('верифицирует валидный токен и возвращает claims', async () => {

@@ -13,6 +13,9 @@ import type {
   MultiIssuerVerifierOptions,
 } from './types'
 
+/** Обязательные claim арендаторского токена — поведение всех существующих верификаторов. */
+const DEFAULT_REQUIRED_CLAIMS = ['sub', 'org_id', 'billing_org_id'] as const
+
 /**
  * Верификатор user-JWT через JWKS. Делегирует кэш ключей (по kid, ротация, single-flight)
  * библиотеке jose. Источник ключей — удалённый jwksUrl, локальный набор jwks или инъекция keyResolver.
@@ -22,6 +25,7 @@ export class JwksJwtVerifier implements JwtVerifier {
   private readonly audience: string | string[]
   private readonly leeway: number
   private readonly keyResolver: JWTVerifyGetKey
+  private readonly requiredClaims: readonly string[]
 
   constructor(options: JwtVerifierOptions) {
     if (!options.issuer?.trim()) {
@@ -37,6 +41,7 @@ export class JwksJwtVerifier implements JwtVerifier {
     this.issuer = options.issuer
     this.audience = options.audience
     this.leeway = options.leeway ?? 60
+    this.requiredClaims = options.requiredClaims ?? DEFAULT_REQUIRED_CLAIMS
 
     if (options.keyResolver) {
       this.keyResolver = options.keyResolver
@@ -69,7 +74,7 @@ export class JwksJwtVerifier implements JwtVerifier {
       throw new AuthError('JWT verification failed', 'invalid_token', { cause })
     }
 
-    for (const required of ['sub', 'org_id', 'billing_org_id'] as const) {
+    for (const required of this.requiredClaims) {
       if (typeof payload[required] !== 'string' || !payload[required]) {
         throw new AuthError(
           `JWT missing required claim: ${required}`,
@@ -115,7 +120,11 @@ export class MultiIssuerJwtVerifier implements JwtVerifier {
       }
       this.byIssuer.set(
         cfg.issuer,
-        new JwksJwtVerifier({ ...cfg, leeway: options.leeway }),
+        new JwksJwtVerifier({
+          ...cfg,
+          leeway: options.leeway,
+          requiredClaims: options.requiredClaims,
+        }),
       )
     }
   }
