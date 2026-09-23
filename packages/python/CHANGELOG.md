@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a14] - 2026-09-23
+
+### Added
+
+- Фича `daylight-calc-agent` и привилегия `daylight-calc-allowed` (парити с TS
+  `0.1.0-alpha.22`) — биллинг агента расчёта КЕО (план docs#361).
+
 ## [0.1.0a13] - 2026-09-23
 
 ### Added
