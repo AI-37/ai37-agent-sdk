@@ -194,6 +194,29 @@ describe('MultiIssuerJwtVerifier', () => {
     expect(claims.billing_org_id).toBe('org-1')
   })
 
+  it('requiredClaims доезжает до каждого issuer, а не теряется по дороге', async () => {
+    const sp = await setupKeyset('sp-key')
+    const widget = await setupKeyset('widget-key')
+    const admin = createMultiIssuerVerifier({
+      issuers: [
+        { issuer: ISSUER, audience: AUDIENCE, jwks: sp.jwks },
+        { issuer: WIDGET_ISSUER, audience: WIDGET_AUDIENCE, jwks: widget.jwks },
+      ],
+      requiredClaims: ['sub'],
+    })
+    const operator = { sub: 'operator-1', platform_role: 'operator' }
+    expect((await admin.verify(await sp.sign(operator, ISSUER, AUDIENCE))).sub).toBe('operator-1')
+    expect(
+      (await admin.verify(await widget.sign(operator, WIDGET_ISSUER, WIDGET_AUDIENCE))).sub,
+    ).toBe('operator-1')
+  })
+
+  it('без requiredClaims мульти-issuer требует арендаторские claim по-прежнему', async () => {
+    const { sp, verifier } = await setupMulti()
+    const token = await sp.sign({ sub: 'operator-1' }, ISSUER, AUDIENCE)
+    await expect(verifier.verify(token)).rejects.toMatchObject({ code: 'missing_claim' })
+  })
+
   it('отклоняет недоверенный issuer', async () => {
     const { sp, verifier } = await setupMulti()
     const token = await sp.sign(baseClaims, 'https://evil.example/', AUDIENCE)
