@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 import jwt
@@ -11,6 +11,7 @@ from .types import Claims
 
 KeyResolver = Callable[[str], Any]
 
+#: Обязательные claim арендаторского токена — поведение всех существующих верификаторов.
 _REQUIRED_CLAIMS = ("sub", "org_id", "billing_org_id")
 
 
@@ -28,7 +29,15 @@ class JwksJwtVerifier:
         key_resolver: KeyResolver | None = None,
         leeway: int = 60,
         algorithms: list[str] | None = None,
+        required_claims: Sequence[str] | None = None,
     ) -> None:
+        """``required_claims`` — какие claim обязаны присутствовать строкой.
+
+        По умолчанию ``("sub", "org_id", "billing_org_id")``: арендаторский токен без организации
+        бессмыслен. Набор задаёт вызывающий, потому что не у всякого субъекта есть организация:
+        платформенный оператор объявляет платформенную область вместо арендаторской, и требовать
+        с него ``org_id`` значило бы изготавливать фиктивную организацию ради прохода верификатора.
+        """
         if not issuer or not issuer.strip():
             raise AuthError("JwtVerifier: issuer is required", "config")
         if audience is None or (isinstance(audience, list) and not audience):
@@ -38,6 +47,9 @@ class JwksJwtVerifier:
         self._audience = audience
         self._leeway = leeway
         self._algorithms = algorithms or ["RS256"]
+        self._required_claims = tuple(
+            _REQUIRED_CLAIMS if required_claims is None else required_claims
+        )
 
         if key_resolver is not None:
             self._resolver: KeyResolver = key_resolver
@@ -85,7 +97,7 @@ class JwksJwtVerifier:
         except Exception as cause:  # noqa: BLE001 — любая ошибка верификации → AuthError
             raise AuthError("JWT verification failed", "invalid_token", cause=cause) from cause
 
-        for required in _REQUIRED_CLAIMS:
+        for required in self._required_claims:
             value = payload.get(required)
             if not isinstance(value, str) or not value:
                 raise AuthError(f"JWT missing required claim: {required}", "missing_claim")

@@ -33,7 +33,7 @@ async function setup() {
   }
 
   const verifier = createJwtVerifier({ issuer: ISSUER, audience: AUDIENCE, jwks })
-  return { sign, verifier }
+  return { sign, verifier, jwks }
 }
 
 const baseClaims = {
@@ -42,6 +42,43 @@ const baseClaims = {
   billing_org_id: 'org-1',
   app_id: 'sp-ai',
 }
+
+describe('JwtVerifier: requiredClaims', () => {
+  it('по умолчанию требует арендаторские claim — поведение не изменилось', async () => {
+    const { sign, verifier } = await setup()
+    const token = await sign({ sub: 'operator-1' })
+    await expect(verifier.verify(token)).rejects.toMatchObject({
+      name: 'AuthError',
+      code: 'missing_claim',
+    })
+  })
+
+  it('платформенному оператору достаточно sub: организации у него нет', async () => {
+    const { sign, jwks } = await setup()
+    const admin = createJwtVerifier({
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      jwks,
+      requiredClaims: ['sub'],
+    })
+    const claims = await admin.verify(await sign({ sub: 'operator-1', platform_role: 'operator' }))
+    expect(claims.sub).toBe('operator-1')
+    expect(claims.platform_role).toBe('operator')
+  })
+
+  it('сокращённый набор не отменяет проверку самого набора', async () => {
+    const { sign, jwks } = await setup()
+    const admin = createJwtVerifier({
+      issuer: ISSUER,
+      audience: AUDIENCE,
+      jwks,
+      requiredClaims: ['sub', 'platform_role'],
+    })
+    await expect(admin.verify(await sign({ sub: 'operator-1' }))).rejects.toMatchObject({
+      code: 'missing_claim',
+    })
+  })
+})
 
 describe('JwtVerifier', () => {
   it('верифицирует валидный токен и возвращает claims', async () => {
@@ -155,6 +192,29 @@ describe('MultiIssuerJwtVerifier', () => {
     const token = await widget.sign(baseClaims, WIDGET_ISSUER, WIDGET_AUDIENCE)
     const claims = await verifier.verify(token)
     expect(claims.billing_org_id).toBe('org-1')
+  })
+
+  it('requiredClaims доезжает до каждого issuer, а не теряется по дороге', async () => {
+    const sp = await setupKeyset('sp-key')
+    const widget = await setupKeyset('widget-key')
+    const admin = createMultiIssuerVerifier({
+      issuers: [
+        { issuer: ISSUER, audience: AUDIENCE, jwks: sp.jwks },
+        { issuer: WIDGET_ISSUER, audience: WIDGET_AUDIENCE, jwks: widget.jwks },
+      ],
+      requiredClaims: ['sub'],
+    })
+    const operator = { sub: 'operator-1', platform_role: 'operator' }
+    expect((await admin.verify(await sp.sign(operator, ISSUER, AUDIENCE))).sub).toBe('operator-1')
+    expect(
+      (await admin.verify(await widget.sign(operator, WIDGET_ISSUER, WIDGET_AUDIENCE))).sub,
+    ).toBe('operator-1')
+  })
+
+  it('без requiredClaims мульти-issuer требует арендаторские claim по-прежнему', async () => {
+    const { sp, verifier } = await setupMulti()
+    const token = await sp.sign({ sub: 'operator-1' }, ISSUER, AUDIENCE)
+    await expect(verifier.verify(token)).rejects.toMatchObject({ code: 'missing_claim' })
   })
 
   it('отклоняет недоверенный issuer', async () => {
