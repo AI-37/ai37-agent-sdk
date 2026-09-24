@@ -126,4 +126,6 @@ def _to_context_file(raw: dict[str, Any]) -> ContextFile:
         scope=raw.get("scope", "chat"),
         summary=raw.get("summary"),
         is_large=raw.get("isLarge"),
+        mime=raw.get("mime"),
+        has_raw=raw.get("hasRaw"),
     )

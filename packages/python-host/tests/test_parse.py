@@ -5,6 +5,8 @@ from google.protobuf.json_format import ParseDict
 
 from ai37_agent_host.parse import parse_a2a_message
 
+XLSX_MIME = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+
 
 def _rc(payload: dict) -> SimpleNamespace:
     return SimpleNamespace(message=ParseDict(payload, Message(), ignore_unknown_fields=True))
@@ -32,6 +34,8 @@ def test_parse_ai37_metadata_and_context_files():
                             "name": "list.xlsx",
                             "scope": "chat",
                             "isLarge": True,
+                            "mime": XLSX_MIME,
+                            "hasRaw": True,
                         }
                     ],
                     "trace_id": "abc",
@@ -51,6 +55,8 @@ def test_parse_ai37_metadata_and_context_files():
     assert cf.name == "list.xlsx"
     assert cf.scope == "chat"
     assert cf.is_large is True
+    assert cf.mime == XLSX_MIME
+    assert cf.has_raw is True
     assert p.metadata.trace_id == "abc"
     assert p.metadata.accepted_output_modes == ["text/markdown"]
     assert p.supported_catalog_ids == ["u1", "u2"]
@@ -96,3 +102,23 @@ def test_message_metadata_overrides_data():
     )
     p = parse_a2a_message(rc)
     assert p.metadata.tenant == "from_msg"
+
+
+def test_context_file_without_mime_stays_none():
+    """Продюсер постарше поля не шлёт — агент обязан увидеть None, а не упасть."""
+    rc = _rc(
+        {
+            "role": "ROLE_USER",
+            "parts": [{"text": "проверь"}],
+            "metadata": {
+                "ai37": {
+                    "context_files": [
+                        {"ref": "chat-attachment:1", "name": "list.xlsx", "scope": "chat"}
+                    ],
+                },
+            },
+        }
+    )
+    cf = parse_a2a_message(rc).metadata.context_files[0]
+    assert cf.mime is None
+    assert cf.has_raw is None

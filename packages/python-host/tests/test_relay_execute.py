@@ -89,7 +89,15 @@ async def test_completed_with_a2ui_and_progress_and_forward():
     req = RemoteA2aRequest(
         query="проверь контрагентов",
         context_id="ctx1",
-        context_files=[ContextFile(ref="chat-attachment:1", name="list.xlsx", scope="chat")],
+        context_files=[
+            ContextFile(
+                ref="chat-attachment:1",
+                name="list.xlsx",
+                scope="chat",
+                mime="text/csv",
+                has_raw=True,
+            )
+        ],
         supported_catalog_ids=["cat-v2"],
     )
     res = await execute_remote_a2a(client, req, on_event=lambda e: seen.append((e.type, e.value)))
@@ -103,7 +111,12 @@ async def test_completed_with_a2ui_and_progress_and_forward():
 
     sent = MessageToDict(client.sent[0], preserving_proto_field_name=False)
     meta = sent["message"]["metadata"]
-    assert meta["ai37"]["context_files"][0]["ref"] == "chat-attachment:1"
+    forwarded = meta["ai37"]["context_files"][0]
+    assert forwarded["ref"] == "chat-attachment:1"
+    # Субагент разбирает вложения теми же признаками, что и родитель: уронить их на relay значит
+    # вернуть ему выбор «первый попавшийся файл».
+    assert forwarded["mime"] == "text/csv"
+    assert forwarded["hasRaw"] is True
     assert meta["a2uiClientCapabilities"]["v0.9"]["supportedCatalogIds"] == ["cat-v2"]
 
 
