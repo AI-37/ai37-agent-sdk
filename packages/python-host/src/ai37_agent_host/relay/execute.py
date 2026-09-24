@@ -117,6 +117,10 @@ def _context_file_dict(f: ContextFile) -> dict[str, Any]:
         out["summary"] = f.summary
     if f.is_large is not None:
         out["isLarge"] = f.is_large
+    if f.mime is not None:
+        out["mime"] = f.mime
+    if f.has_raw is not None:
+        out["hasRaw"] = f.has_raw
     return out
 
 
