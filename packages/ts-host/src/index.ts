@@ -137,3 +137,8 @@ export type {
   AgentRequest,
   AgentHandler,
 } from './types'
+
+// Реестр метрик хоста — чтобы сервис на этом хосте мог положить свою серию в тот же `/metrics`.
+// Иначе ему пришлось бы поднимать второй prom-client, который никто не скрейпит: путь `/metrics`
+// хост занимает сам. Имя длиннее, чем внутри пакета: у потребителя слово `registry` слишком занятое.
+export { registry as hostMetricsRegistry, serviceLabel } from './metrics'

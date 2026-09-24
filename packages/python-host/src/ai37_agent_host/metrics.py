@@ -14,7 +14,14 @@ from __future__ import annotations
 import re
 from collections.abc import Callable
 
-from prometheus_client import Counter, Histogram
+from prometheus_client import REGISTRY, Counter, Histogram
+
+#: Реестр, который отдаёт ``GET /metrics`` хоста. В отличие от TS-хоста здесь это глобальный
+#: default-реестр ``prometheus_client``: ``create_agent_host`` монтирует ``make_asgi_app()`` без
+#: аргумента, а метрика, созданная где угодно в процессе, попадает в него сама. Имя экспортируется
+#: не ради механики, а ради контракта — сервис пишет ``registers=[host_metrics_registry]`` явно и
+#: переживёт переход хоста на собственный реестр. Зеркало ``hostMetricsRegistry`` в ts-host.
+registry = REGISTRY
 
 _requests_total = Counter(
     "ai37_agent_requests_total",
