@@ -177,7 +177,12 @@ class HostExecutor(AgentExecutor):
             payload: dict[str, Any] = {"a2ui": followup or a2ui}
             if result.state is not None:
                 payload["state"] = result.state
-            await updater.add_artifact(parts=[data_part(payload)], name="input-required")
+            # artifact_id закреплён: без него add_artifact сочиняет новый UUID на каждый ход, и
+            # список артефактов растёт вместе с диалогом. С постоянным id менеджер задач артефакт
+            # ЗАМЕНЯЕТ — состояние всегда одно и всегда свежее, как у ветки completed ниже.
+            await updater.add_artifact(
+                parts=[data_part(payload)], artifact_id="input-required", name="input-required"
+            )
             await updater.requires_input(
                 message=self._agent_msg(updater, result.message or "Уточните")
             )
@@ -190,7 +195,9 @@ class HostExecutor(AgentExecutor):
             working: dict[str, Any] = {"a2ui": a2ui, "result": result.result}
             if result.state is not None:
                 working["state"] = result.state
-            await updater.add_artifact(parts=[data_part(working)], name="working")
+            await updater.add_artifact(
+                parts=[data_part(working)], artifact_id="working", name="working"
+            )
             await updater.update_status(
                 TaskState.TASK_STATE_WORKING,
                 message=self._agent_msg(updater, result.message) if result.message else None,
@@ -228,7 +235,15 @@ def _read_accepted_output_modes(context: RequestContext) -> list[str] | None:
 
 
 def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
-    """Persist-state прошлого хода: из data-part артефакта current_task."""
+    """Persist-state прошлого хода: из data-part артефакта current_task.
+
+    Артефакты перебираем С КОНЦА — нужен последний записанный, а не первый. Список накапливается
+    за диалог, и чтение сверху возвращало состояние САМОГО СТАРОГО хода на всю жизнь задачи.
+    Прод 24.09.2026 (minstroy): агент на каждом ходе получал `{"phase": "awaiting-signature"}`
+    от первого сообщения, не видел `bulkTaskId` уже запущенного прогона и заводил второй — по тому
+    же файлу и со вторым списанием. Обратный порядок чинит и те задачи, что уже лежат в сторе
+    с накопленными артефактами.
+    """
     task = getattr(context, "current_task", None)
     if task is None:
         return None
@@ -236,8 +251,8 @@ def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
         data = MessageToDict(task, preserving_proto_field_name=False)
     except Exception:  # noqa: BLE001
         return None
-    for artifact in data.get("artifacts", []) or []:
-        for part in artifact.get("parts", []) or []:
+    for artifact in reversed(data.get("artifacts", []) or []):
+        for part in reversed(artifact.get("parts", []) or []):
             payload = part.get("data")
             if isinstance(payload, dict) and isinstance(payload.get("state"), dict):
                 return payload["state"]
