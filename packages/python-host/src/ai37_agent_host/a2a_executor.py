@@ -177,6 +177,12 @@ class HostExecutor(AgentExecutor):
             payload: dict[str, Any] = {"a2ui": followup or a2ui}
             if result.state is not None:
                 payload["state"] = result.state
+            # БЕЗ artifact_id — намеренно. Закрепить его напрашивается (список артефактов растёт
+            # с диалогом), но тогда менеджер задач заменяет артефакт НА МЕСТЕ, по старому индексу
+            # (`task_manager.py`, CopyFrom), и позиция перестаёт означать свежесть. А на этом
+            # держится чтение в `_read_prior_state`: ход input-required → working → input-required
+            # оставил бы свежее состояние в начале списка, а устаревшее — в конце. Рост списка —
+            # вопрос гигиены, и решать его надо отдельным слотом состояния, а не здесь.
             await updater.add_artifact(parts=[data_part(payload)], name="input-required")
             await updater.requires_input(
                 message=self._agent_msg(updater, result.message or "Уточните")
@@ -228,7 +234,21 @@ def _read_accepted_output_modes(context: RequestContext) -> list[str] | None:
 
 
 def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
-    """Persist-state прошлого хода: из data-part артефакта current_task."""
+    """Persist-state прошлого хода: из data-part артефакта current_task.
+
+    Артефакты перебираем С КОНЦА — нужен последний записанный, а не первый. Список накапливается
+    за диалог, и чтение сверху возвращало состояние САМОГО СТАРОГО хода на всю жизнь задачи.
+    Прод 24.09.2026 (minstroy): агент на каждом ходе получал `{"phase": "awaiting-signature"}`
+    от первого сообщения, не видел `bulkTaskId` уже запущенного прогона и заводил второй — по тому
+    же файлу и со вторым списанием. Обратный порядок чинит и те задачи, что уже лежат в сторе
+    с накопленными артефактами.
+
+    Держится это на инварианте: **позиция в списке означает свежесть**, потому что артефакты
+    состояния ДОПИСЫВАЮТСЯ в хвост. Закреплять им `artifact_id` нельзя — менеджер задач заменяет
+    такой артефакт на месте, по старому индексу, и инвариант рушится (см. комментарий в ветке
+    `input-required`). Единственный закреплённый id — `result` у `completed`, и он безопасен:
+    после него задача терминальна, записывать поверх уже нечего.
+    """
     task = getattr(context, "current_task", None)
     if task is None:
         return None
@@ -236,8 +256,8 @@ def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
         data = MessageToDict(task, preserving_proto_field_name=False)
     except Exception:  # noqa: BLE001
         return None
-    for artifact in data.get("artifacts", []) or []:
-        for part in artifact.get("parts", []) or []:
+    for artifact in reversed(data.get("artifacts", []) or []):
+        for part in reversed(artifact.get("parts", []) or []):
             payload = part.get("data")
             if isinstance(payload, dict) and isinstance(payload.get("state"), dict):
                 return payload["state"]
