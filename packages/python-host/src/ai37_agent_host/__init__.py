@@ -32,6 +32,8 @@ from .llm import (
     create_openai_client,
     resolve_llm_config,
 )
+from .metrics import registry as host_metrics_registry
+from .metrics import service_label
 from .observability.trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 from .output_modes import (
     A2UI_CAPABILITIES_VERSION,
@@ -130,6 +132,9 @@ __all__ = [
     "LlmConfigurationError",
     "resolve_llm_config",
     "create_openai_client",
+    # metrics (сервис кладёт свою серию в тот же /metrics)
+    "host_metrics_registry",
+    "service_label",
     # host app
     "create_agent_host",
     "HostExecutor",
