@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.24] - 2026-09-24
+
+### Added
+
+- Per-skill коды агента ОВиК: фичи `hvac-heat-loss` / `hvac-air-exchange` и привилегии
+  `hvac-heat-loss-allowed` / `hvac-air-exchange-allowed` в `BillingFeatureCode` /
+  `BillingPrivilegeCode` (ревью docs#177, канон `ecosystem/v2/04-a2a-conventions.md`,
+  раздел «Per-skill биллинг»). Агентский уровень `hvac-calc-agent` / `hvac-calc-allowed`
+  остаётся фолбэк-гейтом — изменение аддитивное.
+
 ## [0.1.0-alpha.23] - 2026-09-23
 
 ### Added

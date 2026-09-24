@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a16] - 2026-09-24
+
+### Added
+
+- Per-skill коды агента ОВиК: фичи `hvac-heat-loss` / `hvac-air-exchange` и привилегии
+  `hvac-heat-loss-allowed` / `hvac-air-exchange-allowed` (парити с TS `0.1.0-alpha.24`).
+  Агентский уровень `hvac-calc-agent` / `hvac-calc-allowed` остаётся фолбэк-гейтом.
+
 ## [0.1.0a15] - 2026-09-23
 
 ### Added
