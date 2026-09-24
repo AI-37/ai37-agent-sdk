@@ -12,19 +12,9 @@
       "name": "Elevator Calculation Agent"
     },
     {
-      "code": "hvac-air-exchange",
-      "constant": "HvacAirExchange",
-      "name": "HVAC Air Exchange Skill"
-    },
-    {
       "code": "hvac-calc-agent",
       "constant": "HvacCalcAgent",
       "name": "HVAC Calculation Agent"
-    },
-    {
-      "code": "hvac-heat-loss",
-      "constant": "HvacHeatLoss",
-      "name": "HVAC Heat Loss Skill"
     },
     {
       "code": "minstroy-agent",
