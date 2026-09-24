@@ -3,6 +3,17 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.25] - 2026-09-24
+
+### Removed
+
+- Фичи `hvac-heat-loss` и `hvac-air-exchange` из `BillingFeatureCode` (заведены в
+  `0.1.0-alpha.24`, потребителей не успели получить). Скиллы агента ОВиК разделяются
+  привилегиями `hvac-heat-loss-allowed` / `hvac-air-exchange-allowed` ВНУТРИ единственной
+  фичи `hvac-calc-agent` — так же, как `minstroy-check-inn` / `minstroy-price-monitoring`
+  живут внутри `minstroy-agent`. Фича = продаваемый агент, привилегия = состав скиллов;
+  отдельная фича на скилл заставляла бы организацию покупать один агент трижды.
+
 ## [0.1.0-alpha.24] - 2026-09-24
 
 ### Added

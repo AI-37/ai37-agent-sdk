@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a17] - 2026-09-24
+
+### Removed
+
+- Фичи `hvac-heat-loss` и `hvac-air-exchange` из `BillingFeatureCode` (парити с TS
+  `0.1.0-alpha.25`). Скиллы агента ОВиК разделяются привилегиями `hvac-heat-loss-allowed` /
+  `hvac-air-exchange-allowed` внутри единственной фичи `hvac-calc-agent` — по образцу
+  `minstroy-agent`.
+
 ## [0.1.0a16] - 2026-09-24
 
 ### Added

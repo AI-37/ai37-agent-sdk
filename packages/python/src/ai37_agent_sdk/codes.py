@@ -4,9 +4,7 @@ from enum import Enum
 class BillingFeatureCode(str, Enum):
     DaylightCalcAgent = "daylight-calc-agent"
     ElevatorCalcAgent = "elevator-calc-agent"
-    HvacAirExchange = "hvac-air-exchange"
     HvacCalcAgent = "hvac-calc-agent"
-    HvacHeatLoss = "hvac-heat-loss"
     MinstroyAgent = "minstroy-agent"
     OrgLimits = "org-limits"
     PdaiDoc152Fz = "pdai-doc-152fz"
