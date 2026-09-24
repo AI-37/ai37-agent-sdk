@@ -177,12 +177,13 @@ class HostExecutor(AgentExecutor):
             payload: dict[str, Any] = {"a2ui": followup or a2ui}
             if result.state is not None:
                 payload["state"] = result.state
-            # artifact_id закреплён: без него add_artifact сочиняет новый UUID на каждый ход, и
-            # список артефактов растёт вместе с диалогом. С постоянным id менеджер задач артефакт
-            # ЗАМЕНЯЕТ — состояние всегда одно и всегда свежее, как у ветки completed ниже.
-            await updater.add_artifact(
-                parts=[data_part(payload)], artifact_id="input-required", name="input-required"
-            )
+            # БЕЗ artifact_id — намеренно. Закрепить его напрашивается (список артефактов растёт
+            # с диалогом), но тогда менеджер задач заменяет артефакт НА МЕСТЕ, по старому индексу
+            # (`task_manager.py`, CopyFrom), и позиция перестаёт означать свежесть. А на этом
+            # держится чтение в `_read_prior_state`: ход input-required → working → input-required
+            # оставил бы свежее состояние в начале списка, а устаревшее — в конце. Рост списка —
+            # вопрос гигиены, и решать его надо отдельным слотом состояния, а не здесь.
+            await updater.add_artifact(parts=[data_part(payload)], name="input-required")
             await updater.requires_input(
                 message=self._agent_msg(updater, result.message or "Уточните")
             )
@@ -195,9 +196,7 @@ class HostExecutor(AgentExecutor):
             working: dict[str, Any] = {"a2ui": a2ui, "result": result.result}
             if result.state is not None:
                 working["state"] = result.state
-            await updater.add_artifact(
-                parts=[data_part(working)], artifact_id="working", name="working"
-            )
+            await updater.add_artifact(parts=[data_part(working)], name="working")
             await updater.update_status(
                 TaskState.TASK_STATE_WORKING,
                 message=self._agent_msg(updater, result.message) if result.message else None,
@@ -243,6 +242,12 @@ def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
     от первого сообщения, не видел `bulkTaskId` уже запущенного прогона и заводил второй — по тому
     же файлу и со вторым списанием. Обратный порядок чинит и те задачи, что уже лежат в сторе
     с накопленными артефактами.
+
+    Держится это на инварианте: **позиция в списке означает свежесть**, потому что артефакты
+    состояния ДОПИСЫВАЮТСЯ в хвост. Закреплять им `artifact_id` нельзя — менеджер задач заменяет
+    такой артефакт на месте, по старому индексу, и инвариант рушится (см. комментарий в ветке
+    `input-required`). Единственный закреплённый id — `result` у `completed`, и он безопасен:
+    после него задача терминальна, записывать поверх уже нечего.
     """
     task = getattr(context, "current_task", None)
     if task is None:

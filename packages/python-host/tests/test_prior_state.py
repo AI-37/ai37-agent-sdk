@@ -106,22 +106,28 @@ class TestReadPriorState:
         assert _read_prior_state(_context(task)) == {"phase": "processing"}
 
 
-class _AsksAgain:
-    def __init__(self, status: str) -> None:
+class _Answers:
+    """Агент, который на каждом ходе возвращает своё состояние — как HITL-диалог."""
+
+    def __init__(self, status: str, states: list[dict[str, Any]]) -> None:
         self.status = status
+        self.states = list(states)
+        self.seen: list[dict[str, Any] | None] = []
 
-    async def run(self, _req: AgentRequest) -> AgentResult:
-        return AgentResult(status=self.status, message="ещё разок", state={"phase": "processing"})
+    async def run(self, req: AgentRequest) -> AgentResult:
+        self.seen.append(req.input.task_state)
+        return AgentResult(status=self.status, message="ещё разок", state=self.states.pop(0))
 
 
-async def _artifacts(status: str) -> list[dict[str, Any]]:
-    queue_events: list[Any] = []
+async def _turn(handler: Any, current_task: Any) -> list[dict[str, Any]]:
+    """Один ход через executor; возвращает артефакты, которые он опубликовал."""
+    events: list[Any] = []
 
     class Queue:
         async def enqueue_event(self, event: Any) -> None:
-            queue_events.append(event)
+            events.append(event)
 
-    executor = HostExecutor(_AsksAgain(status), agent_text_modes=["text/plain"])
+    executor = HostExecutor(handler, agent_text_modes=["text/plain"])
     rc = SimpleNamespace(
         message=ParseDict(
             {"role": "ROLE_USER", "parts": [{"text": "hi"}]}, Message(), ignore_unknown_fields=True
@@ -129,24 +135,112 @@ async def _artifacts(status: str) -> list[dict[str, Any]]:
         task_id="t1",
         context_id="c1",
         configuration=None,
-        current_task=None,
+        current_task=current_task,
     )
     await executor.execute(rc, Queue())
     out = []
-    for event in queue_events:
+    for event in events:
         data = MessageToDict(event, preserving_proto_field_name=False)
         if "artifact" in data:
             out.append(data["artifact"])
     return out
 
 
-class TestArtifactIdIsPinned:
-    """Без постоянного id `add_artifact` сочиняет UUID и артефакты копятся весь диалог."""
+def _apply(task: Any, artifacts: list[dict[str, Any]]) -> Any:
+    """Сложить артефакты хода в задачу ровно так, как это делает менеджер задач a2a-sdk.
 
-    async def test_input_required_keeps_one_slot(self) -> None:
-        artifacts = await _artifacts("input-required")
-        assert [a.get("artifactId") for a in artifacts] == ["input-required"]
+    Совпал `artifactId` — запись заменяется НА МЕСТЕ, по старому индексу (`task_manager.py`,
+    `CopyFrom`); не совпал — дописывается в хвост. Модель здесь честная нарочно: на ней держится
+    проверка того, что позиция в списке означает свежесть.
+    """
+    as_dict = (
+        MessageToDict(task, preserving_proto_field_name=False)
+        if task is not None
+        else {"id": "t1", "contextId": "c1"}
+    )
+    existing = as_dict.setdefault("artifacts", [])
+    for artifact in artifacts:
+        same_id = artifact.get("artifactId")
+        at = next((i for i, old in enumerate(existing) if old.get("artifactId") == same_id), None)
+        if at is None:
+            existing.append(artifact)
+        else:
+            existing[at] = artifact
+    return ParseDict(as_dict, a2a_pb2.Task(), ignore_unknown_fields=True)
 
-    async def test_working_keeps_one_slot(self) -> None:
-        artifacts = await _artifacts("working")
-        assert [a.get("artifactId") for a in artifacts] == ["working"]
+
+class TestStateSurvivesADialogue:
+    """Настоящий контракт фикса: агент на КАЖДОМ ходе видит то, что записал на предыдущем."""
+
+    async def test_second_turn_sees_what_the_first_turn_saved(self) -> None:
+        handler = _Answers(
+            "input-required",
+            [
+                {"phase": "awaiting-signature"},
+                {"phase": "processing", "bulkTaskId": "7f05f7a0"},
+            ],
+        )
+
+        task = _apply(None, await _turn(handler, None))
+        await _turn(handler, task)
+
+        assert handler.seen[0] is None, "на первом ходе состояния ещё нет"
+        assert handler.seen[1] == {"phase": "awaiting-signature"}
+
+    async def test_third_turn_sees_the_second_not_the_first(self) -> None:
+        """Тот самый инцидент: ход после запуска прогона обязан видеть его id, а не начало
+        диалога."""
+        handler = _Answers(
+            "input-required",
+            [
+                {"phase": "awaiting-signature"},
+                {"phase": "processing", "bulkTaskId": "7f05f7a0"},
+                {"phase": "processing", "bulkTaskId": "7f05f7a0"},
+            ],
+        )
+
+        task = _apply(None, await _turn(handler, None))
+        task = _apply(task, await _turn(handler, task))
+        await _turn(handler, task)
+
+        assert handler.seen[2] is not None
+        assert handler.seen[2]["bulkTaskId"] == "7f05f7a0", (
+            "третий ход не увидел запущенный прогон — завёлся бы второй, платный"
+        )
+
+    async def test_position_tracks_recency(self) -> None:
+        """Инвариант, на котором держится чтение с конца: артефакты состояния ДОПИСЫВАЮТСЯ.
+
+        Закрепи им `artifact_id` — менеджер задач стал бы заменять их на месте, свежее состояние
+        осталось бы в начале списка, и чтение с конца вернуло бы устаревшее.
+        """
+        handler = _Answers("input-required", [{"n": 1}, {"n": 2}])
+
+        first = await _turn(handler, None)
+        task = _apply(None, first)
+        second = await _turn(handler, task)
+
+        assert len(first) == 1 and len(second) == 1
+        assert first[0]["parts"][0]["data"]["state"] == {"n": 1}
+        assert second[0]["parts"][0]["data"]["state"] == {"n": 2}
+        assert first[0].get("artifactId") != second[0].get("artifactId"), (
+            "артефакты состояния делят id — значит заменяются на месте, и порядок лжёт о свежести"
+        )
+
+    async def test_working_between_two_questions_does_not_shadow_the_fresh_state(self) -> None:
+        """Порядок, который ловит закреплённый `artifact_id`: спросили → поработали → спросили.
+
+        С закреплёнными id третий ход заменил бы артефакт `input-required` на его СТАРОМ месте,
+        перед `working`, и чтение с конца вернуло бы состояние второго хода вместо третьего.
+        """
+        task = _apply(None, await _turn(_Answers("input-required", [{"phase": "first"}]), None))
+        task = _apply(task, await _turn(_Answers("working", [{"phase": "detached"}]), task))
+        task = _apply(task, await _turn(_Answers("input-required", [{"phase": "fresh"}]), task))
+
+        later = _Answers("input-required", [{"phase": "whatever"}])
+        await _turn(later, task)
+
+        assert later.seen[0] == {"phase": "fresh"}, (
+            "ход увидел состояние ПРОШЛОГО хода — артефакты состояния заменяются на месте, "
+            "и порядок в списке больше не означает свежесть"
+        )
