@@ -48,12 +48,18 @@ const limits = {
  * Unlike routing, showcase text is clamped instead of rejected: dropping a whole agent from the
  * catalog over a 61st character would cost the user more than an ellipsis does. The ellipsis is
  * deliberate — a truncated line must look truncated, not like the agent's real name.
+ *
+ * Length is counted in code points, not UTF-16 code units, so that a limit means the same thing
+ * here and in the Python SDK (`len()` counts code points). `String.prototype.slice` would also cut
+ * a surrogate pair in half and emit a lone surrogate — an invalid string travelling into the card's
+ * JSON. Spreading into an array gives whole code points to slice on.
  */
 function clampText(value: unknown, limit: number): string {
   if (typeof value !== 'string') return ''
   const text = compactText(value)
-  if (text.length <= limit) return text
-  return `${text.slice(0, limit - 1).trimEnd()}…`
+  const points = [...text]
+  if (points.length <= limit) return text
+  return `${points.slice(0, limit - 1).join('').trimEnd()}…`
 }
 
 function normalizeNorms(value: unknown): AgentShowcaseNorm[] {

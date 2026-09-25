@@ -61,6 +61,27 @@ describe('AI37 A2A showcase extension', () => {
     expect(profile.computes).toHaveLength(240)
   })
 
+  it('counts and cuts by code points, so a surrogate pair never breaks in half', () => {
+    // 60 кодовых точек, из них одна — эмодзи. По контракту заголовок валиден и обрезаться не должен;
+    // подсчёт по UTF-16 дал бы 61 и разрезал бы пару, оставив висячий суррогат в карточке.
+    const title = `${'а'.repeat(58)}😀б`
+    expect([...title]).toHaveLength(60)
+
+    const profile = normalizeAgentShowcaseProfile({ title, summary: 'с' })
+
+    expect(profile.title).toBe(title)
+    expect([...profile.title].some((ch) => /[\uD800-\uDFFF]/u.test(ch))).toBe(false)
+  })
+
+  it('clamps an over-long emoji title without emitting a lone surrogate', () => {
+    const profile = normalizeAgentShowcaseProfile({ title: '😀'.repeat(70), summary: 'с' })
+
+    expect([...profile.title]).toHaveLength(60)
+    expect(profile.title.endsWith('…')).toBe(true)
+    // Каждая точка — целое эмодзи: обрезка прошла по границам, а не по code units.
+    expect([...profile.title].slice(0, -1).every((ch) => ch === '😀')).toBe(true)
+  })
+
   it('drops items beyond the limits and malformed ones', () => {
     const profile = normalizeAgentShowcaseProfile({
       title: 'Расчёт КЕО',
