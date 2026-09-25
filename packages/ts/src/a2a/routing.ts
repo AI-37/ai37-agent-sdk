@@ -1,3 +1,5 @@
+import { compactText } from './text'
+
 /**
  * Versioned identifier for the AI37 Agent Card routing extension.
  * It is a namespace, not an endpoint: consumers must not dereference it.
@@ -43,17 +45,6 @@ const limits = {
 } as const
 
 const allowedIntents = new Set<string>(AI37_ROUTING_INTENTS)
-
-function compactText(value: string): string {
-  return Array.from(value, (character) => {
-    const code = character.charCodeAt(0)
-    return code < 32 || code === 127 ? ' ' : character
-  })
-    .join('')
-    .replace(/[<>]/g, ' ')
-    .replace(/\s+/g, ' ')
-    .trim()
-}
 
 function normalizeStrings(
   value: unknown,

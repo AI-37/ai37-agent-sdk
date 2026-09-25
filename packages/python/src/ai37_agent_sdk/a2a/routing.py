@@ -3,6 +3,8 @@ from __future__ import annotations
 from collections.abc import Iterable, Mapping
 from typing import Any, Literal, TypedDict, cast
 
+from .text import compact_text
+
 # Versioned identifier, not an endpoint. Consumers must not dereference it.
 AI37_ROUTING_EXTENSION_URI = "https://schemas.ai37.ru/a2a/extensions/routing/v1"
 
@@ -47,13 +49,6 @@ class AgentRoutingExtension(TypedDict):
     params: AgentRoutingProfile
 
 
-def _compact_text(value: str) -> str:
-    safe = "".join(
-        " " if ord(character) < 32 or ord(character) == 127 else character for character in value
-    )
-    return " ".join(safe.replace("<", " ").replace(">", " ").split())
-
-
 def _strings(value: object, field: str, *, max_items: int, max_length: int) -> list[str]:
     if not isinstance(value, list):
         raise TypeError(f"routing.{field} must be an array")
@@ -64,7 +59,7 @@ def _strings(value: object, field: str, *, max_items: int, max_length: int) -> l
     for item in value:
         if not isinstance(item, str):
             raise TypeError(f"routing.{field} items must be strings")
-        normalized = _compact_text(item)
+        normalized = compact_text(item)
         if not normalized or len(normalized) > max_length:
             raise ValueError(f"routing.{field} items must be 1..{max_length} characters")
         key = normalized.casefold()

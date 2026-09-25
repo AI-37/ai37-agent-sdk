@@ -16,3 +16,14 @@ export type {
   AgentRoutingIntent,
   AgentRoutingProfile,
 } from './routing'
+export {
+  AI37_SHOWCASE_EXTENSION_URI,
+  buildAgentShowcaseExtension,
+  normalizeAgentShowcaseProfile,
+  parseAgentShowcaseExtension,
+} from './showcase'
+export type {
+  AgentShowcaseExtension,
+  AgentShowcaseNorm,
+  AgentShowcaseProfile,
+} from './showcase'

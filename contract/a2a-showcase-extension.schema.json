@@ -1,0 +1,36 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai37.ru/a2a/extensions/showcase/v1",
+  "title": "AI37 A2A showcase extension v1",
+  "description": "User-facing description of an agent for the product catalog (agents page and empty chat screen), embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Text is the agent's own: norms must be verifiable, an empty list means the surface writes «Норматив уточняется». Normalisation clamps over-long strings and drops malformed items instead of rejecting the card — only a missing title or summary makes the profile unusable.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["title", "summary"],
+  "properties": {
+    "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+    "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "computes": { "type": "string", "minLength": 1, "maxLength": 240 },
+    "norms": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["code"],
+        "properties": {
+          "code": { "type": "string", "minLength": 1, "maxLength": 80 },
+          "title": { "type": "string", "minLength": 1, "maxLength": 200 }
+        }
+      }
+    },
+    "starter": { "type": "string", "minLength": 1, "maxLength": 160 },
+    "examples": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+    },
+    "order": { "type": "integer" }
+  }
+}
