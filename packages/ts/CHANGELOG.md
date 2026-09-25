@@ -3,6 +3,27 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.26] - 2026-09-25
+
+### Added
+
+- Расширение agent card `showcase/v1` (`AI37_SHOWCASE_EXTENSION_URI`, `AgentShowcaseProfile`,
+  `buildAgentShowcaseExtension` / `normalizeAgentShowcaseProfile` /
+  `parseAgentShowcaseExtension`) — витринные данные агента для каталога продукта: заголовок,
+  краткое описание, что считает, нормативы, стартовая фраза, примеры запросов и порядок
+  показа (план docs/plans/agent-showcase-from-agent-card.md). Карточка без расширения
+  валидна — агент просто не попадает в витрину. Схема контракта:
+  `contract/a2a-showcase-extension.schema.json`.
+
+### Changed
+
+- Нормализация витрины обрезает слишком длинный текст и отбрасывает битые элементы вместо
+  отказа от всей карточки: в `routing/v1` лишний символ — ошибка контракта, а в витрине он
+  стоил бы пользователю целого агента в каталоге. Падение остаётся одно — профиль без
+  `title` или `summary` показывать нечем.
+- `compactText` переехал в `a2a/text.ts` и используется обоими расширениями карточки
+  (внутренняя утилита, публичный API не меняется).
+
 ## [0.1.0-alpha.25] - 2026-09-24
 
 ### Removed

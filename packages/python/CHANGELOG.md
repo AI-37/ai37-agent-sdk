@@ -3,6 +3,21 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a18] - 2026-09-25
+
+### Added
+
+- Расширение agent card `showcase/v1` (`AI37_SHOWCASE_EXTENSION_URI`, `AgentShowcaseProfile`,
+  `build_agent_showcase_extension` / `normalize_agent_showcase_profile` /
+  `parse_agent_showcase_extension`) — парити с TS `0.1.0-alpha.26`. Витринные данные агента
+  для каталога продукта; карточка без расширения валидна.
+
+### Changed
+
+- Нормализация витрины обрезает длинный текст и отбрасывает битые элементы вместо отказа от
+  карточки; обязательны только `title` и `summary`. `compact_text` переехал в `a2a/text.py`
+  и общий для обоих расширений.
+
 ## [0.1.0a17] - 2026-09-24
 
 ### Removed
