@@ -61,6 +61,25 @@ def test_over_long_text_is_clamped_and_marked():
     assert len(profile["computes"]) == 240
 
 
+def test_counts_and_cuts_by_code_points():
+    # Тот же пример, что в TS-тесте: 60 кодовых точек, одна из них — эмодзи. Оба SDK обязаны
+    # считать одинаково, иначе одна и та же карточка ведёт себя по-разному.
+    title = "а" * 58 + "😀б"
+    assert len(title) == 60
+
+    profile = normalize_agent_showcase_profile({"title": title, "summary": "с"})
+
+    assert profile["title"] == title
+
+
+def test_clamps_over_long_emoji_title():
+    profile = normalize_agent_showcase_profile({"title": "😀" * 70, "summary": "с"})
+
+    assert len(profile["title"]) == 60
+    assert profile["title"].endswith("…")
+    assert set(profile["title"][:-1]) == {"😀"}
+
+
 def test_extra_and_malformed_items_are_dropped():
     profile = normalize_agent_showcase_profile(
         {
