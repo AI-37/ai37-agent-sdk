@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a20] - 2026-09-29
+
+### Added
+
+- Код фичи `document-service` и привилегии `max-documents` в `BillingFeatureCode` /
+  `BillingPrivilegeCode` (парити с TS `0.1.0-alpha.28`) — доступ к документам организации и
+  лимит на их число (план `document-service-upload-entitlement.md`, §3.1).
+
 ## [0.1.0a19] - 2026-09-25
 
 ### Fixed
