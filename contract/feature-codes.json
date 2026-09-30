@@ -84,9 +84,9 @@
       "name": "Max Active API Keys"
     },
     {
-      "code": "max-documents",
-      "constant": "MaxDocuments",
-      "name": "Максимум документов организации"
+      "code": "document-service-max-uploads",
+      "constant": "DocumentServiceMaxUploads",
+      "name": "Лимит документов организации"
     },
     {
       "code": "max-users",
