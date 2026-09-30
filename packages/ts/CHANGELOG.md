@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.28] - 2026-09-29
+
+### Added
+
+- Код фичи `document-service` («Документы организации») и привилегии `max-documents` в
+  `BillingFeatureCode` / `BillingPrivilegeCode` — тарифный доступ к разделу документов
+  организации и лимит на число загруженных документов (план
+  `document-service-upload-entitlement.md`, §3.1). Хелпера чтения лимита в SDK нет: гейт живёт в
+  document-service, значения по планам — в `infra`.
+
 ## [0.1.0-alpha.27] - 2026-09-25
 
 ### Fixed

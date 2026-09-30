@@ -2,6 +2,7 @@
 
 export enum BillingFeatureCode {
   DaylightCalcAgent = 'daylight-calc-agent',
+  DocumentService = 'document-service',
   ElevatorCalcAgent = 'elevator-calc-agent',
   HvacCalcAgent = 'hvac-calc-agent',
   MinstroyAgent = 'minstroy-agent',
@@ -19,6 +20,7 @@ export enum BillingPrivilegeCode {
   HvacCalcAllowed = 'hvac-calc-allowed',
   HvacHeatLossAllowed = 'hvac-heat-loss-allowed',
   MaxApiKeys = 'max-api-keys',
+  MaxDocuments = 'max-documents',
   MaxUsers = 'max-users',
   MinstroyCheckInn = 'minstroy-check-inn',
   MinstroyPriceMonitoring = 'minstroy-price-monitoring',

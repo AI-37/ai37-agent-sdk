@@ -7,6 +7,11 @@
       "name": "Daylight Calculation Agent"
     },
     {
+      "code": "document-service",
+      "constant": "DocumentService",
+      "name": "Документы организации"
+    },
+    {
       "code": "elevator-calc-agent",
       "constant": "ElevatorCalcAgent",
       "name": "Elevator Calculation Agent"
@@ -77,6 +82,11 @@
       "code": "max-api-keys",
       "constant": "MaxApiKeys",
       "name": "Max Active API Keys"
+    },
+    {
+      "code": "max-documents",
+      "constant": "MaxDocuments",
+      "name": "Максимум документов организации"
     },
     {
       "code": "max-users",
