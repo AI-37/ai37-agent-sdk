@@ -20,7 +20,7 @@ export enum BillingPrivilegeCode {
   HvacCalcAllowed = 'hvac-calc-allowed',
   HvacHeatLossAllowed = 'hvac-heat-loss-allowed',
   MaxApiKeys = 'max-api-keys',
-  MaxDocuments = 'max-documents',
+  DocumentServiceMaxUploads = 'document-service-max-uploads',
   MaxUsers = 'max-users',
   MinstroyCheckInn = 'minstroy-check-inn',
   MinstroyPriceMonitoring = 'minstroy-price-monitoring',

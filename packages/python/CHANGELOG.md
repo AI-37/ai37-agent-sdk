@@ -3,6 +3,13 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a21] - 2026-09-30
+
+### Changed
+
+- Привилегия `max-documents` (`MaxDocuments`) переименована в `document-service-max-uploads`
+  (`DocumentServiceMaxUploads`), парити с TS `0.1.0-alpha.29`.
+
 ## [0.1.0a20] - 2026-09-29
 
 ### Added

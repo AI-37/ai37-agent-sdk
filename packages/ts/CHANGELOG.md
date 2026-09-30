@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.29] - 2026-09-30
+
+### Changed
+
+- Привилегия лимита документов организации переименована: `max-documents` (`MaxDocuments`) →
+  `document-service-max-uploads` (`DocumentServiceMaxUploads`). Имя привязано к фиче
+  `document-service` и не спутается с `max-*` из `org-limits`. Старый код выпущен только в
+  `0.1.0-alpha.28`, потребителей у него нет: гейт document-service берёт имя привилегии из env.
+
 ## [0.1.0-alpha.28] - 2026-09-29
 
 ### Added
