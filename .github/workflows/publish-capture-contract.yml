@@ -1,0 +1,75 @@
+name: publish · ai37-capture-contract (PyPI)
+
+# Публикация контракта захвата ai37-capture-contract (packages/capture-contract) в приватный PyPI
+# (pypi.app.sp-ai.ru) через poetry build + twine upload — зеркало publish-python.yml.
+# Версия берётся из packages/capture-contract/pyproject.toml. Повторная публикация той же версии
+# падает: уже выложенную версию индекс не перезаписывает.
+#
+# Аутентификация = HTTP Basic (TWINE_USERNAME=ci-publish, TWINE_PASSWORD=${AI37_PYPI_TOKEN}).
+#
+# Требуемый секрет репозитория:
+#   AI37_PYPI_TOKEN — пароль pypi-юзера ci-publish; прокидывается как TWINE_PASSWORD.
+#
+# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner for publish job
+        type: choice
+        required: true
+        default: ubuntu-latest
+        options:
+          - ubuntu-latest
+          - ai37-self-hosted
+      dry_run:
+        description: Dry run (сборка + валидация, без заливки в PyPI)
+        type: boolean
+        required: false
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-capture-contract-${{ github.ref }}
+  cancel-in-progress: false        # publish нельзя отменять на лету
+
+jobs:
+  publish:
+    name: PyPI publish · ai37-capture-contract
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: packages/capture-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # единый источник версии рантайма — packages/capture-contract/.python-version
+          python-version-file: packages/capture-contract/.python-version
+      - name: install poetry
+        run: pipx install poetry
+      - name: install deps
+        run: poetry install --with dev --no-interaction
+      - name: verify (ruff + mypy + pytest)
+        run: |
+          poetry run ruff check .
+          poetry run ruff format --check .
+          poetry run mypy src
+          poetry run pytest
+      - name: install twine
+        run: pipx install twine
+      - name: build
+        run: poetry build --no-interaction
+      - name: publish (dry-run)
+        if: ${{ inputs.dry_run }}
+        run: twine check dist/*
+      - name: publish to private PyPI
+        if: ${{ !inputs.dry_run }}
+        env:
+          TWINE_USERNAME: ci-publish
+          TWINE_PASSWORD: ${{ secrets.AI37_PYPI_TOKEN }}
+        run: twine upload --repository-url https://pypi.app.sp-ai.ru/ dist/*
