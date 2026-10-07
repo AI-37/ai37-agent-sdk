@@ -76,7 +76,7 @@ make verify    # codegen-парити + оба пакета
 ```
 
 ## Деплой
-Библиотека, не сервис: публикация в npm/PyPI через GitHub Actions (`publish-ts.yml`, `publish-python.yml`, `publish-ts-host.yml`, `publish-python-host.yml`). Helm/terraform не используются.
+Библиотека, не сервис: публикация в npm/PyPI через GitHub Actions (`publish-ts.yml`, `publish-python.yml`, `publish-ts-host.yml`, `publish-python-host.yml`, `publish-capture-contract.yml`). Helm/terraform не используются.
 
 ## Связанные документы
 - `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
@@ -101,6 +101,7 @@ SDK для **агентов** экосистемы **AI37**. Закрывает 
 |---|---|---|---|
 | `@ai37/agent-sdk` | npm | `packages/ts` | реализован: auth, billing, a2a, AgentContext, testing, CLI |
 | `ai37-agent-sdk` | PyPI | `packages/python` | реализован: auth, billing, a2a, AgentContext, testing (CLI — follow-up) |
+| `ai37-capture-contract` | PyPI | `packages/capture-contract` | контракт захвата карточки товара для рендереров мониторинга цен (minstroy ↔ website-scraper) |
 
 > **Это resource-server / agent SDK.** Он *проверяет* и *форвардит* уже выданный токен, но **не
 > выполняет OIDC-логин** (Authorization Code + PKCE, обмен code, refresh, сессия) — это сторона

@@ -1,0 +1,38 @@
+[project]
+name = "ai37-capture-contract"
+version = "0.1.0"
+description = "Контракт захвата карточки товара для рендереров мониторинга цен AI37"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "pydantic>=2",
+]
+
+[tool.poetry]
+packages = [{ include = "ai37_capture_contract", from = "src" }]
+
+[tool.poetry.group.dev.dependencies]
+pytest = ">=8"
+mypy = ">=1.10"
+ruff = ">=0.6"
+
+[build-system]
+requires = ["poetry-core>=2.0"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+target-version = "py312"
+line-length = 120
+
+[tool.ruff.lint]
+# flake8-type-checking включён, как у потребителя minstroy: иначе `noqa: TC003` в models.py
+# считается лишним (RUF100), и публикация падает на линте.
+extend-select = ["TC"]
+
+[tool.mypy]
+python_version = "3.12"
+strict = true
+plugins = ["pydantic.mypy"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
