@@ -9,7 +9,7 @@
 ### Fixed
 
 - MCP-эндпоинт (`/mcp`) отвечает `405 Method Not Allowed` + `Allow: POST` на всё, кроме POST
-  (паритет с TS `@ai37/agent-host` `0.1.0-alpha.46`). Stateless-серверу нечего слать в
+  (паритет с TS `@ai37/agent-host` `0.1.0-alpha.47`). Stateless-серверу нечего слать в
   сервер-инициированный SSE, а SDK на GET открывал standalone-стрим с пингами, который жил,
   пока клиент не уйдёт, и держал задачу сервера.
 

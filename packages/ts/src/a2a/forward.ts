@@ -31,6 +31,10 @@ export function buildA2AAuthHeaders(
 /**
  * fetch-обёртка, добавляющая Authorization (forward user-JWT) и A2A-Version к каждому запросу.
  * Остальные заголовки/тело (включая message.metadata) пробрасываются без изменений.
+ *
+ * A2A-Version ставится, только если вызывающий его не задал. Клиент @a2a-js/sdk 1.x сам пишет
+ * `A2A-Version: 1.0`, а сервер 1.x выбирает обработчик по этому заголовку: перезапись на 0.3
+ * отправила бы `SendMessage` в legacy-обработчик (method not found).
  */
 export function forwardAuthFetch(
   bearerToken: string,
@@ -50,7 +54,10 @@ export function forwardAuthFetch(
 
   return ((input: RequestInfo | URL, init?: RequestInit) => {
     const headers = new Headers(init?.headers)
-    for (const [k, v] of Object.entries(injected)) headers.set(k, v)
+    for (const [k, v] of Object.entries(injected)) {
+      if (k === 'A2A-Version' && headers.has(k)) continue
+      headers.set(k, v)
+    }
     return base(input, { ...init, headers })
   }) as typeof fetch
 }

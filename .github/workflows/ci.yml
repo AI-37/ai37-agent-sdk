@@ -117,6 +117,28 @@ jobs:
       - run: poetry run mypy src
       - run: poetry run pytest
 
+  # ───────────────────────── ai37-capture-contract (Python) ─────────────────────────
+  capture-contract:
+    name: py · ai37-capture-contract
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    defaults:
+      run:
+        working-directory: packages/capture-contract
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          # единый источник версии — packages/capture-contract/.python-version
+          python-version-file: packages/capture-contract/.python-version
+      - name: install poetry
+        run: pipx install poetry
+      - name: install deps
+        run: poetry install --with dev --no-interaction
+      - run: poetry run ruff check .
+      - run: poetry run ruff format --check .
+      - run: poetry run mypy src
+      - run: poetry run pytest
+
   # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
   # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
   # опубликованный SDK с PyPI, сиблинг собирать не нужно.
@@ -180,7 +202,7 @@ jobs:
   # trigger keys off it. Fails if any real CI job above failed or was cancelled.
   ci-green:
     if: always()
-    needs: [ts-docx, ts, ts-host, python, python-host, codegen-parity]
+    needs: [ts-docx, ts, ts-host, python, python-host, capture-contract, codegen-parity]
     runs-on: ubuntu-latest
     steps:
       - name: gate

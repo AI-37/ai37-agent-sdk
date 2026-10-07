@@ -6,3 +6,4 @@
 - **`@ai37/agent-host`** (TS) → [`packages/ts-host/CHANGELOG.md`](packages/ts-host/CHANGELOG.md)
 - **`ai37-agent-sdk`** (Python) → [`packages/python/CHANGELOG.md`](packages/python/CHANGELOG.md)
 - **`ai37-agent-host`** (Python) → [`packages/python-host/CHANGELOG.md`](packages/python-host/CHANGELOG.md)
+- **`ai37-capture-contract`** (Python) → [`packages/capture-contract/CHANGELOG.md`](packages/capture-contract/CHANGELOG.md)

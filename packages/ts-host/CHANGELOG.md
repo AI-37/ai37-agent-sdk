@@ -3,7 +3,7 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
-## [0.1.0-alpha.46]
+## [0.1.0-alpha.47]
 
 ### Fixed
 - MCP-эндпоинт (`/mcp`) отвечает `405 Method Not Allowed` + `Allow: POST` на всё, кроме POST,
@@ -14,6 +14,20 @@
   (включая `release` per-user набора) до обрыва. 405 предусмотрен спекой MCP (Streamable HTTP):
   клиенты SDK считают его штатным и не переподключаются. Ответы на POST, включая SSE прогресса и
   elicitation внутри вызова инструмента, не меняются.
+
+## [0.1.0-alpha.46]
+
+### Changed
+- Agent-card хост отдаёт своим роутом (`GET /.well-known/agent-card.json`), а не
+  `agentCardHandler` SDK, и в гибридной форме (`toPublicAgentCard`): поля 0.3 как были, рядом
+  `supportedInterfaces` в форме A2A 1.0, построенные из `url`/`preferredTransport`/
+  `additionalInterfaces` с `protocolVersion` карточки. Свои `supportedInterfaces` агента не
+  трогаются. Так уже делает python-host.
+
+  Зачем сейчас, на 0.3: подготовка к `@a2a-js/sdk` 1.x. Compat-режим его `agentCardHandler`
+  собирает 0.3-карточку поле за полем и теряет `x-ai37`, а оркестратор берёт оттуда биллинг-гейты
+  и skillsIo. Свой роут копирует карточку целиком. Клиенты 0.3 лишнее поле игнорируют, клиент
+  1.x по интерфейсу с `protocolVersion: '0.3'` выбирает legacy-транспорт.
 
 ## [0.1.0-alpha.45]
 
