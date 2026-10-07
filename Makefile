@@ -1,4 +1,4 @@
-.PHONY: codegen ts ts-docx py verify clean
+.PHONY: codegen ts ts-docx py capture-contract verify clean
 
 # Кодоген кодов фич/привилегий из contract/ в оба пакета
 codegen:
@@ -16,14 +16,19 @@ ts-docx:
 py:
 	cd packages/python && poetry install --with dev && poetry run ruff check . && poetry run mypy src && poetry run pytest
 
-# Полная проверка: кодоген-парити + оба пакета (TS + Python).
+# Контракт захвата карточки товара (мониторинг цен): линт + формат + типы + тесты
+capture-contract:
+	cd packages/capture-contract && poetry install --with dev && poetry run ruff check . && poetry run ruff format --check . && poetry run mypy src && poetry run pytest
+
+# Полная проверка: кодоген-парити + все пакеты (TS + DOCX + Python + capture-contract).
 verify: codegen
 	@git diff --exit-code -- packages/ts/src/codes.ts packages/python/src/ai37_agent_sdk/codes.py \
 		|| (echo "codes.ts/codes.py не соответствуют contract/ — запусти make codegen и закоммить" && exit 1)
 	$(MAKE) ts
 	$(MAKE) ts-docx
 	$(MAKE) py
-	@echo "verify: OK (TS + DOCX + Python)."
+	$(MAKE) capture-contract
+	@echo "verify: OK (TS + DOCX + Python + capture-contract)."
 
 clean:
-	rm -rf packages/ts/dist packages/ts/node_modules packages/ts-docx/dist packages/ts-docx/node_modules packages/python/dist-python
+	rm -rf packages/ts/dist packages/ts/node_modules packages/ts-docx/dist packages/ts-docx/node_modules packages/python/dist-python packages/capture-contract/dist

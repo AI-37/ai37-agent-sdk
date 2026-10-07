@@ -103,6 +103,12 @@ SDK для **агентов** экосистемы **AI37**. Закрывает 
 | `ai37-agent-sdk` | PyPI | `packages/python` | реализован: auth, billing, a2a, AgentContext, testing (CLI — follow-up) |
 | `ai37-capture-contract` | PyPI | `packages/capture-contract` | контракт захвата карточки товара для рендереров мониторинга цен (minstroy ↔ website-scraper) |
 
+> `ai37-capture-contract` — доменный пакет, не слой SDK: он описывает контракт захвата карточки
+> товара между minstroy и headed-рендерером `website-scraper`. Живёт здесь по тому же основанию,
+> что `@ai37/docx`: общий для нескольких репозиториев код публикуется из монорепо с публикационными
+> секретами, а не path-зависимостью одного потребителя (решение разработчика 07.10.2026,
+> план AI-37/docs#445 §3.4). На `contract/`, кодоген и публичный API SDK не влияет.
+
 > **Это resource-server / agent SDK.** Он *проверяет* и *форвардит* уже выданный токен, но **не
 > выполняет OIDC-логин** (Authorization Code + PKCE, обмен code, refresh, сессия) — это сторона
 > клиента/UI. Host-слой агента (HTTP + A2A + AG-UI) — отдельный пакет `@ai37/agent-host`.
@@ -147,7 +153,8 @@ make codegen     # contract/feature-codes.json → codes.ts + codes.py
 make ts          # сборка/тесты TS-пакета
 make ts-docx     # локальный markdown → DOCX рендерер @ai37/docx
 make py          # сборка/тесты Python-пакета (Python 3.11+ / poetry)
-make verify      # codegen-парити + TS/Python SDK + @ai37/docx
+make capture-contract  # линт/типы/тесты ai37-capture-contract (Python 3.12+ / poetry)
+make verify      # codegen-парити + TS/Python SDK + @ai37/docx + ai37-capture-contract
 ```
 
 Статус: **0.1.0-alpha**.

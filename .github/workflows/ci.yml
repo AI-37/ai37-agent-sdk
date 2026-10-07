@@ -202,7 +202,7 @@ jobs:
   # trigger keys off it. Fails if any real CI job above failed or was cancelled.
   ci-green:
     if: always()
-    needs: [ts-docx, ts, ts-host, python, python-host, codegen-parity]
+    needs: [ts-docx, ts, ts-host, python, python-host, capture-contract, codegen-parity]
     runs-on: ubuntu-latest
     steps:
       - name: gate
