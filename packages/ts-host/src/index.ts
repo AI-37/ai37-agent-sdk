@@ -1,5 +1,7 @@
 // @ai37/agent-host — публичная точка входа.
 export { createAgentHost } from './createAgentHost'
+export { toPublicAgentCard } from './agent-card'
+export type { AgentInterface, PublicAgentCard } from './agent-card'
 export type { AgentHostOptions } from './createAgentHost'
 // LangGraph durable-чекпоинтер: фабрика (PostgresSaver ± MemorySaver) + turn-scope accessor.
 export { createCheckpointer } from './createCheckpointer'

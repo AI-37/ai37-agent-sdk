@@ -70,6 +70,31 @@ describe('createAgentHost', () => {
     expect(r.body.skills.length).toBe(1)
   })
 
+  it('agent-card гибридный: поля 0.3 + supportedInterfaces 1.0', async () => {
+    const r = await request(app()).get('/.well-known/agent-card.json')
+    expect(r.body.url).toBe('http://localhost/a2a/v1')
+    expect(r.body.protocolVersion).toBe('0.3')
+    expect(r.body.supportedInterfaces).toEqual([
+      { url: 'http://localhost/a2a/v1', protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
+    ])
+  })
+
+  it('agent-card сохраняет расширения x-ai37 (биллинг-гейты оркестратора)', async () => {
+    const billing = { feature: 'calc', privilege: 'calc-run' }
+    const withExt = { ...card, 'x-ai37': { billing } } as AgentCard
+    const r = await request(
+      createAgentHost({
+        card: withExt,
+        handler,
+        agentContext: {
+          auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+          billing: { baseUrl: 'http://localhost:9999' },
+        },
+      }),
+    ).get('/.well-known/agent-card.json')
+    expect(r.body['x-ai37']).toEqual({ billing })
+  })
+
   it('A2A без supportedCatalogIds → completed Task БЕЗ A2UI (каталог не согласован)', async () => {
     const r = await request(app())
       .post('/a2a/v1')

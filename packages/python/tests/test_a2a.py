@@ -10,3 +10,8 @@ def test_build_headers():
 def test_custom_header_name():
     headers = build_a2a_auth_headers("t", header_name="X-Auth", prefix="Token")
     assert headers["X-Auth"] == "Token t"
+
+
+def test_build_a2a_auth_headers_without_version() -> None:
+    headers = build_a2a_auth_headers("t", protocol_version=None)
+    assert headers == {"Authorization": "Bearer t"}
