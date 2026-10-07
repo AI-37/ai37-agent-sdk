@@ -4,6 +4,28 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a19] - 2026-10-07
+
+### Added
+
+- `ai37_agent_host.postgres_task_store.PostgresTaskStore` — durable A2A `TaskStore` на Postgres
+  поверх upstream `a2a.server.tasks.DatabaseTaskStore` (extra `postgres`: `sqlalchemy[asyncio]` +
+  `asyncpg`). Сверху upstream: владелец из проверенного JWT (`jwt_owner_resolver`,
+  `<org_id>:<sub>`), отказ записать чужую задачу (`TaskOwnerError`), неизменяемость завершённой
+  задачи, `assert_ready()`, ретенция `cleanup()`. Таблица по умолчанию `a2a_tasks`.
+- `migrate_postgres_task_store()` и CLI `python -m ai37_agent_host.postgres_task_store
+  migrate|cleanup` (читает `DATABASE_URL`) для Helm-хука и CronJob.
+
+### Notes
+
+- Хост передаёт в `TaskStore` пустой `ServerCallContext`, поэтому upstream-дефолт
+  `resolve_user_scope` даёт всем задачам одного (пустого) владельца. Это касается и
+  `RedisTaskStore`, и `InMemoryTaskStore`: изоляции по пользователю у них фактически нет.
+  `PostgresTaskStore` берёт владельца из JWT хода и этого недостатка не имеет.
+- Upstream `create_task_model(table_name)` регистрирует модель в общем `MetaData` при каждом
+  вызове, второй `DatabaseTaskStore` на ту же кастомную таблицу в процессе падал. Модель
+  кешируется по имени таблицы.
+
 ## [0.1.0a18] - 2026-09-24
 
 ### Fixed
