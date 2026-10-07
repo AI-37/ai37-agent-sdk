@@ -127,6 +127,41 @@ describe('mcp resource server — discovery + challenge', () => {
   })
 })
 
+describe('mcp resource server — stateless: только POST', () => {
+  it.each(['get', 'delete'] as const)(
+    '%s /mcp → 405 + Allow: POST, tools не резолвятся',
+    async (method) => {
+      let resolved = false
+      const statelessApp = createAgentHost({
+        card,
+        handler,
+        agentContext: {
+          auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+          billing: { baseUrl: 'http://localhost:9999' },
+        },
+        mcp: {
+          tools: async () => {
+            resolved = true
+            return [calcTool]
+          },
+        },
+        buildInfo: { name: 'test', version: '9.9.9' },
+      })
+      const r = await request(statelessApp)
+        [method]('/mcp')
+        .set('Accept', 'text/event-stream')
+      expect(r.status).toBe(405)
+      expect(r.headers.allow).toBe('POST')
+      expect(r.body).toEqual({
+        jsonrpc: '2.0',
+        error: { code: -32000, message: 'Method not allowed.' },
+        id: null,
+      })
+      expect(resolved).toBe(false)
+    },
+  )
+})
+
 describe('mcp resource server — tools через in-memory клиент', () => {
   it('tools/list показывает calc_lifts, tools/call прокидывает query в handler', async () => {
     const server = await buildMcpServer(

@@ -60,6 +60,22 @@ export function mcpHttpHandler(
   serverInfo: { name: string; version: string },
 ) {
   return async (req: Request, res: Response): Promise<void> => {
+    // Stateless-сервер живёт один запрос, поэтому сервер-инициированного SSE (GET) и сессии для
+    // DELETE у него нет. Без этого GET открывал пустой SSE-стрим без пингов: nginx рвал его по
+    // proxy-read-timeout (`upstream timed out` в логах), клиент переоткрывал, а каждый висящий стрим
+    // держал зарезолвленные tools до обрыва. 405 — штатный ответ по спеке MCP (Streamable HTTP):
+    // клиент понимает, что стрима нет, и не переподключается. Отвечаем ДО резолва tools.
+    if (req.method !== 'POST') {
+      res
+        .status(405)
+        .set('Allow', 'POST')
+        .json({
+          jsonrpc: '2.0',
+          error: { code: -32000, message: 'Method not allowed.' },
+          id: null,
+        })
+      return
+    }
     const ctx = currentCtx()
     const resolved =
       typeof opts.tools === 'function' ? await opts.tools(ctx) : opts.tools

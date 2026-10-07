@@ -7,6 +7,7 @@
 from __future__ import annotations
 
 import importlib.util
+import json
 
 import pytest
 
@@ -113,6 +114,35 @@ async def test_call_release_swallows_errors_and_handles_none():
         raise RuntimeError("nope")
 
     await mcp_server_mod._call_release(boom)  # проглочено, не бросает
+
+
+@pytest.mark.parametrize("method", ["GET", "DELETE"])
+async def test_reject_non_post_answers_405(method: str):
+    sent: list[dict[str, object]] = []
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    assert await mcp_server_mod._reject_non_post({"type": "http", "method": method}, send) is True
+    start, body = sent
+    assert start["status"] == 405
+    headers = dict(start["headers"])  # type: ignore[arg-type]
+    assert headers[b"allow"] == b"POST"
+    assert json.loads(body["body"]) == {  # type: ignore[arg-type]
+        "jsonrpc": "2.0",
+        "error": {"code": -32000, "message": "Method not allowed."},
+        "id": None,
+    }
+
+
+async def test_reject_non_post_passes_post_through():
+    sent: list[dict[str, object]] = []
+
+    async def send(message: dict[str, object]) -> None:
+        sent.append(message)
+
+    assert await mcp_server_mod._reject_non_post({"type": "http", "method": "POST"}, send) is False
+    assert sent == []
 
 
 class _FakeToolAnnotations:

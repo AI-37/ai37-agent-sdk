@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.46]
+
+### Fixed
+- MCP-эндпоинт (`/mcp`) отвечает `405 Method Not Allowed` + `Allow: POST` на всё, кроме POST,
+  до резолва tools. Сервер stateless: на каждый запрос новый `McpServer`, сервер-инициированных
+  сообщений нет, а сессии для DELETE не бывает. Раньше `GET /mcp` открывал пустой SSE-стрим без
+  пингов: nginx рвал его по `proxy-read-timeout` (`upstream timed out` в логах ingress, шум в
+  `ErrorLogSpike`), клиент переоткрывал, и каждый висящий стрим держал зарезолвленные tools
+  (включая `release` per-user набора) до обрыва. 405 предусмотрен спекой MCP (Streamable HTTP):
+  клиенты SDK считают его штатным и не переподключаются. Ответы на POST, включая SSE прогресса и
+  elicitation внутри вызова инструмента, не меняются.
+
 ## [0.1.0-alpha.45]
 
 ### Added
