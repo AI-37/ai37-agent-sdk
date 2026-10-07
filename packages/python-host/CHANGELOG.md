@@ -16,6 +16,10 @@
 - `migrate_postgres_task_store()` и CLI `python -m ai37_agent_host.postgres_task_store
   migrate|cleanup` (читает `DATABASE_URL`) для Helm-хука и CronJob.
 
+- `id`/`context_id` задачи шире upstream: миграция расширяет обе колонки до `varchar(255)`
+  (`MAX_ID_LENGTH`), `assert_ready()` проверяет ширину, id длиннее отклоняется как
+  `InvalidParams`, а не 500 от БД. Upstream объявляет их `String(36)`, а `Thread.contextId`
+  chat-backend до сих пор бывает `th_<uuid>` (39) — первый же `save` такого треда падал бы.
 - `owner.py`: `current_user()` / `current_call_context()` / `HostCallContextBuilder` —
   пользователь хода из проверенного JWT (`JwtUser`, `user_name` = `<org_id>:<sub>`).
 

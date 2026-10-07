@@ -12,6 +12,10 @@ protobuf-сериализация, owner-scoped ``get``/``list``/``delete``). З
   повторный save игнорируется, при смене состояния — warning.
 * **Схема — шагом деплоя, не подом.** ``migrate_postgres_task_store`` создаёт таблицу из Job;
   стор работает с ``create_table=False`` и проверяет её в ``assert_ready``.
+* **id длиннее 36 символов.** Upstream объявляет ``id``/``context_id`` как ``String(36)``, а
+  ``contextId`` тредов chat-backend — ``th_<uuid>`` (39). Миграция расширяет обе колонки до
+  ``varchar(255)`` (SQLAlchemy длину при вставке не проверяет), ``assert_ready`` это проверяет,
+  а ещё более длинный id отклоняется как ``InvalidParams``, а не 500 от БД.
 * **Ретенция** ``cleanup``: завершённые задачи старше N дней, брошенные паузы — только по явному
   порогу.
 
@@ -46,6 +50,9 @@ logger = logging.getLogger(__name__)
 
 #: Таблица по умолчанию. Не ``tasks`` (дефолт upstream): у агента в той же БД бывают свои таблицы.
 DEFAULT_TABLE_NAME = "a2a_tasks"
+
+#: Ширина ``id``/``context_id`` после миграции. Upstream — 36, наши ``th_<uuid>`` — 39.
+MAX_ID_LENGTH = 255
 
 #: Состояния, из которых A2A-задача уже не выходит.
 TERMINAL_TASK_STATES: frozenset[int] = frozenset(
@@ -135,6 +142,14 @@ class PostgresTaskStore(DatabaseTaskStore):
                 f"PostgresTaskStore: table {self.table_name} not found. "
                 "Run `python -m ai37_agent_host.postgres_task_store migrate` first."
             )
+        widths = await _id_column_widths(self.engine, self.table_name)
+        narrow = {name: width for name, width in widths.items() if width < MAX_ID_LENGTH}
+        if narrow:
+            raise RuntimeError(
+                f"PostgresTaskStore: {self.table_name} id columns too narrow {narrow}, "
+                f"expected {MAX_ID_LENGTH}. Run `python -m ai37_agent_host.postgres_task_store "
+                "migrate` first."
+            )
 
     async def _stored(self, task_id: str) -> tuple[str | None, int] | None:
         """``(owner, state)`` сохранённой задачи без owner-фильтра, или ``None``."""
@@ -152,6 +167,7 @@ class PostgresTaskStore(DatabaseTaskStore):
         return row.owner, TaskState.Value(state_name)
 
     async def save(self, task: Task, context: ServerCallContext) -> None:
+        _check_id_length(task)
         owner = self.owner_resolver(context)
         stored = await self._stored(task.id)
         if stored is not None:
@@ -217,20 +233,57 @@ class PostgresTaskStore(DatabaseTaskStore):
                 return total
 
 
+def _check_id_length(task: Task) -> None:
+    """id приходит от клиента (AG-UI threadId, A2A contextId): длинный — ошибка запроса, не 500."""
+    from a2a.utils.errors import InvalidParamsError
+
+    for name, value in (("id", task.id), ("contextId", task.context_id)):
+        if len(value) > MAX_ID_LENGTH:
+            raise InvalidParamsError(f"task {name} is longer than {MAX_ID_LENGTH} characters")
+
+
+async def _id_column_widths(engine: AsyncEngine, table_name: str) -> dict[str, int]:
+    """Ширина varchar у ``id``/``context_id`` в Postgres; у прочих СУБД длина не проверяется."""
+    if engine.dialect.name != "postgresql":
+        return {}
+    from sqlalchemy import text
+
+    async with engine.connect() as conn:
+        rows = await conn.execute(
+            text(
+                "SELECT column_name, character_maximum_length FROM information_schema.columns "
+                "WHERE table_name = :t AND column_name IN ('id', 'context_id') "
+                "AND table_schema = current_schema()"
+            ),
+            {"t": table_name},
+        )
+        return {row[0]: row[1] or MAX_ID_LENGTH for row in rows}
+
+
 async def migrate_postgres_task_store(
     engine: AsyncEngine, *, table_name: str = DEFAULT_TABLE_NAME
 ) -> None:
-    """Создаёт таблицу задач (идемпотентно). Запускать из Job до выката, не из каждого пода.
+    """Создаёт таблицу задач и расширяет id-колонки (идемпотентно). Запускать из Job до выката.
 
     Дальнейшие изменения схемы upstream выпускает Alembic-миграциями (``a2a-db upgrade``
-    из ``a2a-sdk[db-cli]`` с ``--tasks-table``).
+    из ``a2a-sdk[db-cli]`` с ``--tasks-table``); ширину id они не трогают.
     """
     from a2a.server.models import Base
+    from sqlalchemy import text
 
     model: Any = _task_model(table_name)
     table = model.__table__
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all, tables=[table])
+        if engine.dialect.name == "postgresql":
+            quoted = engine.dialect.identifier_preparer.quote(table_name)
+            await conn.execute(
+                text(
+                    f"ALTER TABLE {quoted} "
+                    f"ALTER COLUMN id TYPE varchar({MAX_ID_LENGTH}), "
+                    f"ALTER COLUMN context_id TYPE varchar({MAX_ID_LENGTH})"
+                )
+            )
 
 
 async def _run_cli(args: argparse.Namespace, database_url: str) -> str:

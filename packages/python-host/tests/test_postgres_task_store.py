@@ -190,6 +190,48 @@ async def test_system_path_without_jwt_keeps_working(store: PostgresTaskStore) -
     assert loaded is not None
 
 
+# ── длина id ─────────────────────────────────────────────────────────────────
+
+#: contextId тредов chat-backend: ``th_<uuid>`` — 39 символов, шире upstream String(36).
+TH_ID = "th_ccf61b75-cad3-4ca8-ba32-dd8524a02e18"
+
+
+async def test_chat_backend_thread_id_fits(store: PostgresTaskStore) -> None:
+    task = _task(TH_ID, TaskState.TASK_STATE_INPUT_REQUIRED)
+    task.context_id = TH_ID
+    await store.save(task, ctx())
+    loaded = await store.get(TH_ID, ctx())
+    assert loaded is not None
+    assert loaded.context_id == TH_ID
+
+
+async def test_too_long_id_is_invalid_params(store: PostgresTaskStore) -> None:
+    from a2a.utils.errors import InvalidParamsError
+
+    with pytest.raises(InvalidParamsError):
+        await store.save(_task("x" * 256, TaskState.TASK_STATE_WORKING), ctx())
+
+
+async def test_assert_ready_rejects_upstream_narrow_table(engine: Any) -> None:
+    if engine.dialect.name != "postgresql":
+        pytest.skip("длина varchar проверяется только в Postgres")
+    from a2a.server.models import Base
+
+    from ai37_agent_host.postgres_task_store import _task_model
+
+    name = f"narrow_{uuid.uuid4().hex[:8]}"
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all, tables=[_task_model(name).__table__])
+    try:
+        with pytest.raises(RuntimeError, match="too narrow"):
+            await PostgresTaskStore(engine, table_name=name).assert_ready()
+        await migrate_postgres_task_store(engine, table_name=name)
+        await PostgresTaskStore(engine, table_name=name).assert_ready()
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
+
+
 # ── cleanup ──────────────────────────────────────────────────────────────────
 
 
