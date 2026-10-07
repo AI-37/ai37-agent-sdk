@@ -266,11 +266,15 @@ async def _save_state(
 
 
 def _call_context() -> Any:
-    """``ServerCallContext`` для taskStore (a2a-sdk 1.x требует его в ``get``/``save``)."""
-    try:
-        from a2a.server.context import ServerCallContext
+    """``ServerCallContext`` для taskStore (a2a-sdk 1.x требует его в ``get``/``save``).
 
-        return ServerCallContext()
+    С пользователем из JWT хода — тот же владелец, что на A2A-пути (см. ``owner.py``), иначе
+    состояние, сохранённое через AG-UI, не нашлось бы через A2A и наоборот.
+    """
+    try:
+        from .owner import current_call_context
+
+        return current_call_context()
     except Exception:  # noqa: BLE001
         return None
 

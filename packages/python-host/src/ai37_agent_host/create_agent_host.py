@@ -28,6 +28,7 @@ from prometheus_client import make_asgi_app
 from .a2a_executor import HostExecutor
 from .auth_guard import AuthGuardMiddleware
 from .metrics import service_label
+from .owner import HostCallContextBuilder
 from .types import AgentHandler
 
 
@@ -92,13 +93,21 @@ def create_agent_host(
             },
         )
 
+    # Пользователь из JWT хода в ServerCallContext: по нему TaskStore разводит задачи владельцев.
+    context_builder = HostCallContextBuilder()
     app.router.routes.extend(
         [
             *create_jsonrpc_routes(
-                request_handler=request_handler, rpc_url=base_path, enable_v0_3_compat=True
+                request_handler=request_handler,
+                rpc_url=base_path,
+                enable_v0_3_compat=True,
+                context_builder=context_builder,
             ),
             *create_rest_routes(
-                request_handler=request_handler, enable_v0_3_compat=True, path_prefix=base_path
+                request_handler=request_handler,
+                enable_v0_3_compat=True,
+                path_prefix=base_path,
+                context_builder=context_builder,
             ),
         ]
     )

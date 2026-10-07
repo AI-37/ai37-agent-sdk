@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai37-agent-host"
-version = "0.1.0a18"
+version = "0.1.0a19"
 description = "AI37 agent host (Python): A2A + AG-UI + MCP + file-aware store backends поверх a2a-sdk и ai37-agent-sdk. Порт @ai37/agent-host."
 authors = ["AI37"]
 license = "Apache-2.0"
@@ -29,9 +29,15 @@ prometheus-client = ">=0.20,<1.0"
 # Redis-клиент нужен только потребителю RedisTaskStore (клиент инжектится, не импортируется
 # хостом). Опциональный extra: `pip install ai37-agent-host[redis]`.
 redis = { version = ">=5.0", optional = true }
+# PostgresTaskStore (postgres_task_store.py) поверх upstream DatabaseTaskStore: SQLAlchemy async +
+# драйвер asyncpg. Опциональный extra: `pip install ai37-agent-host[postgres]` (то же, что
+# a2a-sdk[postgresql]); без него хост и остальные сторы работают как раньше.
+sqlalchemy = { version = ">=2.0", extras = ["asyncio"], optional = true }
+asyncpg = { version = ">=0.29", optional = true }
 
 [tool.poetry.extras]
 redis = ["redis"]
+postgres = ["sqlalchemy", "asyncpg"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
@@ -40,6 +46,10 @@ ruff = ">=0.6,<0.13"
 mypy = "^1.11"
 # Асинхронный in-memory Redis для тестов RedisTaskStore (fakeredis.aioredis.FakeRedis).
 fakeredis = ">=2.20"
+# PostgresTaskStore: SQLite-движок для тестов всегда, Postgres — при TEST_DATABASE_URL (CI-сервис).
+sqlalchemy = { version = ">=2.0", extras = ["asyncio"] }
+asyncpg = ">=0.29"
+aiosqlite = ">=0.20"
 
 # Опциональные группы подключаются по мере реализации модулей:
 #   mcp (python mcp SDK), observability (langfuse + opentelemetry),
