@@ -18,6 +18,7 @@ ASGI-приложение (StreamableHTTP, stateless). ``mcp`` SDK — soft-impo
 
 from __future__ import annotations
 
+import json
 from collections.abc import Awaitable
 from dataclasses import dataclass
 from typing import Any
@@ -174,6 +175,36 @@ def build_mcp_server(server_info: ServerInfo, opts: McpOptions) -> Any:
     return server
 
 
+_METHOD_NOT_ALLOWED_BODY = json.dumps(
+    {"jsonrpc": "2.0", "error": {"code": -32000, "message": "Method not allowed."}, "id": None}
+).encode()
+
+
+async def _reject_non_post(scope: dict[str, Any], send: Any) -> bool:
+    """405 на всё, кроме POST; ``True`` — ответ уже отправлен (зеркало ``ts-host`` mcp-server.ts).
+
+    Stateless-серверу нечего слать в сервер-инициированный SSE (GET), а сессии для DELETE нет.
+    Без этого SDK на GET открывает standalone-стрим с пингами, который живёт, пока клиент не уйдёт,
+    и держит задачу сервера. 405 — штатный ответ по спеке MCP (Streamable HTTP): клиент понимает,
+    что стрима нет, и не переподключается.
+    """
+    if scope.get("method") == "POST":
+        return False
+    await send(
+        {
+            "type": "http.response.start",
+            "status": 405,
+            "headers": [
+                (b"allow", b"POST"),
+                (b"content-type", b"application/json"),
+                (b"content-length", str(len(_METHOD_NOT_ALLOWED_BODY)).encode()),
+            ],
+        }
+    )
+    await send({"type": "http.response.body", "body": _METHOD_NOT_ALLOWED_BODY})
+    return True
+
+
 def create_mcp_asgi_app(server_info: ServerInfo, opts: McpOptions) -> tuple[Any, Any]:
     """ASGI-приложение MCP-эндпоинта (StreamableHTTP, stateless) + его session-manager.
 
@@ -191,6 +222,8 @@ def create_mcp_asgi_app(server_info: ServerInfo, opts: McpOptions) -> tuple[Any,
     session_manager = StreamableHTTPSessionManager(app=server, stateless=True, json_response=True)
 
     async def asgi_app(scope: dict[str, Any], receive: Any, send: Any) -> None:
+        if await _reject_non_post(scope, send):
+            return
         await session_manager.handle_request(scope, receive, send)
 
     return asgi_app, session_manager
