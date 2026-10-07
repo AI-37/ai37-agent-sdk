@@ -11,17 +11,31 @@
 - `ai37_agent_host.postgres_task_store.PostgresTaskStore` — durable A2A `TaskStore` на Postgres
   поверх upstream `a2a.server.tasks.DatabaseTaskStore` (extra `postgres`: `sqlalchemy[asyncio]` +
   `asyncpg`). Сверху upstream: владелец из проверенного JWT (`jwt_owner_resolver`,
-  `<org_id>:<sub>`), отказ записать чужую задачу (`TaskOwnerError`), неизменяемость завершённой
-  задачи, `assert_ready()`, ретенция `cleanup()`. Таблица по умолчанию `a2a_tasks`.
+  отказ записать чужую задачу (`TaskOwnerError`), неизменяемость завершённой задачи,
+  `assert_ready()`, ретенция `cleanup()`. Таблица по умолчанию `a2a_tasks`.
 - `migrate_postgres_task_store()` и CLI `python -m ai37_agent_host.postgres_task_store
   migrate|cleanup` (читает `DATABASE_URL`) для Helm-хука и CronJob.
 
-### Notes
+- `owner.py`: `current_user()` / `current_call_context()` / `HostCallContextBuilder` —
+  пользователь хода из проверенного JWT (`JwtUser`, `user_name` = `<org_id>:<sub>`).
 
-- Хост передаёт в `TaskStore` пустой `ServerCallContext`, поэтому upstream-дефолт
-  `resolve_user_scope` даёт всем задачам одного (пустого) владельца. Это касается и
-  `RedisTaskStore`, и `InMemoryTaskStore`: изоляции по пользователю у них фактически нет.
-  `PostgresTaskStore` берёт владельца из JWT хода и этого недостатка не имеет.
+### Fixed
+
+- **Задачи разных пользователей не были разведены.** Аутентификацию делает
+  `AuthGuardMiddleware` (ContextVar), а не Starlette `request.user`, поэтому `a2a-sdk` клал в
+  `ServerCallContext` анонимного пользователя с пустым именем, а AG-UI-путь передавал пустой
+  контекст. Все сторы (`InMemoryTaskStore`, `RedisTaskStore`, `DatabaseTaskStore`) разводят задачи
+  по `context.user.user_name`, так что все задачи всех пользователей лежали под одним владельцем:
+  `tasks/get` по чужому `taskId` отдавал чужую задачу. Теперь `create_agent_host` передаёт в
+  JSON-RPC и REST маршруты `HostCallContextBuilder`, а AG-UI собирает контекст через
+  `current_call_context()`, и владелец на обоих путях один и тот же.
+
+  **При выкатке:** у `RedisTaskStore` владелец входит в ключ (`{prefix}{owner}:{task_id}`), поэтому
+  задачи, поставленные на паузу (`input-required`) до обновления, после него не найдутся: их
+  нужно довести до конца до деплоя или принять, что пользователь начнёт заново. Без JWT
+  (`AI37_AUTH_REQUIRED=false`) владелец пустой, как раньше.
+
+### Notes
 - Upstream `create_task_model(table_name)` регистрирует модель в общем `MetaData` при каждом
   вызове, второй `DatabaseTaskStore` на ту же кастомную таблицу в процессе падал. Модель
   кешируется по имени таблицы.

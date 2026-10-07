@@ -46,6 +46,7 @@ from .output_modes import (
     negotiate_text,
     read_client_capabilities,
 )
+from .owner import HostCallContextBuilder, JwtUser, current_call_context, current_user
 from .redis_task_store import RedisTaskStore
 from .store_backend import (
     AttachmentsStoreBackendBase,
@@ -143,6 +144,10 @@ __all__ = [
     "AuthGuardMiddleware",
     # durable task store (A2A tasks/get/list reconcile)
     "RedisTaskStore",
+    "HostCallContextBuilder",
+    "JwtUser",
+    "current_call_context",
+    "current_user",
     # agui (AG-UI SSE adapter)
     "agui_routes",
     # store-backend (file-aware)

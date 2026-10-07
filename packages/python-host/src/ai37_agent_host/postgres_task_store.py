@@ -3,9 +3,8 @@
 Своё хранилище не пишем: ``a2a-sdk`` 1.x уже несёт ``DatabaseTaskStore`` (SQLAlchemy async,
 protobuf-сериализация, owner-scoped ``get``/``list``/``delete``). Здесь только то, чего в нём нет:
 
-* **Владелец из проверенного JWT.** Хост передаёт в стор пустой ``ServerCallContext``, поэтому
-  дефолтный ``resolve_user_scope`` даёт всем один пустой owner. ``jwt_owner_resolver`` берёт
-  ``org_id`` + ``sub`` из ``AgentContext`` хода (ContextVar ``AuthGuardMiddleware``).
+* **Владелец** — upstream ``resolve_user_scope``: хост кладёт в ``ServerCallContext``
+  пользователя из JWT хода (``owner.py``, ``<org_id>:<sub>``) на A2A- и AG-UI-пути.
 * **Чужую задачу не перезаписать.** Upstream ``save`` делает ``merge`` по одному ``id``: запись
   того же id от другого владельца молча забирает задачу себе. Здесь такой ``save`` бросает
   ``TaskOwnerError``.
@@ -39,8 +38,6 @@ from a2a.server.context import ServerCallContext
 from a2a.server.owner_resolver import OwnerResolver, resolve_user_scope
 from a2a.server.tasks.database_task_store import DatabaseTaskStore
 from a2a.types.a2a_pb2 import Task, TaskState
-
-from .als import current_ctx
 
 if TYPE_CHECKING:  # pragma: no cover - sqlalchemy приходит extra'ом
     from sqlalchemy.ext.asyncio import AsyncEngine
@@ -93,20 +90,6 @@ class CleanupResult:
     stale_deleted: int
 
 
-def jwt_owner_resolver(context: ServerCallContext) -> str:
-    """Владелец = ``<org_id>:<sub>`` из проверенного JWT хода; без JWT — upstream-дефолт.
-
-    Без JWT (системный путь, ``AI37_AUTH_REQUIRED=false`` в локали) ключ совпадает с
-    ``resolve_user_scope`` — поведение как у ``InMemoryTaskStore``/``RedisTaskStore``.
-    """
-    ctx = current_ctx()
-    claims = getattr(ctx, "claims", None) or {}
-    sub = claims.get("sub")
-    if sub:
-        return f"{claims.get('org_id') or ''}:{sub}"
-    return resolve_user_scope(context)
-
-
 def to_async_url(database_url: str) -> str:
     """``postgres://``/``postgresql://`` из terraform-секрета → драйвер asyncpg для SQLAlchemy."""
     for prefix in ("postgresql+asyncpg://", "postgres://", "postgresql://"):
@@ -132,7 +115,7 @@ class PostgresTaskStore(DatabaseTaskStore):
         engine: AsyncEngine,
         *,
         table_name: str = DEFAULT_TABLE_NAME,
-        owner_resolver: OwnerResolver = jwt_owner_resolver,
+        owner_resolver: OwnerResolver = resolve_user_scope,
     ) -> None:
         # Без table_name: upstream не создаёт модель заново, ниже подставляем кешированную.
         super().__init__(engine, create_table=False, owner_resolver=owner_resolver)

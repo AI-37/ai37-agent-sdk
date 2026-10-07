@@ -40,11 +40,12 @@ app = create_agent_host(card=..., handler=..., agent_context=..., task_store=sto
 ```
 
 Это тонкая обёртка над upstream `a2a.server.tasks.DatabaseTaskStore` (SQLAlchemy async), своего
-хранилища нет. Сверху добавлено:
+хранилища нет. Владельца задачи хост кладёт в `ServerCallContext` сам (`owner.py`, `<org_id>:<sub>`
+из проверенного JWT) — на A2A- и AG-UI-пути и для любого стора. REST-ручки агента, которые ходят в
+стор напрямую, берут контекст через `current_call_context()`. Сверху добавлено:
 
-- **владелец из проверенного JWT** (`<org_id>:<sub>` из `AgentContext` хода): чужой пользователь
-  задачу не прочитает (`get` → `None`) и не перезапишет (`save` → `TaskOwnerError`). Upstream
-  перезаписывает строку по одному `id` независимо от владельца;
+- **чужую задачу не перезаписать** (`save` → `TaskOwnerError`), не прочитать (`get` → `None`).
+  Upstream перезаписывает строку по одному `id` независимо от владельца;
 - **завершённая задача не перезаписывается** (completed/failed/canceled/rejected);
 - **схема — шагом деплоя**: таблицу `a2a_tasks` создаёт Job, под таблицу не создаёт;
 - **ретенция** `cleanup(terminal_retention_days=..., stale_retention_days=...)`.

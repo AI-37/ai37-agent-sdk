@@ -23,11 +23,11 @@ from google.protobuf.struct_pb2 import Struct  # noqa: E402
 from sqlalchemy import text, update  # noqa: E402
 
 from ai37_agent_host.als import HostScope, scope_context  # noqa: E402
+from ai37_agent_host.owner import current_call_context  # noqa: E402
 from ai37_agent_host.postgres_task_store import (  # noqa: E402
     PostgresTaskStore,
     TaskOwnerError,
     create_engine,
-    jwt_owner_resolver,
     main,
     migrate_postgres_task_store,
     to_async_url,
@@ -52,7 +52,9 @@ def _task(task_id: str, state: int, step: int | None = None) -> Task:
     return task
 
 
-CTX = ServerCallContext()
+def ctx() -> ServerCallContext:
+    """Контекст, как его собирает хост: пользователь из JWT текущего хода."""
+    return current_call_context()
 
 
 @pytest.fixture(params=BACKENDS)
@@ -79,16 +81,7 @@ def store(engine: Any, table: str) -> PostgresTaskStore:
     return PostgresTaskStore(engine, table_name=table)
 
 
-# ── owner resolver ───────────────────────────────────────────────────────────
-
-
-def test_owner_from_jwt_claims() -> None:
-    with _as_user("alice", "org-7"):
-        assert jwt_owner_resolver(CTX) == "org-7:alice"
-
-
-def test_owner_without_jwt_falls_back_to_upstream_default() -> None:
-    assert jwt_owner_resolver(CTX) == CTX.user.user_name
+# ── url ──────────────────────────────────────────────────────────────────────
 
 
 def test_async_url_normalisation() -> None:
@@ -120,10 +113,10 @@ async def test_round_trip_survives_a_new_store_instance(
 ) -> None:
     task = _task("t1", TaskState.TASK_STATE_INPUT_REQUIRED, step=2)
     with _as_user("alice"):
-        await store.save(task, CTX)
+        await store.save(task, ctx())
     restarted = PostgresTaskStore(engine, table_name=table)
     with _as_user("alice"):
-        loaded = await restarted.get("t1", CTX)
+        loaded = await restarted.get("t1", ctx())
     assert loaded is not None
     assert loaded.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
     assert dict(loaded.metadata)["state"]["step"] == 2
@@ -131,29 +124,29 @@ async def test_round_trip_survives_a_new_store_instance(
 
 async def test_other_user_cannot_read(store: PostgresTaskStore) -> None:
     with _as_user("alice"):
-        await store.save(_task("t2", TaskState.TASK_STATE_WORKING), CTX)
+        await store.save(_task("t2", TaskState.TASK_STATE_WORKING), ctx())
     with _as_user("bob"):
-        assert await store.get("t2", CTX) is None
+        assert await store.get("t2", ctx()) is None
     with _as_user("alice", org="org-2"):
-        assert await store.get("t2", CTX) is None
+        assert await store.get("t2", ctx()) is None
 
 
 async def test_other_user_cannot_overwrite(store: PostgresTaskStore) -> None:
     with _as_user("alice"):
-        await store.save(_task("t3", TaskState.TASK_STATE_INPUT_REQUIRED), CTX)
+        await store.save(_task("t3", TaskState.TASK_STATE_INPUT_REQUIRED), ctx())
     with _as_user("bob"), pytest.raises(TaskOwnerError):
-        await store.save(_task("t3", TaskState.TASK_STATE_WORKING), CTX)
+        await store.save(_task("t3", TaskState.TASK_STATE_WORKING), ctx())
     with _as_user("alice"):
-        loaded = await store.get("t3", CTX)
+        loaded = await store.get("t3", ctx())
     assert loaded is not None
     assert loaded.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
 
 async def test_non_terminal_task_is_updated(store: PostgresTaskStore) -> None:
     with _as_user("alice"):
-        await store.save(_task("t4", TaskState.TASK_STATE_SUBMITTED), CTX)
-        await store.save(_task("t4", TaskState.TASK_STATE_INPUT_REQUIRED, step=3), CTX)
-        loaded = await store.get("t4", CTX)
+        await store.save(_task("t4", TaskState.TASK_STATE_SUBMITTED), ctx())
+        await store.save(_task("t4", TaskState.TASK_STATE_INPUT_REQUIRED, step=3), ctx())
+        loaded = await store.get("t4", ctx())
     assert loaded is not None
     assert loaded.status.state == TaskState.TASK_STATE_INPUT_REQUIRED
 
@@ -171,11 +164,11 @@ async def test_terminal_task_is_frozen(
     store: PostgresTaskStore, terminal: int, caplog: pytest.LogCaptureFixture
 ) -> None:
     with _as_user("alice"):
-        await store.save(_task("t5", TaskState.TASK_STATE_WORKING), CTX)
-        await store.save(_task("t5", terminal), CTX)
+        await store.save(_task("t5", TaskState.TASK_STATE_WORKING), ctx())
+        await store.save(_task("t5", terminal), ctx())
         with caplog.at_level(logging.WARNING):
-            await store.save(_task("t5", TaskState.TASK_STATE_WORKING), CTX)
-        loaded = await store.get("t5", CTX)
+            await store.save(_task("t5", TaskState.TASK_STATE_WORKING), ctx())
+        loaded = await store.get("t5", ctx())
     assert loaded is not None
     assert loaded.status.state == terminal
     assert "already" in caplog.text
@@ -185,15 +178,15 @@ async def test_repeated_terminal_save_is_silent(
     store: PostgresTaskStore, caplog: pytest.LogCaptureFixture
 ) -> None:
     with _as_user("alice"):
-        await store.save(_task("t6", TaskState.TASK_STATE_COMPLETED), CTX)
+        await store.save(_task("t6", TaskState.TASK_STATE_COMPLETED), ctx())
         with caplog.at_level(logging.WARNING):
-            await store.save(_task("t6", TaskState.TASK_STATE_COMPLETED), CTX)
+            await store.save(_task("t6", TaskState.TASK_STATE_COMPLETED), ctx())
     assert "already" not in caplog.text
 
 
 async def test_system_path_without_jwt_keeps_working(store: PostgresTaskStore) -> None:
-    await store.save(_task("t7", TaskState.TASK_STATE_WORKING), CTX)
-    loaded = await store.get("t7", CTX)
+    await store.save(_task("t7", TaskState.TASK_STATE_WORKING), ctx())
+    loaded = await store.get("t7", ctx())
     assert loaded is not None
 
 
@@ -211,34 +204,34 @@ async def _age(store: PostgresTaskStore, task_id: str, days: int) -> None:
 
 
 async def test_cleanup_keeps_paused_tasks_by_default(store: PostgresTaskStore) -> None:
-    await store.save(_task("old-done", TaskState.TASK_STATE_COMPLETED), CTX)
-    await store.save(_task("new-done", TaskState.TASK_STATE_FAILED), CTX)
-    await store.save(_task("old-paused", TaskState.TASK_STATE_INPUT_REQUIRED), CTX)
+    await store.save(_task("old-done", TaskState.TASK_STATE_COMPLETED), ctx())
+    await store.save(_task("new-done", TaskState.TASK_STATE_FAILED), ctx())
+    await store.save(_task("old-paused", TaskState.TASK_STATE_INPUT_REQUIRED), ctx())
     await _age(store, "old-done", 10)
     await _age(store, "old-paused", 100)
 
     result = await store.cleanup(terminal_retention_days=7)
 
     assert (result.terminal_deleted, result.stale_deleted) == (1, 0)
-    assert await store.get("old-done", CTX) is None
-    assert await store.get("new-done", CTX) is not None
-    assert await store.get("old-paused", CTX) is not None
+    assert await store.get("old-done", ctx()) is None
+    assert await store.get("new-done", ctx()) is not None
+    assert await store.get("old-paused", ctx()) is not None
 
 
 async def test_cleanup_stale_when_asked(store: PostgresTaskStore) -> None:
-    await store.save(_task("old-paused", TaskState.TASK_STATE_INPUT_REQUIRED), CTX)
-    await store.save(_task("fresh-paused", TaskState.TASK_STATE_INPUT_REQUIRED), CTX)
+    await store.save(_task("old-paused", TaskState.TASK_STATE_INPUT_REQUIRED), ctx())
+    await store.save(_task("fresh-paused", TaskState.TASK_STATE_INPUT_REQUIRED), ctx())
     await _age(store, "old-paused", 40)
 
     result = await store.cleanup(terminal_retention_days=7, stale_retention_days=30)
 
     assert (result.terminal_deleted, result.stale_deleted) == (0, 1)
-    assert await store.get("fresh-paused", CTX) is not None
+    assert await store.get("fresh-paused", ctx()) is not None
 
 
 async def test_cleanup_in_small_batches(store: PostgresTaskStore) -> None:
     for i in range(5):
-        await store.save(_task(f"done-{i}", TaskState.TASK_STATE_COMPLETED), CTX)
+        await store.save(_task(f"done-{i}", TaskState.TASK_STATE_COMPLETED), ctx())
         await _age(store, f"done-{i}", 30)
     result = await store.cleanup(terminal_retention_days=7, batch_size=2)
     assert result.terminal_deleted == 5
