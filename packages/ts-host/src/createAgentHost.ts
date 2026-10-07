@@ -5,17 +5,14 @@ import {
   InMemoryTaskStore,
   type TaskStore,
 } from '@a2a-js/sdk/server'
-import {
-  agentCardHandler,
-  jsonRpcHandler,
-  UserBuilder,
-} from '@a2a-js/sdk/server/express'
+import { jsonRpcHandler, UserBuilder } from '@a2a-js/sdk/server/express'
 import type { AgentContextSettings } from '@ai37/agent-sdk'
 import {
   buildDevContextOverrides,
   isDevModeRequested,
 } from '@ai37/agent-sdk/dev'
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
+import { toPublicAgentCard } from './agent-card'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -112,10 +109,11 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
   )
 
-  app.use(
-    `/${AGENT_CARD_PATH}`,
-    agentCardHandler({ agentCardProvider: requestHandler }),
-  )
+  // Карточка своим роутом, а не agentCardHandler SDK: см. toPublicAgentCard (x-ai37 + 1.0-интерфейсы).
+  const publicCard = toPublicAgentCard(opts.card)
+  app.get(`/${AGENT_CARD_PATH}`, (_req, res) => {
+    res.json(publicCard)
+  })
 
   const required = opts.agentContext.auth.required ?? true
   // Dev-режим (insecure-dev / fake billing) включается ТОЛЬКО через env и fail-closed в проде

@@ -27,4 +27,31 @@ describe('a2a forward', () => {
     expect(headers.get('a2a-version')).toBe(A2A_PROTOCOL_VERSION)
     expect(init.body).toContain('metadata') // тело проброшено без изменений
   })
+
+  it('forwardAuthFetch не перезаписывает A2A-Version, заданный клиентом (SDK 1.x)', async () => {
+    const base = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('{}', { status: 200 }),
+    )
+    const f = forwardAuthFetch('jwt-1', { fetch: base as unknown as typeof fetch })
+
+    await f('https://agent.test/a2a/v1', { headers: { 'A2A-Version': '1.0' } })
+
+    const headers = (base.mock.calls[0][1] as RequestInit).headers as Headers
+    expect(headers.get('a2a-version')).toBe('1.0')
+    expect(headers.get('authorization')).toBe('Bearer jwt-1')
+  })
+
+  it('forwardAuthFetch всегда перезаписывает Authorization (forward user-JWT)', async () => {
+    const base = vi.fn(
+      async (_input: RequestInfo | URL, _init?: RequestInit) =>
+        new Response('{}', { status: 200 }),
+    )
+    const f = forwardAuthFetch('jwt-user', { fetch: base as unknown as typeof fetch })
+
+    await f('https://agent.test/a2a/v1', { headers: { Authorization: 'Bearer stale' } })
+
+    const headers = (base.mock.calls[0][1] as RequestInit).headers as Headers
+    expect(headers.get('authorization')).toBe('Bearer jwt-user')
+  })
 })
