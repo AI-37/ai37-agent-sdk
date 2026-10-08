@@ -142,6 +142,7 @@ class PostgresTaskStore(DatabaseTaskStore):
                 f"PostgresTaskStore: table {self.table_name} not found. "
                 "Run `python -m ai37_agent_host.postgres_task_store migrate` first."
             )
+        await _assert_task_table(self.engine, self.table_name)
         widths = await _id_column_widths(self.engine, self.table_name)
         narrow = {name: width for name, width in widths.items() if width < MAX_ID_LENGTH}
         if narrow:
@@ -242,6 +243,36 @@ def _check_id_length(task: Task) -> None:
             raise InvalidParamsError(f"task {name} is longer than {MAX_ID_LENGTH} characters")
 
 
+async def _missing_task_columns(engine: AsyncEngine, table_name: str) -> list[str]:
+    """Колонки модели задачи, которых нет в существующей таблице ``table_name``.
+
+    ``create_all`` и ``has_table`` смотрят только на имя, поэтому чужая таблица с тем же именем
+    (старая схема сервиса, таблица другого компонента в общей БД) сошла бы за готовую.
+    """
+    from sqlalchemy import inspect
+
+    model: Any = _task_model(table_name)
+    expected = [column.name for column in model.__table__.columns]
+
+    def _present(sync_conn: Any) -> set[str]:
+        return {column["name"] for column in inspect(sync_conn).get_columns(table_name)}
+
+    async with engine.connect() as conn:
+        present = await conn.run_sync(_present)
+    return [name for name in expected if name not in present]
+
+
+async def _assert_task_table(engine: AsyncEngine, table_name: str) -> None:
+    """Падает, если таблица ``table_name`` есть, но это не таблица задач A2A."""
+    missing = await _missing_task_columns(engine, table_name)
+    if missing:
+        raise RuntimeError(
+            f"PostgresTaskStore: table {table_name} exists but is not an A2A task table "
+            f"(missing columns {missing}). Another table already uses this name: pick a "
+            "different one (`table_name=` / `--table`) or drop the old table first."
+        )
+
+
 async def _id_column_widths(engine: AsyncEngine, table_name: str) -> dict[str, int]:
     """Ширина varchar у ``id``/``context_id`` в Postgres; у прочих СУБД длина не проверяется."""
     if engine.dialect.name != "postgresql":
@@ -275,6 +306,10 @@ async def migrate_postgres_task_store(
     table = model.__table__
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all, tables=[table])
+    # До ALTER: на чужой таблице с тем же именем create_all молча ничего не сделал бы, а ALTER
+    # поменял бы её колонки id/context_id.
+    await _assert_task_table(engine, table_name)
+    async with engine.begin() as conn:
         if engine.dialect.name == "postgresql":
             quoted = engine.dialect.identifier_preparer.quote(table_name)
             await conn.execute(
@@ -323,7 +358,11 @@ def main(argv: Sequence[str] | None = None, env: dict[str, str] | None = None) -
     if not database_url:
         print("ai37 task store: DATABASE_URL is not set", file=sys.stderr)
         return 1
-    print(asyncio.run(_run_cli(args, database_url)))
+    try:
+        print(asyncio.run(_run_cli(args, database_url)))
+    except RuntimeError as exc:  # таблица не та или не готова: понятное сообщение без трейсбека
+        print(f"ai37 task store: {exc}", file=sys.stderr)
+        return 1
     return 0
 
 

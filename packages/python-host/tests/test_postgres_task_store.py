@@ -232,6 +232,63 @@ async def test_assert_ready_rejects_upstream_narrow_table(engine: Any) -> None:
             await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
 
 
+async def _create_foreign_table(engine: Any, name: str) -> None:
+    """Чужая таблица с тем же именем: так выглядела старая ``a2a_tasks`` в БД Минстроя."""
+    async with engine.begin() as conn:
+        await conn.execute(
+            text(
+                f"CREATE TABLE {name} (id varchar(36) PRIMARY KEY, context_id varchar(36), "
+                "owner_id varchar(255), skill_id varchar(64), state varchar(64))"
+            )
+        )
+
+
+async def test_migrate_refuses_foreign_table_with_same_name(engine: Any) -> None:
+    name = f"foreign_{uuid.uuid4().hex[:8]}"
+    await _create_foreign_table(engine, name)
+    try:
+        with pytest.raises(RuntimeError, match="not an A2A task table") as caught:
+            await migrate_postgres_task_store(engine, table_name=name)
+        assert "kind" in str(caught.value) and "status" in str(caught.value)
+        if engine.dialect.name == "postgresql":
+            async with engine.connect() as conn:
+                width = await conn.scalar(
+                    text(
+                        "SELECT character_maximum_length FROM information_schema.columns "
+                        "WHERE table_name = :t AND column_name = 'id' "
+                        "AND table_schema = current_schema()"
+                    ),
+                    {"t": name},
+                )
+            assert width == 36, "migrate не должен трогать колонки чужой таблицы"
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
+
+
+async def test_assert_ready_refuses_foreign_table_with_same_name(engine: Any) -> None:
+    name = f"foreign_{uuid.uuid4().hex[:8]}"
+    await _create_foreign_table(engine, name)
+    try:
+        with pytest.raises(RuntimeError, match="not an A2A task table"):
+            await PostgresTaskStore(engine, table_name=name).assert_ready()
+    finally:
+        async with engine.begin() as conn:
+            await conn.execute(text(f"DROP TABLE IF EXISTS {name}"))
+
+
+def test_cli_migrate_reports_foreign_table(
+    tmp_path: Any, capsys: pytest.CaptureFixture[str]
+) -> None:
+    import sqlite3  # noqa: PLC0415
+
+    db = tmp_path / "foreign.db"
+    with sqlite3.connect(db) as conn:
+        conn.execute("CREATE TABLE a2a_tasks (id varchar(36) PRIMARY KEY, state varchar(64))")
+    assert main(["migrate"], {"DATABASE_URL": f"sqlite+aiosqlite:///{db}"}) == 1
+    assert "not an A2A task table" in capsys.readouterr().err
+
+
 # ── cleanup ──────────────────────────────────────────────────────────────────
 
 
