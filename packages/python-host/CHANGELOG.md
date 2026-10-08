@@ -4,6 +4,25 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a22] - 2026-10-08
+
+### Added
+
+- `publish_artifact(...)` — зеркало `publishArtifact` из `@ai37/agent-host` `0.1.0-alpha.48`.
+  Публикует результат хода в выходную полку chat-backend (`POST /api/artifacts`, план
+  files-and-artifacts-layer §3.3) от имени пользователя: user-JWT и диалог берутся из request-scope
+  хода. Без них бросает `ArtifactPublishError("no_scope")` и запрос не отправляет. Ключ
+  идемпотентности по умолчанию считается тем же алгоритмом, что в TS, и даёт тот же результат
+  (в тестах это проверено общим вектором). Все поля уходят одним multipart: без файлов httpx
+  отправил бы urlencoded, а markdown — как есть, без CRLF. Ошибки — те же коды, что в TS.
+- `ArtifactsStoreBackend` — read-only StoreBackend по корпусу диалога (`{"contextId": …}`) или
+  проекта (`{"projectId": …}`). Поддержаны `ls`, `read` окнами, FTS-`grep` и `glob`.
+  `read_raw("/<id>/<fileId>")` и `read_file(id, file_id)` отдают байты файла артефакта, а
+  `write`/`edit` возвращают ошибку.
+- `current_turn_context()` → `HostTurn(context_id, task_id)`. A2A-executor и AG-UI-роутер
+  кладут их в scope до вызова handler'а, независимо от трассировки.
+- `context_file_path` разбирает `artifact:<id>` и `project-artifact:<id>`.
+
 ## [0.1.0a21] - 2026-10-08
 
 ### Fixed

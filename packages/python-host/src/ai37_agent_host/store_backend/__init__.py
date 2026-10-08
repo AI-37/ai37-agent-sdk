@@ -1,5 +1,6 @@
 """File-aware store-backends host'а (порт ``ts-host/src/store-backend``)."""
 
+from .artifacts_store_backend import ArtifactsStoreBackend
 from .attachments_store_backend import (
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
@@ -28,6 +29,7 @@ __all__ = [
     "ChatAttachmentsStoreBackend",
     "ProjectAttachmentsStoreBackend",
     "ChatStoreBackend",
+    "ArtifactsStoreBackend",
     "FileInfo",
     "GrepMatch",
     "LsResult",

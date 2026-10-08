@@ -9,6 +9,7 @@ from .agui import agui_routes
 from .als import (
     HostLangfuseScope,
     HostScope,
+    HostTurn,
     current_accepted_output_modes,
     current_bearer,
     current_checkpointer,
@@ -19,9 +20,16 @@ from .als import (
     current_scope,
     current_supported_catalog_ids,
     current_trace_id,
+    current_turn_context,
     reset_scope,
     scope_context,
     set_scope,
+)
+from .artifacts import (
+    ArtifactPublishError,
+    PublishArtifactFile,
+    PublishedArtifact,
+    publish_artifact,
 )
 from .auth_guard import AuthGuardMiddleware
 from .create_agent_host import create_agent_host
@@ -49,6 +57,7 @@ from .output_modes import (
 from .owner import HostCallContextBuilder, JwtUser, current_call_context, current_user
 from .redis_task_store import RedisTaskStore
 from .store_backend import (
+    ArtifactsStoreBackend,
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
     ChatStoreBackend,
@@ -114,6 +123,14 @@ __all__ = [
     "current_langfuse_trace",
     "current_langfuse_handler",
     "current_langfuse_callbacks",
+    "current_turn_context",
+    "HostTurn",
+    # artifacts (выходная полка)
+    "publish_artifact",
+    "PublishArtifactFile",
+    "PublishedArtifact",
+    "ArtifactPublishError",
+    "ArtifactsStoreBackend",
     # output-modes (host negotiation)
     "A2UI_CAPABILITIES_VERSION",
     "negotiate_text",

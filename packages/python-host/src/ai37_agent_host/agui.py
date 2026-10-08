@@ -29,7 +29,7 @@ from collections.abc import AsyncIterator
 from typing import Any
 
 from .a2ui import component_to_a2ui_operations
-from .als import current_ctx, current_scope
+from .als import HostTurn, current_ctx, current_scope
 from .observability.langfuse import BeginTurnArgs, with_turn_observability
 from .output_modes import negotiate_output, read_client_capabilities
 from .types import (
@@ -512,6 +512,8 @@ async def _run_turn(
     # Симметрия с A2A-путём: кладём обе оси в ALS-scope (guard уже открыл его; для AG-UI-тела пуст).
     scope = current_scope()
     if scope is not None:
+        # Диалог и ход (на AG-UI оба = thread_id) — как на A2A-пути, для publish_artifact.
+        scope.turn = HostTurn(context_id=thread_id, task_id=thread_id)
         scope.accepted_output_modes = accepted
         if supported_catalog_ids:
             scope.supported_catalog_ids = supported_catalog_ids

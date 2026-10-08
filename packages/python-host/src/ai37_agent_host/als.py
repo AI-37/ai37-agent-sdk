@@ -28,6 +28,17 @@ class HostLangfuseScope:
 
 
 @dataclass
+class HostTurn:
+    """Диалог и ход текущего запроса.
+
+    A2A ``context_id``/``task_id``; на AG-UI оба равны ``thread_id``.
+    """
+
+    context_id: str
+    task_id: str
+
+
+@dataclass
 class HostScope:
     ctx: AgentContext | None = None
     bearer: str | None = None
@@ -43,6 +54,9 @@ class HostScope:
     #: (состояние хода/HITL): checkpointer — состояние графа.
     checkpointer: Any = None
     langfuse: HostLangfuseScope | None = None
+    #: Диалог и ход: кладут executor и AG-UI-роутер до вызова handler'а, независимо от трассировки.
+    #: Нужны вызовам «от имени хода» без проброса через сигнатуры (:func:`publish_artifact`).
+    turn: HostTurn | None = None
 
 
 _request_scope: contextvars.ContextVar[HostScope | None] = contextvars.ContextVar(
@@ -91,6 +105,12 @@ def current_accepted_output_modes() -> list[str] | None:
 def current_supported_catalog_ids() -> list[str] | None:
     scope = _request_scope.get()
     return scope.supported_catalog_ids if scope else None
+
+
+def current_turn_context() -> HostTurn | None:
+    """Диалог и ход текущего запроса или ``None`` вне хода."""
+    scope = _request_scope.get()
+    return scope.turn if scope else None
 
 
 def current_checkpointer() -> Any:
