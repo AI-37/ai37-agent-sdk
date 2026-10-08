@@ -198,6 +198,24 @@ describe('defaultIdempotencyKey', () => {
     expect(defaultIdempotencyKey(base, 'ctx2', 't')).not.toBe(k)
   })
 
+  it('общий вектор с python-host: ключи совпадают между хостами', () => {
+    expect(
+      defaultIdempotencyKey(
+        {
+          kind: 'lift-report',
+          name: 'Протокол',
+          markdown: '# Протокол\nрасчёт',
+          files: [{ fileName: 'a', data: new Uint8Array([1, 2, 3]) }],
+        },
+        'ctx-1',
+        'task-1',
+      ),
+    ).toBe('auto:45723bc590893178ca233071ad7901320089e89e122531c76c966cae000f4d00')
+    expect(defaultIdempotencyKey({ kind: 'k', name: 'n', markdown: 'm' }, 'c', undefined)).toBe(
+      'auto:9a4a12a8686e9e9528d2a83161b39ad53006d42243e6c576c5be920936033391',
+    )
+  })
+
   it('порядок файлов не важен', () => {
     const a = { fileName: 'a', data: new Uint8Array([1]) }
     const b = { fileName: 'b', data: new Uint8Array([2]) }
