@@ -6,7 +6,8 @@ import type { TaskStore } from '@a2a-js/sdk/server'
 import { negotiateOutput, readClientCapabilities } from './output-modes'
 import { currentCtx, requestScope } from './als'
 import { componentToA2uiOperations, toA2uiSnapshot } from './a2ui'
-import { toTask } from './build-task'
+import { toAguiSnapshot } from './build-task'
+import { currentCallContext } from './owner'
 import { withTurnObservability } from './observability/langfuse'
 import type {
   AgentEvent,
@@ -150,7 +151,8 @@ export function aguiRouter(
 
     // Multi-turn/HITL: состояние прошлого хода thread'а из task-store
     // (taskId = threadId). undefined на первом ходу. Симметрично A2A-пути.
-    const priorTask = taskStore ? await taskStore.load(threadId) : undefined
+    // Владелец — пользователь из JWT хода (тот же, что на A2A-пути): чужой threadId даёт пустой ход.
+    const priorTask = taskStore ? await taskStore.load(threadId, currentCallContext()) : undefined
     const priorState = priorTask?.metadata?.state as
       | Record<string, unknown>
       | undefined
@@ -312,9 +314,10 @@ export function aguiRouter(
       endReasoning()
 
       // Персистим состояние хода в task-store (multi-turn/HITL). Тот же формат
-      // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы.
+      // и тот же taskId(=threadId), что на A2A-пути → state переживает ходы. Снимок без
+      // терминального статуса: задача AG-UI живёт весь тред (см. toAguiSnapshot).
       if (taskStore) {
-        await taskStore.save(toTask(result, threadId, threadId, negotiation))
+        await taskStore.save(toAguiSnapshot(result, threadId, negotiation), currentCallContext())
       }
 
       if (textMessageId) {

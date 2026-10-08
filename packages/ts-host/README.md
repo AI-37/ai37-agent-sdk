@@ -16,7 +16,7 @@ const handler: AgentHandler = {
 };
 
 const app = createAgentHost({
-  card,                         // AgentCard (@a2a-js/sdk)
+  card,                         // Ai37AgentCardInput: поля A2A 0.3 + x-ai37
   handler,
   agentContext: {
     auth: { issuer, audience, jwksUrl, required: true },
@@ -85,6 +85,34 @@ async run({ input }) {
 На следующем `message/send` с тем же `taskId` host грузит прошлый Task и отдаёт его состояние в
 `input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process). Для durable
 (переживает рестарт/реплики) передайте свой `taskStore` в `createAgentHost({ ..., taskStore })`.
+`TaskStore` и `InMemoryTaskStore` хост реэкспортирует, своя зависимость от `@a2a-js/sdk` ради них
+агенту не нужна.
+
+**Владелец задачи.** Хост передаёт стору `ServerCallContext` с пользователем из JWT хода:
+`userName = "<org_id>:<sub>"` (как python-host). Так делают и A2A-путь (`userBuilder` обработчика),
+и AG-UI-путь. Стор `@a2a-js/sdk` 1.x адресует задачу парой (владелец, id), поэтому чужой `taskId`
+не открывает чужую паузу. На 0.3 стор контекст игнорирует, но хост передаёт его уже сейчас.
+
+**REST-ручки агента** (протокол, черновик формы, рекомендации) работают с состоянием хода через
+хелперы, а не через `taskStore.load/save`:
+
+```ts
+import { loadTaskState, saveTaskState } from "@ai37/agent-host";
+
+app.get("/api/draft", guard, async (req, res) => {
+  const state = await loadTaskState(taskStore, String(req.query.taskId)); // от имени пользователя запроса
+  if (!state) return res.status(404).json({ error: "task_expired" });   // нет, истекла или чужая
+  res.json({ draft: state.draft ?? null });
+});
+
+await saveTaskState(taskStore, taskId, { ...state, draft }); // false — задачи нет
+```
+
+Хелперы не зависят от формы `Task` в SDK и переживут переход на `@a2a-js/sdk` 1.x без правок.
+Если нужен сам стор, `currentCallContext()` даёт тот же контекст: `taskStore.load(id, currentCallContext())`.
+
+На AG-UI `taskId = threadId`, задача живёт весь тред. Её снимок хост пишет без терминального
+статуса (`completed`/`failed` хода → `unknown`), иначе после первого `completed` тред бы замёрз.
 
 ## Артефакты: результат хода, который нужен дольше хода
 

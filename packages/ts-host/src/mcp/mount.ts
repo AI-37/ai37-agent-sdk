@@ -1,5 +1,5 @@
 import type { Express } from 'express'
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentCardInput } from '../agent-card'
 import type {
   AgentContextOverrides,
   AgentContextSettings,
@@ -28,7 +28,7 @@ export function deriveAuthorizationServers(
 }
 
 export interface MountMcpOptions {
-  card: AgentCard
+  card: Ai37AgentCardInput
   mcp: McpOptions
   agentContext: AgentContextSettings
   required: boolean

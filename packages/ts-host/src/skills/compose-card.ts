@@ -1,4 +1,4 @@
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentCardInput } from '../agent-card'
 import {
   AI37_ROUTING_EXTENSION_URI,
   buildAgentRoutingExtension,
@@ -17,7 +17,9 @@ export interface Ai37SkillsCardBlock {
   skillsIo?: Record<string, SkillIoSchemas>
 }
 
-export type ComposedAgentCard = AgentCard & { 'x-ai37'?: Ai37SkillsCardBlock }
+export type ComposedAgentCard<C extends Ai37AgentCardInput = Ai37AgentCardInput> = C & {
+  'x-ai37'?: Ai37SkillsCardBlock
+}
 
 /**
  * Карточка агента, собранная из зарегистрированных скиллов: базовая карточка потребителя
@@ -28,11 +30,11 @@ export type ComposedAgentCard = AgentCard & { 'x-ai37'?: Ai37SkillsCardBlock }
  * результат ПОЛНОСТЬЮ равен базовой карточке — «агент без дополнительных скиллов ничего
  * не меняет» (закреплено тестом).
  */
-export function composeCardWithSkills(
-  base: AgentCard,
+export function composeCardWithSkills<C extends Ai37AgentCardInput>(
+  base: C,
   providers: readonly SkillProvider[],
-): ComposedAgentCard {
-  const card: ComposedAgentCard = { ...base, skills: providers.map((p) => p.card) }
+): ComposedAgentCard<C> {
+  const card: ComposedAgentCard<C> = { ...base, skills: providers.map((p) => p.card) }
 
   const extraDomains = providers.flatMap((p) => p.routing?.domains ?? [])
   const extraIntents = providers.flatMap((p) => p.routing?.intents ?? [])
@@ -75,10 +77,10 @@ function dedupeCaseInsensitive(values: string[]): string[] {
   return result
 }
 
-function withXAi37(
-  card: ComposedAgentCard,
+function withXAi37<C extends Ai37AgentCardInput>(
+  card: ComposedAgentCard<C>,
   providers: readonly SkillProvider[],
-): ComposedAgentCard {
+): ComposedAgentCard<C> {
   const skillsBilling: NonNullable<Ai37SkillsCardBlock['skills']> = {}
   const skillsIo: NonNullable<Ai37SkillsCardBlock['skillsIo']> = {}
   for (const provider of providers) {

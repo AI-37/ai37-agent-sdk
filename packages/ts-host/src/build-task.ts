@@ -130,3 +130,23 @@ export function toTask(
     ],
   }
 }
+
+/**
+ * Снимок хода AG-UI для task-store. На AG-UI `taskId = threadId`: одна задача живёт весь тред, и
+ * каждый ход перезаписывает её снимок. Поэтому статус в снимке не бывает терминальным:
+ * `completed`/`failed` хода записываются как `unknown`, `input-required` остаётся. Иначе после
+ * первого `completed` стор с неизменяемой терминальной задачей (и обработчик `@a2a-js/sdk` 1.2+,
+ * который отклоняет сообщения в неё) заморозил бы тред. Так же делает python-host
+ * (`agui.py:_save_state` пишет задачу без статуса).
+ *
+ * Всё остальное как у `toTask`: `metadata.state` для следующего хода, A2UI и артефакт результата.
+ */
+export function toAguiSnapshot(
+  result: AgentResult,
+  threadId: string,
+  negotiation: OutputNegotiation = TEXT_ONLY,
+): Task {
+  const task = toTask(result, threadId, threadId, negotiation)
+  if (task.status.state === 'input-required') return task
+  return { ...task, status: { ...task.status, state: 'unknown' } }
+}

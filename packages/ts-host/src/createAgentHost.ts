@@ -1,18 +1,19 @@
 import express, { type Express } from 'express'
-import { AGENT_CARD_PATH, type AgentCard } from '@a2a-js/sdk'
+import { AGENT_CARD_PATH } from '@a2a-js/sdk'
 import {
   DefaultRequestHandler,
   InMemoryTaskStore,
   type TaskStore,
 } from '@a2a-js/sdk/server'
-import { jsonRpcHandler, UserBuilder } from '@a2a-js/sdk/server/express'
+import { jsonRpcHandler } from '@a2a-js/sdk/server/express'
 import type { AgentContextSettings } from '@ai37/agent-sdk'
 import {
   buildDevContextOverrides,
   isDevModeRequested,
 } from '@ai37/agent-sdk/dev'
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
-import { toPublicAgentCard } from './agent-card'
+import { toPublicAgentCard, toSdkAgentCard, type Ai37AgentCardInput } from './agent-card'
+import { hostUserBuilder } from './owner'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -22,8 +23,11 @@ import type { AgentHandler } from './types'
 import { renderMetrics, metricsContentType, serviceLabel } from './metrics'
 
 export interface AgentHostOptions {
-  /** AgentCard (discovery). */
-  card: AgentCard
+  /**
+   * Карточка агента (discovery) в словаре хоста: поля A2A 0.3 + `x-ai37`. Карточку 0.3 из
+   * `@a2a-js/sdk` можно передать как есть; публичную гибридную форму хост строит сам.
+   */
+  card: Ai37AgentCardInput
   /** Когниция агента (intent/work/critic/respond внутри). */
   handler: AgentHandler
   /** Настройки auth/billing для @ai37/agent-sdk AgentContext. */
@@ -104,7 +108,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   const taskStore = opts.taskStore ?? new InMemoryTaskStore()
 
   const requestHandler = new DefaultRequestHandler(
-    opts.card,
+    toSdkAgentCard(opts.card),
     taskStore,
     new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
   )
@@ -139,7 +143,8 @@ export function createAgentHost(opts: AgentHostOptions): Express {
     guard,
     jsonRpcHandler({
       requestHandler,
-      userBuilder: UserBuilder.noAuthentication, // auth делает guard (ALS)
+      // JWT проверяет guard (ALS), здесь только владелец задачи `<org_id>:<sub>` для TaskStore.
+      userBuilder: hostUserBuilder,
     }),
   )
 

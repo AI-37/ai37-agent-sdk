@@ -1,7 +1,23 @@
 // @ai37/agent-host — публичная точка входа.
 export { createAgentHost } from './createAgentHost'
 export { toPublicAgentCard } from './agent-card'
-export type { AgentInterface, PublicAgentCard } from './agent-card'
+export type {
+  AgentInterface,
+  PublicAgentCard,
+  Ai37AgentCardInput,
+  Ai37AgentCardInterface,
+  Ai37AgentCapabilities,
+  Ai37AgentExtension,
+  Ai37AgentSkill,
+  Ai37SecurityScheme,
+} from './agent-card'
+// Владелец A2A-задачи из JWT хода (`<org_id>:<sub>`) и контекст вызова TaskStore для AG-UI и REST-ручек.
+export { JwtUser, currentUser, currentCallContext, hostUserBuilder } from './owner'
+// Состояние хода для REST-ручек агента: от имени пользователя запроса, без типов Task из SDK.
+export { loadTaskState, saveTaskState } from './task-state'
+// TaskStore реэкспортом: агенту не нужна прямая зависимость от @a2a-js/sdk ради типа стора.
+export { InMemoryTaskStore } from '@a2a-js/sdk/server'
+export type { TaskStore, ServerCallContext } from '@a2a-js/sdk/server'
 export type { AgentHostOptions } from './createAgentHost'
 // LangGraph durable-чекпоинтер: фабрика (PostgresSaver ± MemorySaver) + turn-scope accessor.
 export { createCheckpointer } from './createCheckpointer'
@@ -74,7 +90,7 @@ export type {
 } from './mcp'
 export { parseA2AMessage } from './parse'
 export type { ParsedMessage } from './parse'
-export { toTask, agentMessage } from './build-task'
+export { toTask, toAguiSnapshot, agentMessage } from './build-task'
 export { HostExecutor } from './a2a-executor'
 export { aguiRouter } from './agui'
 export { componentToA2uiOperations, toA2uiSnapshot } from './a2ui'
