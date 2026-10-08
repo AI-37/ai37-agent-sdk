@@ -2,17 +2,18 @@ name: ci
 
 on:
   pull_request:
-  # Ручной запуск — чтобы можно было прогнать CI на self-hosted раннере
-  # (например когда исчерпаны минуты GitHub-hosted). На push/PR input не задан,
-  # inputs.runner пуст → все джобы идут на ubuntu-latest как раньше.
+  # Раннер (канон AI-37, одинаковый во всех репо): ручной запуск с runner=ubuntu-latest или
+  # ai37-self-hosted выбирает явно; auto и автопрогон на PR берут переменную CI_RUNNER (репо или
+  # организации, JSON-массив меток, напр. ["self-hosted","ai37-local-1"]), без неё — ubuntu-latest.
   workflow_dispatch:
     inputs:
       runner:
-        description: Runner for CI jobs
+        description: "Runner: auto = переменная CI_RUNNER, иначе ubuntu-latest"
         type: choice
         required: true
-        default: ubuntu-latest
+        default: auto
         options:
+          - auto
           - ubuntu-latest
           - ai37-self-hosted
 
@@ -25,7 +26,7 @@ jobs:
   # ───────────────────────── @ai37/docx (TS) ─────────────────────────
   ts-docx:
     name: ts · @ai37/docx
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/ts-docx
@@ -44,7 +45,7 @@ jobs:
   # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
   ts:
     name: ts · @ai37/agent-sdk
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/ts
@@ -64,7 +65,7 @@ jobs:
   # Зависит от @ai37/agent-sdk (file:../ts) — сначала собираем ядро, чтобы был его dist.
   ts-host:
     name: ts · @ai37/agent-host
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     # @ai37/a2ui-catalog-schemas тянется из приватного Verdaccio (npm.app.sp-ai.ru) → `npm ci`
     # нужен _auth. Даём его на уровне job (как в publish-ts-host.yml): NPM_CONFIG_USERCONFIG
     # грузит корневой .npmrc (//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}), AI37_NPM_TOKEN — из secrets.
@@ -99,7 +100,7 @@ jobs:
   # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
   python:
     name: py · ai37-agent-sdk
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/python
@@ -120,7 +121,7 @@ jobs:
   # ───────────────────────── ai37-capture-contract (Python) ─────────────────────────
   capture-contract:
     name: py · ai37-capture-contract
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/capture-contract
@@ -144,7 +145,7 @@ jobs:
   # опубликованный SDK с PyPI, сиблинг собирать не нужно.
   python-host:
     name: py · ai37-agent-host
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     defaults:
       run:
         working-directory: packages/python-host
@@ -183,7 +184,7 @@ jobs:
   # codes.ts / codes.py должны соответствовать contract/feature-codes.json.
   codegen-parity:
     name: codegen parity
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -203,7 +204,7 @@ jobs:
   ci-green:
     if: always()
     needs: [ts-docx, ts, ts-host, python, python-host, capture-contract, codegen-parity]
-    runs-on: ubuntu-latest
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-latest' }}
     steps:
       - name: gate
         if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
