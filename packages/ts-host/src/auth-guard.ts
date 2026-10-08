@@ -9,7 +9,7 @@ import {
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { readClientCapabilities } from './output-modes'
 import { requestScope } from './als'
-import { recordAuthFailure } from './metrics'
+import { recordAuthFailure, recordAuthGuardError } from './metrics'
 
 /**
  * Достаёт нативный `params.configuration.acceptedOutputModes` (формат текста) из тела A2A JSON-RPC
@@ -53,9 +53,27 @@ function readInstructions(body: unknown): string | undefined {
 }
 
 /**
+ * Сбой проверки при `required=true`, не являющийся `AuthError`: конфиг (`BillingConfigurationError`
+ * при пустом `appsAuthToken`), зависимость (introspection/JWKS вне обёртки `AuthError`) или баг.
+ * Запрос завершаем, а не пропускаем анонимом: иначе дыра в конфиге открывает агент без auth
+ * (fail-open). Клиенту — 503 без деталей, детали — в лог и метрику
+ * `ai37_agent_auth_guard_errors_total`. Общий для `jwtGuard` и `mcpChallengeGuard`.
+ */
+export function reportGuardError(service: string, guard: 'jwt' | 'mcp', e: unknown): void {
+  recordAuthGuardError(service)
+  const name = e instanceof Error ? e.name : typeof e
+  const message = e instanceof Error ? e.message : String(e)
+  console.error(
+    `[ai37-agent-host] ${guard}-guard: проверка запроса упала не на auth (${name}: ${message}) — ` +
+      'запрос отклонён 503, проверьте конфигурацию auth/billing агента.',
+  )
+}
+
+/**
  * Express-middleware: строит verified `AgentContext` из заголовков и открывает
- * request-scope. При `required` и невалидном/отсутствующем токене → 401.
- * При `required=false` — пропускает без ctx (миграция).
+ * request-scope. При `required`: невалидный/отсутствующий токен (`AuthError`) → 401, любой другой
+ * сбой проверки (конфиг, недоступная зависимость) → 503; в обоих случаях `next()` не вызывается
+ * (fail-closed). При `required=false` — пропускает без ctx (миграция).
  *
  * `overrides` (verifier/billingClient) — точка внедрения dev-режима
  * (`buildDevContextOverrides` из `@ai37/agent-sdk/dev`); по умолчанию пусто → прод-поведение.
@@ -79,36 +97,34 @@ export function jwtGuard(
     const acceptedOutputModes = readAcceptedOutputModes(req.body)
     const supportedCatalogIds = readSupportedCatalogIds(req.body)
     const instructions = readInstructions(req.body)
+    let ctx: AgentContext | undefined
     try {
-      const ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
-      requestScope.run(
-        {
-          ctx,
-          bearer: extractBearer(req.headers),
-          acceptedOutputModes,
-          supportedCatalogIds,
-          instructions,
-          checkpointer,
-        },
-        () => next(),
-      )
+      ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
     } catch (e) {
-      if (e instanceof AuthError && required) {
-        recordAuthFailure(service)
-        res.status(401).json({ error: 'unauthorized', detail: e.message })
+      if (required) {
+        if (e instanceof AuthError) {
+          recordAuthFailure(service)
+          res.status(401).json({ error: 'unauthorized', detail: e.message })
+        } else {
+          reportGuardError(service, 'jwt', e)
+          res.status(503).json({ error: 'auth_unavailable' })
+        }
         return
       }
-      requestScope.run(
-        {
-          ctx: undefined,
-          bearer: undefined,
-          acceptedOutputModes,
-          supportedCatalogIds,
-          instructions,
-          checkpointer,
-        },
-        () => next(),
-      )
+      // required=false (миграция) — пропускаем без ctx.
     }
+    // next() вне try: исключение ниже по цепочке не должно попасть в catch проверки и
+    // запустить обработчик второй раз.
+    requestScope.run(
+      {
+        ctx,
+        bearer: ctx ? extractBearer(req.headers) : undefined,
+        acceptedOutputModes,
+        supportedCatalogIds,
+        instructions,
+        checkpointer,
+      },
+      () => next(),
+    )
   }
 }

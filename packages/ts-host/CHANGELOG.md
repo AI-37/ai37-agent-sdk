@@ -3,6 +3,28 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.50]
+
+### Security
+- `jwtGuard` и `mcpChallengeGuard` закрываются при сбое (fail-closed). Раньше при `required=true`
+  401 отдавался только на `AuthError`. Любая другая ошибка проверки пропускала запрос дальше
+  анонимом (`ctx: undefined`). Такими ошибками были `BillingConfigurationError` при пустом
+  `billing.appsAuthToken` (падал каждый запрос с токеном), сбой introspection или JWKS вне
+  обёртки `AuthError`, баг верификатора. Теперь при `required=true`: `AuthError` даёт 401, как
+  раньше; любая другая ошибка даёт **503** с телом без деталей. Для A2A и AG-UI это
+  `{"error":"auth_unavailable"}`, для MCP — JSON-RPC `-32603` без `WWW-Authenticate`. `next()` не
+  вызывается. При `required=false` поведение прежнее, запрос идёт анонимом.
+
+### Added
+- Метрика `ai37_agent_auth_guard_errors_total{service}`: 503 из guard'ов. Подробности ошибки
+  (имя и сообщение) пишутся в `console.error`, токен в лог не попадает.
+- `MountMcpOptions.service` и пятый параметр `service` у `mcpChallengeGuard` для лейбла метрики.
+  `createAgentHost` передаёт их сам.
+
+### Changed
+- `next()` в guard'ах вызывается вне `try`. Исключение ниже по цепочке больше не попадает в
+  `catch` проверки токена.
+
 ## [0.1.0-alpha.49]
 
 Подготовка к `@a2a-js/sdk` 1.x, ещё на 0.3 (план docs `plans/ts-a2a-sdk-1x-database-task-store.md`,
