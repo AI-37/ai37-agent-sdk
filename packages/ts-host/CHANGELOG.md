@@ -3,6 +3,37 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.49]
+
+Подготовка к `@a2a-js/sdk` 1.x, ещё на 0.3 (план docs `plans/ts-a2a-sdk-1x-database-task-store.md`,
+§3.4 срез 1). Агенты могут перейти на новые типы и хелперы до смены SDK, тогда их PR после 0.2.0
+сведутся к бампу.
+
+### Added
+- Владелец A2A-задачи из JWT хода: `currentUser()` (`JwtUser`, `userName = "<org_id>:<sub>"`; без
+  `sub` — аноним), `currentCallContext()` (`ServerCallContext` для прямых обращений к стору) и
+  `hostUserBuilder` для `jsonRpcHandler`. Паритет с python-host `owner.py`.
+- `loadTaskState(store, taskId)` / `saveTaskState(store, taskId, state)` для REST-ручек агента:
+  состояние хода (`task.metadata.state`) от имени пользователя запроса, без типов `Task` из SDK.
+  Нет задачи (истекла или чужая) — `undefined` / `false`.
+- Свой тип карточки `Ai37AgentCardInput` (поля A2A 0.3 + `x-ai37`) и типы её частей
+  (`Ai37AgentSkill`, `Ai37AgentCapabilities`, `Ai37AgentExtension`, `Ai37SecurityScheme`,
+  `Ai37AgentCardInterface`). Карточка `AgentCard` из `@a2a-js/sdk` 0.3 присваивается без приведения.
+- Реэкспорт `TaskStore`, `InMemoryTaskStore`, `ServerCallContext` из `@a2a-js/sdk/server`.
+- `toAguiSnapshot(result, threadId, negotiation)` — снимок хода AG-UI для стора (см. Changed).
+
+### Changed
+- `jsonRpcHandler` получает `hostUserBuilder` вместо `UserBuilder.noAuthentication`, AG-UI-путь
+  передаёт стору `currentCallContext()`. На 0.3 `InMemoryTaskStore` контекст игнорирует, так что
+  поведение по умолчанию прежнее; свой стор, который смотрит на `context.user`, теперь видит владельца.
+- AG-UI пишет снимок треда без терминального статуса: `completed`/`failed` хода сохраняются как
+  `unknown`, `input-required` как есть. На AG-UI `taskId = threadId`, задача живёт весь тред, и после
+  первого `completed` стор с неизменяемой терминальной задачей (ts-host 0.2.1) и обработчик SDK 1.2+
+  заморозили бы тред. Состояние (`metadata.state`), A2UI и артефакт результата не меняются.
+- `AgentHostOptions.card`, `composeCardWithSkills`, `SkillCardEntry`, `mountMcp` типизированы
+  словарём хоста (`Ai37AgentCardInput`, `Ai37AgentSkill`). `composeCardWithSkills` стала generic и
+  возвращает тип базовой карточки, так что код, который держит результат как `AgentCard` 0.3, не ломается.
+
 ## [0.1.0-alpha.48]
 
 ### Added

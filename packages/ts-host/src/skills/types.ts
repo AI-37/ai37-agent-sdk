@@ -1,4 +1,4 @@
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentSkill } from '../agent-card'
 import type { BillingExecutionRequirement } from '@ai37/agent-sdk'
 import type { AgentHandler, AgentInput } from '../types'
 
@@ -12,8 +12,8 @@ import type { AgentHandler, AgentInput } from '../types'
  * продуктовый форк) и подключаются кодом или через env-загрузчик (loader.ts).
  */
 
-/** Запись `card.skills[]` A2A-карточки (тип элемента из @a2a-js/sdk). */
-export type SkillCardEntry = AgentCard['skills'][number]
+/** Запись `card.skills[]` карточки (словарь хоста, не зависит от версии `@a2a-js/sdk`). */
+export type SkillCardEntry = Ai37AgentSkill
 
 /**
  * Настоящие JSON Schema входа/выхода скилла → `x-ai37.skillsIo[id]` карточки
