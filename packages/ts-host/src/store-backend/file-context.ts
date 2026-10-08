@@ -9,15 +9,22 @@ import type { ContextFile } from '../types'
  * файловый доступ, без привязки к домену.
  */
 
-/** Префикс ref → якорь виртуальной ФС StoreBackend (см. attachments-store-backend `anchor`). */
+/**
+ * Префикс ref → якорь виртуальной ФС StoreBackend (см. attachments-store-backend `anchor`). Артефакты
+ * агентов (`artifact:` / `project-artifact:`) читает `ArtifactsStoreBackend`, смонтированный на
+ * `/artifacts/` и `/project-artifacts/`; в `context_files` они не приходят — только явным ref.
+ */
 const REF_ANCHORS: ReadonlyArray<readonly [string, string]> = [
   ['project-attachment:', 'project-attachments'],
   ['chat-attachment:', 'chat-attachments'],
+  ['project-artifact:', 'project-artifacts'],
+  ['artifact:', 'artifacts'],
 ]
 
 /**
  * Путь виртуальной ФС для `read`/`grep` по ref'у файла: `project-attachment:<id>` → `/project-attachments/<id>`,
- * `chat-attachment:<id>` → `/chat-attachments/<id>`. null — если ref неизвестного вида (не файл).
+ * `chat-attachment:<id>` → `/chat-attachments/<id>`, `artifact:<id>` → `/artifacts/<id>`,
+ * `project-artifact:<id>` → `/project-artifacts/<id>`. null — если ref неизвестного вида (не файл).
  */
 export function contextFilePath(ref: string): string | null {
   for (const [prefix, anchor] of REF_ANCHORS) {

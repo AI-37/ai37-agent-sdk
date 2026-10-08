@@ -138,6 +138,8 @@ export function aguiRouter(
     // Guard уже открыл scope; для AG-UI-тела он пуст (нет `params`), дополняем.
     const scope = requestScope.getStore()
     if (scope) {
+      // Диалог и ход (на AG-UI оба = threadId) — как на A2A-пути, для publishArtifact.
+      scope.turn = { contextId: threadId, taskId: threadId }
       scope.acceptedOutputModes = accepted
       if (supportedCatalogIds.length > 0) scope.supportedCatalogIds = supportedCatalogIds
       // Инструкция владельца (жёсткая политика) в scope — Ai37ChatCompletions подмешает её в LLM-вызовы.

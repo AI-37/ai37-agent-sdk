@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { tmpdir } from 'node:os'
 import type { AgentCard } from '@a2a-js/sdk'
 import { OUTPUT_MODE_TEXT, OUTPUT_MODE_MARKDOWN } from '@ai37/agent-sdk'
-import { createAgentHost, type AgentHandler } from '../src/index'
+import { createAgentHost, currentTurnContext, type AgentHandler } from '../src/index'
 
 // Каталог A2UI этого агента (две оси: формат текста ≠ выбор каталога).
 const CATALOG = 'https://ai-37.github.io/ai37-a2ui-catalog/a2ui/catalogs/ai37-a2ui/v1/catalog.json'
@@ -933,5 +933,59 @@ describe('A2A a2uiAction (симметрия с AG-UI: оркестратор ф
     const r = await send()
     expect(r.status).toBe(200)
     expect(r.body.result.artifacts[0].parts[0].data.result.action).toBeNull()
+  })
+})
+
+describe('диалог и ход в request-scope (currentTurnContext)', () => {
+  function capturingApp(seen: Array<{ contextId: string; taskId: string } | undefined>) {
+    const capture: AgentHandler = {
+      async run() {
+        seen.push(currentTurnContext())
+        return { status: 'completed', message: 'ok' }
+      },
+    }
+    return createAgentHost({
+      card,
+      handler: capture,
+      agentContext: {
+        auth: { issuer: 'https://issuer', audience: 'aud', required: false },
+        billing: { baseUrl: 'http://localhost:9999' },
+      },
+    })
+  }
+
+  it('A2A: handler видит contextId и taskId хода без включённой трассировки', async () => {
+    const seen: Array<{ contextId: string; taskId: string } | undefined> = []
+    const r = await request(capturingApp(seen))
+      .post('/a2a/v1')
+      .send({
+        jsonrpc: '2.0',
+        id: '1',
+        method: 'message/send',
+        params: {
+          message: {
+            kind: 'message',
+            messageId: 'm1',
+            role: 'user',
+            contextId: 'ctx-42',
+            parts: [{ kind: 'text', text: 'hi' }],
+          },
+        },
+      })
+    expect(r.status).toBe(200)
+    expect(seen[0]?.contextId).toBe('ctx-42')
+    expect(seen[0]?.taskId).toBe(r.body.result.id)
+  })
+
+  it('AG-UI: оба значения — threadId', async () => {
+    const seen: Array<{ contextId: string; taskId: string } | undefined> = []
+    await request(capturingApp(seen))
+      .post('/agui')
+      .send({ threadId: 'th-7', runId: 'r1', messages: [{ role: 'user', content: 'hi' }] })
+    expect(seen[0]).toEqual({ contextId: 'th-7', taskId: 'th-7' })
+  })
+
+  it('вне хода — undefined', () => {
+    expect(currentTurnContext()).toBeUndefined()
   })
 })

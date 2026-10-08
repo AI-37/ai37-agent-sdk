@@ -17,12 +17,13 @@ export {
   currentTraceId,
   currentSessionId,
   currentTurnId,
+  currentTurnContext,
   currentLangfuseTrace,
   currentLangfuseHandler,
   currentLangfuseCallbacks,
   requestScope,
 } from './als'
-export type { HostScope, HostLangfuseScope } from './als'
+export type { HostScope, HostLangfuseScope, HostTurn } from './als'
 // Langfuse-наблюдаемость (v4/OTel): host сам открывает turn-спан хода; эти хелперы — для ручного
 // контроля/тестов. `injectTraceContext` форвардит W3C trace-context вниз по A2A.
 export {
@@ -91,6 +92,25 @@ export type {
   ProjectAttachmentsStoreBackendOptions,
 } from './store-backend/attachments-store-backend'
 // File-aware примитив: манифест context_files в промпт + маппинг ref→путь (read/grep). Generic.
+// Выходная полка: артефакты агентов — публикация (user-JWT хода) и read-only StoreBackend.
+export { ArtifactsStoreBackend } from './store-backend/artifacts-store-backend'
+export type {
+  ArtifactsStoreBackendOptions,
+  ArtifactFileBody,
+} from './store-backend/artifacts-store-backend'
+export {
+  publishArtifact,
+  ArtifactPublishError,
+  artifactErrorCode,
+  defaultIdempotencyKey,
+} from './artifacts/publish-artifact'
+export type {
+  PublishArtifactOptions,
+  PublishArtifactFile,
+  PublishedArtifact,
+  PublishedArtifactFile,
+  ArtifactPublishErrorCode,
+} from './artifacts/publish-artifact'
 export {
   renderContextFilesManifest,
   contextFilePath,
