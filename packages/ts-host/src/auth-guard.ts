@@ -52,20 +52,43 @@ function readInstructions(body: unknown): string | undefined {
   return raw || undefined
 }
 
+const MAX_LOGGED_MESSAGE = 200
+
+/**
+ * Сообщение ошибки для лога. Сообщение произвольной ошибки из auth/billing-пути может нести
+ * секрет (токен в тексте исключения), поэтому вырезаем токен запроса и всё токеноподобное
+ * (`Bearer …`, JWT `eyJ….….…`) и режем длину.
+ */
+function loggableMessage(e: unknown, bearer: string | undefined): string {
+  let message = e instanceof Error ? e.message : String(e)
+  if (bearer) message = message.split(bearer).join('[redacted]')
+  message = message
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/eyJ[\w-]*\.[\w-]*\.[\w-]*/g, '[redacted-jwt]')
+  return message.length > MAX_LOGGED_MESSAGE
+    ? `${message.slice(0, MAX_LOGGED_MESSAGE)}…`
+    : message
+}
+
 /**
  * Сбой проверки при `required=true`, не являющийся `AuthError`: конфиг (`BillingConfigurationError`
  * при пустом `appsAuthToken`), зависимость (introspection/JWKS вне обёртки `AuthError`) или баг.
  * Запрос завершаем, а не пропускаем анонимом: иначе дыра в конфиге открывает агент без auth
- * (fail-open). Клиенту — 503 без деталей, детали — в лог и метрику
- * `ai37_agent_auth_guard_errors_total`. Общий для `jwtGuard` и `mcpChallengeGuard`.
+ * (fail-open). Клиенту — 503 без деталей, детали — в лог (без секретов, см. `loggableMessage`) и
+ * метрику `ai37_agent_auth_guard_errors_total`. Общий для `jwtGuard` и `mcpChallengeGuard`.
  */
-export function reportGuardError(service: string, guard: 'jwt' | 'mcp', e: unknown): void {
+export function reportGuardError(
+  service: string,
+  guard: 'jwt' | 'mcp',
+  e: unknown,
+  bearer?: string,
+): void {
   recordAuthGuardError(service)
   const name = e instanceof Error ? e.name : typeof e
-  const message = e instanceof Error ? e.message : String(e)
   console.error(
-    `[ai37-agent-host] ${guard}-guard: проверка запроса упала не на auth (${name}: ${message}) — ` +
-      'запрос отклонён 503, проверьте конфигурацию auth/billing агента.',
+    `[ai37-agent-host] ${guard}-guard: проверка запроса упала не на auth ` +
+      `(${name}: ${loggableMessage(e, bearer)}) — запрос отклонён 503, ` +
+      'проверьте конфигурацию auth/billing агента.',
   )
 }
 
@@ -106,7 +129,7 @@ export function jwtGuard(
           recordAuthFailure(service)
           res.status(401).json({ error: 'unauthorized', detail: e.message })
         } else {
-          reportGuardError(service, 'jwt', e)
+          reportGuardError(service, 'jwt', e, extractBearer(req.headers))
           res.status(503).json({ error: 'auth_unavailable' })
         }
         return

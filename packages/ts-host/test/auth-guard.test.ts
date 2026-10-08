@@ -1,6 +1,6 @@
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'
-import express from 'express'
+import express, { type NextFunction, type Request, type Response } from 'express'
 import {
   AuthError,
   BillingConfigurationError,
@@ -150,6 +150,57 @@ describe('jwtGuard, required=true', () => {
     expect(r.status).toBe(200)
     expect(r.body).toEqual({ anonymous: false, sub: 'alice' })
     expect(calls).toHaveLength(1)
+  })
+})
+
+describe('jwtGuard: лог 503 без секретов', () => {
+  it('токен запроса, Bearer-заголовок и JWT из сообщения ошибки вырезаны', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const secret = 'sk-live-opaque-key-123'
+    const jwt = 'eyJhbGciOiJSUzI1NiJ9.eyJzdWIiOiJhIn0.c2lnbmF0dXJl'
+    const leaky = new Error(`introspection of ${secret} failed; Bearer other-token; ${jwt}`)
+    const { app } = guarded(true, { verifier: throwingVerifier(leaky) }, 'g-503-redact')
+    const r = await post(app, secret)
+    expect(r.status).toBe(503)
+    const line = String(log.mock.calls[0]?.[0])
+    expect(line).toContain('introspection of [redacted] failed')
+    expect(line).not.toContain(secret)
+    expect(line).not.toContain('other-token')
+    expect(line).not.toContain(jwt)
+  })
+
+  it('длинное сообщение обрезается', async () => {
+    const log = vi.spyOn(console, 'error').mockImplementation(() => {})
+    const { app } = guarded(true, { verifier: throwingVerifier(new Error('x'.repeat(5000))) }, 'g-503-long')
+    await post(app, 'tok')
+    expect(String(log.mock.calls[0]?.[0]).length).toBeLessThan(500)
+  })
+})
+
+describe('jwtGuard: исключение ниже по цепочке не перезапускает обработчик', () => {
+  const okOverrides = (): AgentContextOverrides => ({
+    verifier: new FakeJwtVerifier(claims),
+    billingClient: new InMemoryBillingClient({ runtimeState: fixtures.runtimeState.active() }),
+  })
+  const req = { headers: { authorization: 'Bearer tok' }, body: {} } as unknown as Request
+  const res = (): Response => {
+    const r = { status: vi.fn(), json: vi.fn() }
+    r.status.mockReturnValue(r)
+    return r as unknown as Response
+  }
+
+  it.each([
+    ['required=false, Error', false, new Error('downstream')],
+    ['required=true, AuthError из downstream', true, new AuthError('downstream')],
+  ])('%s → next() один раз, ошибка всплывает, ответ guard не пишет', async (_l, required, error) => {
+    const guard = jwtGuard(settings(required), required, okOverrides(), 'g-next')
+    const next = vi.fn(() => {
+      throw error
+    }) as unknown as NextFunction
+    const response = res()
+    await expect(guard(req, response, next)).rejects.toBe(error)
+    expect(next).toHaveBeenCalledTimes(1)
+    expect(response.status).not.toHaveBeenCalled()
   })
 })
 

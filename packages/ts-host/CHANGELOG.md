@@ -17,13 +17,16 @@
 
 ### Added
 - Метрика `ai37_agent_auth_guard_errors_total{service}`: 503 из guard'ов. Подробности ошибки
-  (имя и сообщение) пишутся в `console.error`, токен в лог не попадает.
+  (имя и сообщение) пишутся в `console.error`. Токен запроса, `Bearer …` и JWT из сообщения
+  вырезаются, длина ограничена 200 символами.
 - `MountMcpOptions.service` и пятый параметр `service` у `mcpChallengeGuard` для лейбла метрики.
   `createAgentHost` передаёт их сам.
 
 ### Changed
 - `next()` в guard'ах вызывается вне `try`. Исключение ниже по цепочке больше не попадает в
-  `catch` проверки токена.
+  `catch` проверки токена и не запускает обработчик второй раз.
+
+Паритет: `ai37-agent-host` (Python) `0.1.0a23`.
 
 ## [0.1.0-alpha.49]
 

@@ -52,7 +52,7 @@ export function mcpChallengeGuard(
         return
       }
       if (required) {
-        reportGuardError(service, 'mcp', e)
+        reportGuardError(service, 'mcp', e, extractBearer(req.headers))
         res.status(503).json({
           jsonrpc: '2.0',
           error: { code: -32603, message: 'auth unavailable' },

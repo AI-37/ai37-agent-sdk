@@ -4,6 +4,33 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a23] - 2026-10-09
+
+Паритет с `@ai37/agent-host` `0.1.0-alpha.50`: guard'ы закрываются при сбое проверки так же, как в TS.
+
+### Security
+
+- `AuthGuardMiddleware` и `McpChallengeGuardMiddleware` при `required=True` отвечают **503** на
+  сбой проверки, который не является `AuthError`. Это `BillingConfigurationError` при пустом
+  `billing.apps_auth_token`, сбой introspection или JWKS вне `AuthError`, баг верификатора. Тело
+  ответа без деталей: для A2A и AG-UI `{"error": "auth_unavailable"}`, для MCP JSON-RPC `-32603`
+  без `WWW-Authenticate`. Downstream не вызывается. Анонимного прохода здесь и раньше не было:
+  исключение всплывало из middleware, и сервер отдавал сырой 500 без метрики.
+  `AuthError` → 401, как раньше.
+
+### Added
+
+- Метрика `ai37_agent_auth_guard_errors_total{service}`. Причина пишется в лог
+  `ai37_agent_host.auth_guard` (уровень ERROR). Токен запроса, `Bearer …` и JWT из сообщения
+  вырезаются, длина ограничена 200 символами.
+- `McpChallengeGuardMiddleware(service=...)` и `MountMcpOptions.service` для лейбла метрики.
+
+### Changed
+
+- При `required=False` сбой проверки, который не является `AuthError`, пропускает запрос без
+  ctx, как в TS. Раньше был 500. Доступа это не расширяет: при `required=False` запрос без
+  токена и так проходит анонимом.
+
 ## [0.1.0a22] - 2026-10-08
 
 ### Added
