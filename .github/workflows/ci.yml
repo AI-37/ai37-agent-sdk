@@ -2,9 +2,9 @@ name: ci
 
 on:
   pull_request:
-  # Раннер (канон AI-37, одинаковый во всех репо): ручной запуск с runner=ubuntu-latest или
-  # ai37-self-hosted выбирает явно; auto и автопрогон на PR берут переменную CI_RUNNER (репо или
-  # организации, JSON-массив меток, напр. ["self-hosted","ai37-local-1"]), без неё — ubuntu-latest.
+  # Раннер (канон AI-37): ручной запуск с runner=ubuntu-latest или ai37-self-hosted выбирает
+  # явно; auto и автозапуск берут переменную организации CI_RUNNER — раннер тестов (CI),
+  # JSON-массив меток, напр. ["self-hosted","ai37-local-1"]; без неё — ubuntu-latest.
   workflow_dispatch:
     inputs:
       runner:

@@ -14,14 +14,18 @@ name: publish · ai37-agent-sdk (PyPI)
 # Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
 
 on:
+  # Раннер (канон AI-37): ручной запуск с runner=ubuntu-latest или ai37-self-hosted выбирает
+  # явно; auto и автозапуск берут переменную организации CD_RUNNER — раннер деплоя и публикации (CD),
+  # JSON-массив меток, напр. ["self-hosted","ai37-local-1"]; без неё — ubuntu-latest.
   workflow_dispatch:
     inputs:
       runner:
-        description: Runner for publish job
+        description: "Runner: auto = переменная CD_RUNNER, иначе ubuntu-latest"
         type: choice
         required: true
-        default: ubuntu-latest
+        default: auto
         options:
+          - auto
           - ubuntu-latest
           - ai37-self-hosted
       dry_run:
@@ -40,7 +44,7 @@ concurrency:
 jobs:
   publish:
     name: PyPI publish · ai37-agent-sdk
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CD_RUNNER && fromJSON(vars.CD_RUNNER) || 'ubuntu-latest' }}
     timeout-minutes: 20
     defaults:
       run:
