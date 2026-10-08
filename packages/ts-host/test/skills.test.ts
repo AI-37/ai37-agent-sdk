@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentCardInput as AgentCard } from '../src/index'
 import {
   buildAgentRoutingExtension,
   type AgentContext,

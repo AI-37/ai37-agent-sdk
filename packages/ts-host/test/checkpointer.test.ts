@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest'
 import request from 'supertest'
 import { MemorySaver } from '@langchain/langgraph-checkpoint'
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentCardInput as AgentCard } from '../src/index'
 import { OUTPUT_MODE_TEXT, OUTPUT_MODE_MARKDOWN } from '@ai37/agent-sdk'
 import {
   createAgentHost,

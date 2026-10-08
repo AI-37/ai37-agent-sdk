@@ -1,5 +1,7 @@
 import { v4 as uuidv4 } from 'uuid'
-import type { Message, Task } from '@a2a-js/sdk'
+import { Role, TaskState, type Artifact, type Message, type Task, type TaskStatus } from '@a2a-js/sdk'
+import { AgentEvent as SdkEvent, type AgentExecutionEvent } from '@a2a-js/sdk/server'
+import { dataPart, textPart } from './parts'
 import { filterA2uiByCatalog, type OutputNegotiation } from './output-modes'
 import { toA2uiSnapshot } from './a2ui'
 import type { A2uiComponent, A2uiSnapshot, AgentResult } from './types'
@@ -37,20 +39,54 @@ export function agentMessage(
   text: string,
 ): Message {
   return {
-    kind: 'message',
     messageId: uuidv4(),
-    role: 'agent',
-    parts: [{ kind: 'text', text }],
     contextId,
     taskId,
+    role: Role.ROLE_AGENT,
+    parts: [textPart(text)],
+    metadata: undefined,
+    extensions: [],
+    referenceTaskIds: [],
+  }
+}
+
+function status(state: TaskState, message?: Message): TaskStatus {
+  return { state, message, timestamp: now() }
+}
+
+/**
+ * Id артефакта формы `input-required`. Стабилен в пределах задачи: следующий ход заменяет форму на
+ * месте (или очищает её, см. `finalTaskEvents`), а не копит старые формы рядом с новой.
+ */
+export function formArtifactId(taskId: string): string {
+  return `a2ui-${taskId}`
+}
+
+function formArtifact(taskId: string, a2ui: A2uiSnapshot[] | undefined): Artifact {
+  return {
+    artifactId: formArtifactId(taskId),
+    name: 'input-required',
+    description: '',
+    parts: a2ui ? [dataPart({ a2ui })] : [],
+    metadata: undefined,
+    extensions: [],
   }
 }
 
 /**
- * Заворачивает результат handler'а в A2A-`Task`. `negotiation` определяет content-negotiation
- * вывода (РЕШЕНИЕ 10, две оси): A2UI (включая HITL-карточку `followup`) — только если каталог
- * согласован (`negotiation.catalogId`); текст для `completed` — только если агент дал `message`
- * (никаких дефолтов). По умолчанию (без negotiation) — text-only.
+ * Заворачивает результат handler'а в A2A-`Task` (типы `@a2a-js/sdk` 1.x). `negotiation` определяет
+ * content-negotiation вывода (РЕШЕНИЕ 10, две оси): A2UI (включая HITL-карточку `followup`) — только
+ * если каталог согласован (`negotiation.catalogId`); текст для `completed` — только если агент дал
+ * `message` (никаких дефолтов). По умолчанию (без negotiation) — text-only.
+ *
+ * Клиенту 0.3 compat-слой SDK отдаёт ту же задачу в форме 0.3: `kind:'task'`, состояние строкой,
+ * data-часть как `{ kind: 'data', data }`.
+ *
+ * Форма `input-required` едет data-частью артефакта `a2ui-<taskId>` (`{ a2ui: [...] }`), а не в
+ * `task.metadata.a2ui`, как было на 0.3. Причина в стриме 1.x: после первого события прогресса
+ * сервер не принимает второй `task`, финал уходит `status-update` + `artifact-update`, а relay 0.3
+ * (`drainStream` до 0.2.0) метаданные `status-update` не читает и форму потерял бы. Артефакты читают
+ * все версии relay (`extractA2ui` смотрит и туда, и в `metadata.a2ui`).
  */
 export function toTask(
   result: AgentResult,
@@ -70,71 +106,102 @@ export function toTask(
     result.followup && negotiation.catalogIds.includes(result.followup.catalogId ?? negotiation.catalogId ?? '')
       ? result.followup
       : undefined
+  const base = { id: taskId, contextId, history: [] as Message[] }
 
   if (result.status === 'failed') {
     return {
-      kind: 'task',
-      id: taskId,
-      contextId,
-      status: {
-        state: 'failed',
-        message: agentMessage(taskId, contextId, result.message ?? 'Ошибка'),
-        timestamp: now(),
-      },
+      ...base,
+      status: status(TaskState.TASK_STATE_FAILED, agentMessage(taskId, contextId, result.message ?? 'Ошибка')),
+      artifacts: [],
+      metadata: undefined,
     }
   }
 
   if (result.status === 'input-required') {
     return {
-      kind: 'task',
-      id: taskId,
-      contextId,
-      status: {
-        state: 'input-required',
-        message: agentMessage(taskId, contextId, result.message ?? 'Уточните'),
-        timestamp: now(),
-      },
-      metadata: {
-        // Формы уезжают конвертами с гарантированным surfaceId (см. ensureEnvelopeSurfaceIds).
-        a2ui: ensureEnvelopeSurfaceIds(followup ? [followup] : a2ui, taskId),
-        ...(result.state !== undefined ? { state: result.state } : {}),
-      },
+      ...base,
+      status: status(
+        TaskState.TASK_STATE_INPUT_REQUIRED,
+        agentMessage(taskId, contextId, result.message ?? 'Уточните'),
+      ),
+      // Формы уезжают конвертами с гарантированным surfaceId (см. ensureEnvelopeSurfaceIds).
+      artifacts: [formArtifact(taskId, ensureEnvelopeSurfaceIds(followup ? [followup] : a2ui, taskId))],
+      metadata: result.state !== undefined ? { state: result.state } : undefined,
     }
   }
 
   return {
-    kind: 'task',
-    id: taskId,
-    contextId,
-    status: {
-      state: 'completed',
-      // Текст — только если агент его дал (компонент-онли каноничен: AG-UI content опционален,
-      // A2A не требует текстовый part). Никаких болванок '.Готово'.
-      ...(result.message
-        ? { message: agentMessage(taskId, contextId, result.message) }
-        : {}),
-      timestamp: now(),
-    },
-    ...(result.state !== undefined ? { metadata: { state: result.state } } : {}),
+    ...base,
+    // Текст — только если агент его дал (компонент-онли каноничен: AG-UI content опционален,
+    // A2A не требует текстовый part). Никаких болванок '.Готово'.
+    status: status(
+      TaskState.TASK_STATE_COMPLETED,
+      result.message ? agentMessage(taskId, contextId, result.message) : undefined,
+    ),
+    metadata: result.state !== undefined ? { state: result.state } : undefined,
     artifacts: [
       {
         artifactId: uuidv4(),
         name: 'result',
-        parts: [
-          {
-            kind: 'data',
-            data: { a2ui, result: result.result },
-          },
-        ],
+        description: '',
+        parts: [dataPart({ a2ui, result: result.result })],
+        metadata: undefined,
+        extensions: [],
       },
     ],
   }
 }
 
 /**
+ * События финала хода для шины исполнения `@a2a-js/sdk` 1.x.
+ *
+ * Сервер 1.x не заменяет сохранённую задачу, а сливает с ней новую: `metadata` по ключам, артефакты
+ * по `artifactId`. Поэтому то, что прошлый ход оставил, а этот не дал, надо очистить явно, иначе оно
+ * доживёт до ответа: форма прошлого шага (артефакт `a2ui-<taskId>` → пустой) и `metadata.state`
+ * (→ `null`, читатели считают его отсутствием). На 0.3 задача заменялась целиком.
+ *
+ * `lifecycleStarted` — исполнение уже опубликовало `task` (прогресс). Тогда второй `task` в стриме
+ * запрещён, и финал уходит `artifact-update` по каждому артефакту + `status-update` с метаданными.
+ * Иначе — один `task`.
+ */
+export function finalTaskEvents(
+  task: Task,
+  prior: Task | undefined,
+  lifecycleStarted: boolean,
+): AgentExecutionEvent[] {
+  const formId = formArtifactId(task.id)
+  const artifacts = [...task.artifacts]
+  const priorForm = prior?.artifacts?.find((a) => a.artifactId === formId)
+  if (priorForm?.parts.length && !artifacts.some((a) => a.artifactId === formId)) {
+    artifacts.push(formArtifact(task.id, undefined))
+  }
+  let metadata = task.metadata
+  const priorState = prior?.metadata?.state
+  if (priorState !== undefined && priorState !== null && metadata?.state === undefined) {
+    metadata = { ...metadata, state: null }
+  }
+
+  if (!lifecycleStarted) return [SdkEvent.task({ ...task, artifacts, metadata })]
+  return [
+    ...artifacts.map((artifact) =>
+      SdkEvent.artifactUpdate({
+        taskId: task.id,
+        contextId: task.contextId,
+        artifact,
+        append: false,
+        lastChunk: true,
+        metadata: undefined,
+      }),
+    ),
+    SdkEvent.statusUpdate({ taskId: task.id, contextId: task.contextId, status: task.status, metadata }),
+  ]
+}
+
+/**
  * Снимок хода AG-UI для task-store. На AG-UI `taskId = threadId`: одна задача живёт весь тред, и
  * каждый ход перезаписывает её снимок. Поэтому статус в снимке не бывает терминальным:
- * `completed`/`failed` хода записываются как `unknown`, `input-required` остаётся. Иначе после
+ * `completed`/`failed` хода записываются как `TASK_STATE_UNSPECIFIED` (в 0.3 — `unknown`),
+ * `input-required` остаётся. Иначе после
  * первого `completed` стор с неизменяемой терминальной задачей (и обработчик `@a2a-js/sdk` 1.2+,
  * который отклоняет сообщения в неё) заморозил бы тред. Так же делает python-host
  * (`agui.py:_save_state` пишет задачу без статуса).
@@ -147,6 +214,6 @@ export function toAguiSnapshot(
   negotiation: OutputNegotiation = TEXT_ONLY,
 ): Task {
   const task = toTask(result, threadId, threadId, negotiation)
-  if (task.status.state === 'input-required') return task
-  return { ...task, status: { ...task.status, state: 'unknown' } }
+  if (task.status?.state === TaskState.TASK_STATE_INPUT_REQUIRED) return task
+  return { ...task, status: status(TaskState.TASK_STATE_UNSPECIFIED, task.status?.message) }
 }

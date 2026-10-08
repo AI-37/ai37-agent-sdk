@@ -153,7 +153,7 @@ export function aguiRouter(
     // (taskId = threadId). undefined на первом ходу. Симметрично A2A-пути.
     // Владелец — пользователь из JWT хода (тот же, что на A2A-пути): чужой threadId даёт пустой ход.
     const priorTask = taskStore ? await taskStore.load(threadId, currentCallContext()) : undefined
-    const priorState = priorTask?.metadata?.state as
+    const priorState = (priorTask?.metadata?.state ?? undefined) as
       | Record<string, unknown>
       | undefined
 

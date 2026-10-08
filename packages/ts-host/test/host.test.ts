@@ -3,7 +3,7 @@ import request from 'supertest'
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import type { AgentCard } from '@a2a-js/sdk'
+import type { Ai37AgentCardInput as AgentCard } from '../src/index'
 import { OUTPUT_MODE_TEXT, OUTPUT_MODE_MARKDOWN } from '@ai37/agent-sdk'
 import { createAgentHost, currentTurnContext, type AgentHandler } from '../src/index'
 
@@ -39,6 +39,22 @@ const handler: AgentHandler = {
   },
 }
 
+type WireArtifact = { artifactId: string; name?: string; parts: { kind: string; data?: any }[] }
+
+/**
+ * Форма input-required из ответа 0.3: с ts-host 0.2 она едет data-частью артефакта `a2ui-<taskId>`
+ * (раньше — `task.metadata.a2ui`), см. build-task `toTask`.
+ */
+function formOf(result: { id: string; artifacts?: WireArtifact[] }): any[] {
+  const art = result.artifacts?.find((a) => a.artifactId === `a2ui-${result.id}`)
+  return art?.parts[0]?.data?.a2ui ?? []
+}
+
+/** data-часть артефакта `result` (completed). */
+function resultData(result: { artifacts?: WireArtifact[] }): any {
+  return result.artifacts?.find((a) => a.name === 'result')?.parts[0]?.data
+}
+
 /** Хелпер: A2UI capabilities в метаданных A2A-сообщения. */
 function caps(ids: string[]) {
   return { a2uiClientCapabilities: { 'v0.9': { supportedCatalogIds: ids } } }
@@ -70,11 +86,12 @@ describe('createAgentHost', () => {
     expect(r.body.skills.length).toBe(1)
   })
 
-  it('agent-card гибридный: поля 0.3 + supportedInterfaces 1.0', async () => {
+  it('agent-card гибридный: поля 0.3 + supportedInterfaces с JSON-RPC 1.0 и 0.3', async () => {
     const r = await request(app()).get('/.well-known/agent-card.json')
     expect(r.body.url).toBe('http://localhost/a2a/v1')
     expect(r.body.protocolVersion).toBe('0.3')
     expect(r.body.supportedInterfaces).toEqual([
+      { url: 'http://localhost/a2a/v1', protocolBinding: 'JSONRPC', protocolVersion: '1.0' },
       { url: 'http://localhost/a2a/v1', protocolBinding: 'JSONRPC', protocolVersion: '0.3' },
     ])
   })
@@ -114,7 +131,7 @@ describe('createAgentHost', () => {
     expect(r.status).toBe(200)
     expect(r.body.result.status.state).toBe('completed')
     // каталог не согласован → компоненты не отдаются; текст (status.message) есть, т.к. агент его дал
-    expect(r.body.result.artifacts[0].parts[0].data.a2ui).toEqual([])
+    expect(resultData(r.body.result).a2ui).toEqual([])
     expect(r.body.result.status.message.parts[0].text).toBe('ok')
   })
 
@@ -137,7 +154,7 @@ describe('createAgentHost', () => {
       })
     expect(r.status).toBe(200)
     expect(r.body.result.status.state).toBe('completed')
-    expect(r.body.result.artifacts[0].parts[0].data.a2ui[0].component).toBe('SimpleTable')
+    expect(resultData(r.body.result).a2ui[0].component).toBe('SimpleTable')
   })
 
   it('A2A: клиент поддерживает только чужой каталог → A2UI не шлётся', async () => {
@@ -157,7 +174,7 @@ describe('createAgentHost', () => {
           },
         },
       })
-    expect(r.body.result.artifacts[0].parts[0].data.a2ui).toEqual([])
+    expect(resultData(r.body.result).a2ui).toEqual([])
   })
 
   it('component-only: completed без message → НЕТ status.message (текст не форсится)', async () => {
@@ -192,7 +209,7 @@ describe('createAgentHost', () => {
       })
     expect(r.body.result.status.state).toBe('completed')
     expect(r.body.result.status.message).toBeUndefined()
-    expect(r.body.result.artifacts[0].parts[0].data.a2ui[0].component).toBe('SimpleTable')
+    expect(resultData(r.body.result).a2ui[0].component).toBe('SimpleTable')
   })
 })
 
@@ -316,7 +333,7 @@ describe('multi-turn state (HITL)', () => {
     // ход 2 — тот же taskId, handler видит prior state без эха клиента
     const r2 = await send(wizardApp, '2', [{ kind: 'text', text: 'answer' }], taskId)
     expect(r2.body.result.status.state).toBe('completed')
-    expect(r2.body.result.artifacts[0].parts[0].data.result.resumedStep).toBe(1)
+    expect(resultData(r2.body.result).result.resumedStep).toBe(1)
   })
 })
 
@@ -415,7 +432,7 @@ describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляе
     expect(body.indexOf('TEXT_MESSAGE_CONTENT')).toBeLessThan(body.indexOf('ACTIVITY_SNAPSHOT'))
   })
 
-  it('A2A: конверт уезжает в metadata.a2ui ЦЕЛИКОМ (id/dataModel — сквозной контракт)', async () => {
+  it('A2A: конверт уезжает в артефакт формы ЦЕЛИКОМ (id/dataModel — сквозной контракт)', async () => {
     const r = await request(snapshotApp())
       .post('/a2a/v1')
       .send({
@@ -432,7 +449,7 @@ describe('AG-UI result.a2ui с конвертом A2uiSnapshot (управляе
           },
         },
       })
-    const [item] = r.body.result.metadata.a2ui
+    const [item] = formOf(r.body.result)
     expect(item.component).toEqual({ component: 'FormCard', props: { title: 'т' } })
     expect(item.messageId).toBe('msg-stable-1')
     expect(item.surfaceId).toBe('surf-stable-1')
@@ -492,17 +509,17 @@ describe('инвариант surfaceId конвертов (a2ui-action-owner-by-
     // Шаг 1: дефолт выводится из taskId этого визарда.
     const r1 = await send(app, '1')
     const taskId: string = r1.body.result.id
-    expect(r1.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${taskId}`)
+    expect(formOf(r1.body.result)[0].surfaceId).toBe(`surf-${taskId}`)
 
     // Шаг 2 того же визарда (resume по taskId): surfaceId ТОТ ЖЕ — форма заменяется на месте,
     // маппинг владельца у оркестратора не размножается.
     const r2 = await send(app, '2', taskId)
-    expect(r2.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${taskId}`)
+    expect(formOf(r2.body.result)[0].surfaceId).toBe(`surf-${taskId}`)
 
     // Повторный запуск расчёта (новый диалог → новый таск): surfaceId ДРУГОЙ.
     const r3 = await send(app, '3')
     expect(r3.body.result.id).not.toBe(taskId)
-    expect(r3.body.result.metadata.a2ui[0].surfaceId).toBe(`surf-${r3.body.result.id}`)
+    expect(formOf(r3.body.result)[0].surfaceId).toBe(`surf-${r3.body.result.id}`)
   })
 
   it('заданный агентом surfaceId не перетирается, второй конверт без id получает суффикс', async () => {
@@ -531,7 +548,7 @@ describe('инвариант surfaceId конвертов (a2ui-action-owner-by-
     })
 
     const r = await send(app, '1')
-    const items = r.body.result.metadata.a2ui
+    const items = formOf(r.body.result)
     const taskId: string = r.body.result.id
     expect(items[0].surfaceId).toBe('surf-custom')
     expect(items[1].surfaceId).toBe(`surf-${taskId}`)
@@ -560,7 +577,7 @@ describe('инвариант surfaceId конвертов (a2ui-action-owner-by-
     })
 
     const r = await send(app, '1')
-    const [item] = r.body.result.metadata.a2ui
+    const [item] = formOf(r.body.result)
     const taskId: string = r.body.result.id
     // Сырое дерево нормализовано в конверт: дерево внутри `component`, id — от taskId.
     expect(item.component).toEqual({ component: 'FormCard', props: { title: 'Лифты' } })
@@ -589,7 +606,7 @@ describe('инвариант surfaceId конвертов (a2ui-action-owner-by-
     })
 
     const r = await send(app, '1')
-    const [item] = r.body.result.metadata.a2ui
+    const [item] = formOf(r.body.result)
     expect(item.component).toEqual({ component: 'FormCard', props: { title: 'Сырая' } })
     expect(item.surfaceId).toBe(`surf-${r.body.result.id}`)
   })
@@ -857,7 +874,7 @@ describe('dev-режим (insecure-dev + fake billing) через env', () => {
       })
 
     expect(r.status).toBe(200)
-    const data = r.body.result.artifacts[0].parts[0].data.result
+    const data = resultData(r.body.result).result
     expect(data.billingOrgId).toBe('dev-billing-org')
     expect(data.remainingTotalTokens).toBe(777)
     expect(data.llmKey).toBe('sk-dev-777')
@@ -915,7 +932,7 @@ describe('A2A a2uiAction (симметрия с AG-UI: оркестратор ф
       },
     })
     expect(r.status).toBe(200)
-    const action = r.body.result.artifacts[0].parts[0].data.result.action
+    const action = resultData(r.body.result).result.action
     expect(action.name).toBe('apply')
     expect(action.context.N).toBe('15')
     expect(action.surfaceId).toBe('surf-1')
@@ -924,7 +941,7 @@ describe('A2A a2uiAction (симметрия с AG-UI: оркестратор ф
   it('nav:* действие с пустым context', async () => {
     const r = await send({ a2uiAction: { userAction: { name: 'nav:building', context: {} } } })
     expect(r.status).toBe(200)
-    const action = r.body.result.artifacts[0].parts[0].data.result.action
+    const action = resultData(r.body.result).result.action
     expect(action.name).toBe('nav:building')
     expect(action.context).toEqual({})
   })
@@ -932,7 +949,7 @@ describe('A2A a2uiAction (симметрия с AG-UI: оркестратор ф
   it('без a2uiAction → input.action undefined', async () => {
     const r = await send()
     expect(r.status).toBe(200)
-    expect(r.body.result.artifacts[0].parts[0].data.result.action).toBeNull()
+    expect(resultData(r.body.result).result.action).toBeNull()
   })
 })
 

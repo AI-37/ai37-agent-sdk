@@ -1,13 +1,14 @@
 import { beforeAll, describe, expect, it } from 'vitest'
 import request from 'supertest'
 import express from 'express'
-import type { Task } from '@a2a-js/sdk'
-import type { ServerCallContext } from '@a2a-js/sdk/server'
+import { TaskState, type Task } from '@a2a-js/sdk'
+import { ServerCallContext } from '@a2a-js/sdk/server'
 import type { AgentContext } from '@ai37/agent-sdk'
 import { createTestKeyset, TEST_AUDIENCE, TEST_ISSUER, type TestKeyset } from '@ai37/agent-sdk/testing'
 import {
   createAgentHost,
   currentCallContext,
+  InMemoryTaskStore,
   currentUser,
   hostUserBuilder,
   jwtGuard,
@@ -21,27 +22,26 @@ import {
 } from '../src/index'
 
 /**
- * Стор с семантикой `@a2a-js/sdk` 1.x: задача адресуется парой (владелец, id), владелец —
- * `context.user.userName`. На 0.3 `InMemoryTaskStore` контекст игнорирует, поэтому для проверки
- * владельца нужен такой стор: так видно, что хост передаёт контекст на всех путях.
+ * `InMemoryTaskStore` 1.x адресует задачу парой (владелец, id), владелец — `context.user.userName`.
+ * Подкласс записывает, с каким владельцем к нему приходили, и даёт прочитать задачу «от имени»
+ * конкретного пользователя.
  */
-class OwnerScopedStore implements TaskStore {
-  readonly rows = new Map<string, Task>()
+class OwnerScopedStore extends InMemoryTaskStore {
   readonly owners: string[] = []
 
-  private key(id: string, context?: ServerCallContext): string {
-    const owner = context?.user?.userName ?? '<no-context>'
-    this.owners.push(owner)
-    return `${owner}|${id}`
+  override async save(task: Task, context: ServerCallContext): Promise<void> {
+    this.owners.push(context.user?.userName ?? '<no-user>')
+    return super.save(task, context)
   }
 
-  async save(task: Task, context?: ServerCallContext): Promise<void> {
-    this.rows.set(this.key(task.id, context), structuredClone(task))
+  override async load(taskId: string, context: ServerCallContext): Promise<Task | undefined> {
+    this.owners.push(context.user?.userName ?? '<no-user>')
+    return super.load(taskId, context)
   }
 
-  async load(taskId: string, context?: ServerCallContext): Promise<Task | undefined> {
-    const task = this.rows.get(this.key(taskId, context))
-    return task ? structuredClone(task) : undefined
+  /** Задача `id` глазами пользователя `<org>:<sub>` (без записи в owners). */
+  peek(id: string, sub: string, org = 'org-1'): Promise<Task | undefined> {
+    return super.load(id, new ServerCallContext({ user: new JwtUser(sub, org) }))
   }
 }
 
@@ -156,7 +156,8 @@ describe('владелец задачи на путях хоста', () => {
     const r1 = await send(app, alice)
     expect(r1.body.result.status.state).toBe('input-required')
     const taskId: string = r1.body.result.id
-    expect(store.rows.has(`org-1:alice|${taskId}`)).toBe(true)
+    expect(await store.peek(taskId, 'alice')).toBeDefined()
+    expect(await store.peek(taskId, 'bob')).toBeUndefined()
 
     // Боб знает taskId, но задача адресуется парой (владелец, id): для него её нет.
     const stolen = await send(app, bob, taskId)
@@ -166,8 +167,7 @@ describe('владелец задачи на путях хоста', () => {
     const r2 = await send(app, alice, taskId)
     expect(r2.body.result.status.state).toBe('completed')
     expect(r2.body.result.status.message.parts[0].text).toBe('шаг 1')
-    expect(store.owners).not.toContain('<no-context>')
-    expect(store.owners).not.toContain('')
+    expect(new Set(store.owners)).toEqual(new Set(['org-1:alice', 'org-1:bob']))
   })
 
   it('AG-UI: состояние треда видно только его владельцу', async () => {
@@ -177,15 +177,15 @@ describe('владелец задачи на путях хоста', () => {
     const bob = await token('bob')
 
     await agui(app, alice, 'th-1')
-    expect(store.rows.get('org-1:alice|th-1')?.metadata?.state).toEqual({ step: 1 })
+    expect((await store.peek('th-1', 'alice'))?.metadata?.state).toEqual({ step: 1 })
 
     // У Боба тот же threadId — первый ход, не продолжение мастера Алисы.
     await agui(app, bob, 'th-1')
-    expect(store.rows.get('org-1:bob|th-1')?.metadata?.state).toEqual({ step: 1 })
+    expect((await store.peek('th-1', 'bob'))?.metadata?.state).toEqual({ step: 1 })
 
     const second = await agui(app, alice, 'th-1')
     expect(second.text).toContain('шаг 1')
-    expect(store.rows.get('org-1:alice|th-1')?.metadata?.state).toEqual({ step: 2 })
+    expect((await store.peek('th-1', 'alice'))?.metadata?.state).toEqual({ step: 2 })
   })
 
   it('смена организации — другой владелец (паритет с python-host)', async () => {
@@ -198,17 +198,17 @@ describe('владелец задачи на путях хоста', () => {
 })
 
 describe('AG-UI-снимок без терминального статуса', () => {
-  it('completed хода пишется как unknown, тред продолжается следующим ходом', async () => {
+  it('completed хода пишется как UNSPECIFIED, тред продолжается следующим ходом', async () => {
     const store = new OwnerScopedStore()
     const app = createAgentHost({ card, handler: wizard, agentContext: auth(), taskStore: store })
     const alice = await token('alice')
 
     await agui(app, alice, 'th-2')
-    expect(store.rows.get('org-1:alice|th-2')?.status.state).toBe('input-required')
+    expect((await store.peek('th-2', 'alice'))?.status?.state).toBe(TaskState.TASK_STATE_INPUT_REQUIRED)
 
     await agui(app, alice, 'th-2')
-    const snapshot = store.rows.get('org-1:alice|th-2')
-    expect(snapshot?.status.state).toBe('unknown')
+    const snapshot = await store.peek('th-2', 'alice')
+    expect(snapshot?.status?.state).toBe(TaskState.TASK_STATE_UNSPECIFIED)
     expect(snapshot?.metadata?.state).toEqual({ step: 2 })
 
     // Третий ход того же треда видит состояние второго: снимок не «замёрз» на completed.
@@ -254,10 +254,10 @@ describe('loadTaskState / saveTaskState (REST-ручки агента)', () => {
       .send({ step: 1, draft: { rooms: 2 } })
     expect(write.status).toBe(204)
 
-    const saved = store.rows.get(`org-1:alice|${taskId}`)
+    const saved = await store.peek(taskId, 'alice')
     expect(saved?.metadata?.state).toEqual({ step: 1, draft: { rooms: 2 } })
-    expect(saved?.status.state).toBe('input-required')
-    expect(saved?.metadata?.a2ui).toBeDefined()
+    expect(saved?.status?.state).toBe(TaskState.TASK_STATE_INPUT_REQUIRED)
+    expect(saved?.artifacts.map((a) => a.artifactId)).toEqual([`a2ui-${taskId}`])
   })
 
   it('чужая или несуществующая задача — 404, запись не делается', async () => {
@@ -274,20 +274,22 @@ describe('loadTaskState / saveTaskState (REST-ручки агента)', () => {
       .set('Authorization', `Bearer ${bob}`)
       .send({ hacked: true })
     expect(write.status).toBe(404)
-    expect(store.rows.has(`org-1:bob|${taskId}`)).toBe(false)
-    expect(store.rows.get(`org-1:alice|${taskId}`)?.metadata?.state).toEqual({ step: 1 })
+    expect(await store.peek(taskId, 'bob')).toBeUndefined()
+    expect((await store.peek(taskId, 'alice'))?.metadata?.state).toEqual({ step: 1 })
   })
 
   it('задача без состояния — пустой словарь, а не undefined', async () => {
     const store = new OwnerScopedStore()
     const alice = await token('alice')
     const task: Task = {
-      kind: 'task',
       id: 't-empty',
       contextId: 'c',
-      status: { state: 'working' },
+      status: { state: TaskState.TASK_STATE_WORKING, message: undefined, timestamp: undefined },
+      artifacts: [],
+      history: [],
+      metadata: undefined,
     }
-    await store.save(task, { user: new JwtUser('alice', 'org-1') } as unknown as ServerCallContext)
+    await store.save(task, new ServerCallContext({ user: new JwtUser('alice', 'org-1') }))
     const read = await request(restApp(store)).get('/state?taskId=t-empty').set('Authorization', `Bearer ${alice}`)
     expect(read.status).toBe(200)
     expect(read.body).toEqual({})

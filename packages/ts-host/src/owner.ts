@@ -11,9 +11,8 @@ import { currentCtx } from './als'
  * ALS, а `UserBuilder.noAuthentication` отдавал SDK анонима: все задачи всех пользователей оказались
  * бы под одним владельцем. Здесь пользователь собирается из claims хода: `<org_id>:<sub>`.
  *
- * На `@a2a-js/sdk` 0.3 стор контекст игнорирует, поэтому до смены SDK это ничего не меняет. Зато
- * агенты могут уже сейчас передавать `currentCallContext()` в свои REST-ручки, и после бампа владелец
- * заработает без правок у них.
+ * Без `sub` пользователь анонимный, и стор 1.x кладёт задачу под владельца `'unknown'`, как
+ * python-host. `tenant` хост не использует, он остаётся пустым.
  */
 export class JwtUser implements User {
   constructor(
@@ -49,7 +48,7 @@ export function currentUser(): User {
  * владелец будет анонимным.
  */
 export function currentCallContext(): ServerCallContext {
-  return new ServerCallContext(undefined, currentUser())
+  return new ServerCallContext({ user: currentUser() })
 }
 
 /**
