@@ -28,7 +28,7 @@ from ai37_agent_sdk import BillingExecutionDeniedError
 from google.protobuf.json_format import MessageToDict
 
 from .a2a_progress import A2aProgress
-from .als import current_accepted_output_modes, current_ctx
+from .als import HostTurn, current_accepted_output_modes, current_ctx, current_scope
 from .build_task import data_part, resolve_result_a2ui, text_part
 from .metrics import norm_final_state, observe_turn, record_billing_denied
 from .output_modes import negotiate_output
@@ -129,6 +129,11 @@ class HostExecutor(AgentExecutor):
             supported_catalog_ids=supported,
             task_state=_read_prior_state(context),
         )
+
+        # Диалог и ход — в ALS: publish_artifact и прочие вызовы «от имени хода» берут их оттуда.
+        scope = current_scope()
+        if scope is not None:
+            scope.turn = HostTurn(context_id=context_id, task_id=task_id)
 
         progress = A2aProgress(updater, task_id)
         try:

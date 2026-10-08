@@ -12,14 +12,18 @@ from __future__ import annotations
 from ..types import ContextFile
 
 # Префикс ref → якорь виртуальной ФС StoreBackend (см. attachments-store-backend ``anchor``).
+# Артефакты агентов (``artifact:``/``project-artifact:``) читает ArtifactsStoreBackend на
+# ``/artifacts/`` и ``/project-artifacts/``; в ``context_files`` они не приходят — только явным ref.
 _REF_ANCHORS: tuple[tuple[str, str], ...] = (
     ("project-attachment:", "project-attachments"),
     ("chat-attachment:", "chat-attachments"),
+    ("project-artifact:", "project-artifacts"),
+    ("artifact:", "artifacts"),
 )
 
 
 def context_file_path(ref: str) -> str | None:
-    """chat-attachment:<id> → /chat-attachments/<id> (аналогично project); None — не файл."""
+    """chat-attachment:<id> → /chat-attachments/<id>; так же project и артефакты. None — не файл."""
     for prefix, anchor in _REF_ANCHORS:
         if ref.startswith(prefix):
             return f"/{anchor}/{ref[len(prefix) :]}"
