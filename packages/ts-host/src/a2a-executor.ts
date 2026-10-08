@@ -9,6 +9,7 @@ import {
   currentCtx,
   currentAcceptedOutputModes,
   currentSupportedCatalogIds,
+  requestScope,
 } from './als'
 import { parseA2AMessage } from './parse'
 import { toTask } from './build-task'
@@ -60,6 +61,10 @@ export class HostExecutor implements AgentExecutor {
       negotiation,
       ...optionalInputFields(rc, parsed, accepted, supportedCatalogIds),
     }
+
+    // Диалог и ход — в ALS: publishArtifact и прочие вызовы «от имени хода» берут их оттуда.
+    const scope = requestScope.getStore()
+    if (scope) scope.turn = { contextId: rc.contextId, taskId: rc.taskId }
 
     // Progress stays native: node/reasoning → status-update, text → artifact-update.
     // The final Task retains the canonical complete message for send/persistence.

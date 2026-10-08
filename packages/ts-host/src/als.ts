@@ -45,6 +45,18 @@ export interface HostScope {
    * Это ДРУГОЙ уровень, чем A2A `taskStore` (состояние хода/HITL): checkpointer — состояние графа.
    */
   checkpointer?: BaseCheckpointSaver
+  /**
+   * Диалог и ход текущего запроса (A2A `contextId`/`taskId`; на AG-UI оба = `threadId`). Кладут
+   * executor и AG-UI-роутер до вызова handler'а — независимо от того, включена ли трассировка.
+   * Нужны вызовам «от имени хода» без проброса через сигнатуры (`publishArtifact`).
+   */
+  turn?: HostTurn
+}
+
+/** Диалог и ход текущего запроса. */
+export interface HostTurn {
+  contextId: string
+  taskId: string
 }
 
 /** Срез Langfuse одного хода (см. observability/langfuse.ts). */
@@ -84,6 +96,10 @@ export const currentSupportedCatalogIds = (): string[] | undefined =>
  * агента передаёт его в свой граф: `graph.compile({ checkpointer: currentCheckpointer() })`. Читается
  * из turn-scope (как `currentCtx()`), поэтому вне запроса вернёт undefined.
  */
+/** Диалог и ход текущего запроса (`contextId`/`taskId`) или undefined вне хода. */
+export const currentTurnContext = (): HostTurn | undefined =>
+  requestScope.getStore()?.turn
+
 export const currentCheckpointer = (): BaseCheckpointSaver | undefined =>
   requestScope.getStore()?.checkpointer
 

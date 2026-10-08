@@ -3,6 +3,32 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.1.0-alpha.48]
+
+### Added
+- `publishArtifact(opts)` публикует результат хода в выходную полку chat-backend (`POST
+  /api/artifacts`, план files-and-artifacts-layer §3.3). Запрос идёт от имени пользователя:
+  user-JWT и диалог берутся из request-scope хода. Без них функция бросает `ArtifactPublishError`
+  с кодом `no_scope` и запрос не отправляет. Ключ идемпотентности по умолчанию выводится из хода
+  и содержимого, поэтому ретрай после обрыва сети возвращает уже записанный артефакт
+  (`created: false`), а не плодит дубль. Ответы сервера сводятся к кодам `invalid_input`,
+  `unauthorized`, `not_found`, `conflict`, `too_large`, `rate_limited`, `storage_unavailable`,
+  `upstream_error`, `network_error`. В текст ошибки не попадают ни тело артефакта, ни ответ
+  сервера, только короткий машинный код.
+- `ArtifactsStoreBackend` — read-only StoreBackend для `CompositeBackend`, устроен по образцу
+  вложений. Корпус задаётся диалогом (`contextId`, свои артефакты чата) или проектом
+  (`projectId`). Поддержаны `ls`, `read` окнами, FTS-`grep` и `glob` по имени. Бинарные файлы
+  читаются отдельным `readFile(id, fileId)`; `write`/`edit`/`readRaw` возвращают ошибку.
+- `currentTurnContext()` возвращает `{ contextId, taskId }` текущего хода. Executor и AG-UI-роутер
+  кладут их в request-scope до вызова handler'а, независимо от трассировки. Раньше диалог в ALS
+  был только при включённом Langfuse (`currentSessionId`).
+- `contextFilePath` знает ref-ы артефактов: `artifact:<id>` → `/artifacts/<id>`,
+  `project-artifact:<id>` → `/project-artifacts/<id>`.
+
+Нужен chat-backend с `/api/artifacts` (AI-37/spai-chat-backend #156, #157). Против старого
+chat-backend `publishArtifact` получит 404 и бросит `not_found`; остальное поведение хоста не
+меняется.
+
 ## [0.1.0-alpha.47]
 
 ### Fixed

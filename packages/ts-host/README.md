@@ -86,6 +86,35 @@ async run({ input }) {
 `input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process). Для durable
 (переживает рестарт/реплики) передайте свой `taskStore` в `createAgentHost({ ..., taskStore })`.
 
+## Артефакты: результат хода, который нужен дольше хода
+
+Протокол расчёта, документ, пакет — это артефакт. Агент публикует его в выходную полку chat-backend
+(`POST /api/artifacts`) от имени пользователя: user-JWT и диалог `publishArtifact` берёт из
+request-scope хода (`currentBearer`, `currentTurnContext`). Если их нет, вызов падает с `no_scope`,
+публикации «от никого» не бывает.
+
+```ts
+const artifact = await publishArtifact({
+  baseUrl: process.env.CHAT_BACKEND_URL!,
+  kind: 'lift-report',
+  name: 'Протокол расчёта лифтов',
+  markdown: report,              // DOCX chat-backend рендерит из него сам
+  producerAgentId: 'elevator-calc',
+})
+// в ответ агента: A2UI-карточка артефакта или markdown-ссылка artifact.url
+```
+
+- Байты по A2A не ходят: в ответе агента — ссылка и `artifact.ref` (`artifact:<id>`).
+- Повтор того же вызова в том же ходе безопасен. Ключ идемпотентности выводится из хода и
+  содержимого, и chat-backend вернёт уже записанный артефакт (`created: false`).
+- Ошибки приходят как `ArtifactPublishError` с кодом (`not_found`, `conflict`, `too_large`,
+  `rate_limited`, `storage_unavailable`, `network_error`, …). В тексте ошибки нет ни тела
+  артефакта, ни ответа сервера.
+
+Читают артефакты другие агенты через `ArtifactsStoreBackend` (read-only, `/artifacts/` и
+`/project-artifacts/` в `CompositeBackend`) по явному ref или поиском по проекту. В
+`context_files` артефакты не попадают (ADR 13).
+
 ## Установка
 
 ```bash

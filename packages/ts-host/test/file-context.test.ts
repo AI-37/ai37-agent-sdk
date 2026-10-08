@@ -12,6 +12,10 @@ describe('contextFilePath', () => {
   it('маппит chat-attachment ref в путь chat-attachments', () => {
     expect(contextFilePath('chat-attachment:f_xyz')).toBe('/chat-attachments/f_xyz')
   })
+  it('маппит артефакты агентов: artifact → /artifacts, project-artifact → /project-artifacts', () => {
+    expect(contextFilePath('artifact:a1')).toBe('/artifacts/a1')
+    expect(contextFilePath('project-artifact:a2')).toBe('/project-artifacts/a2')
+  })
   it('возвращает null для не-файлового ref (project:/неизвестный)', () => {
     expect(contextFilePath('project:proj_1')).toBeNull()
     expect(contextFilePath('whatever:1')).toBeNull()
