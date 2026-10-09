@@ -6,6 +6,10 @@
 (multi-issuer JWT → JWKS, иначе → introspection API-ключа), и так же открывается ALS-scope
 (``set_scope``), чтобы MCP-tool handler мог прочитать ``current_ctx()`` — кто вызвал.
 
+Fail-closed как у :class:`AuthGuardMiddleware`: при ``required`` сбой проверки не на
+``AuthError`` (конфиг, недоступная зависимость) → 503 без ``WWW-Authenticate`` (новый токен тут не
+поможет), downstream не вызывается.
+
 Pure-ASGI (НЕ ``BaseHTTPMiddleware``): downstream в ТОЙ ЖЕ задаче → ``contextvars`` доезжают
 до MCP-handler'а. Синхронный SDK → ``AgentContext.from_request`` гоняем через ``anyio.to_thread``.
 """
@@ -19,6 +23,7 @@ import anyio
 from ai37_agent_sdk import AgentContext, AgentContextSettings, AuthError, extract_bearer
 
 from ..als import HostScope, reset_scope, set_scope
+from ..auth_guard import report_guard_error
 
 
 class McpChallengeGuardMiddleware:
@@ -37,6 +42,7 @@ class McpChallengeGuardMiddleware:
         resource_metadata_url: str,
         guarded_prefixes: list[str],
         overrides: dict[str, Any] | None = None,
+        service: str = "unknown",
     ) -> None:
         self.app = app
         self._settings = settings
@@ -44,6 +50,7 @@ class McpChallengeGuardMiddleware:
         self._resource_metadata_url = resource_metadata_url
         self._prefixes = tuple(guarded_prefixes)
         self._overrides = overrides or {}
+        self._service = service
 
     async def __call__(self, scope: dict[str, Any], receive: Any, send: Any) -> None:
         if scope.get("type") != "http" or not self._is_guarded(scope.get("path", "")):
@@ -61,6 +68,12 @@ class McpChallengeGuardMiddleware:
                 await self._send_challenge(send, str(exc))
                 return
             # required=false (миграция) — пропускаем без ctx.
+        except Exception as exc:
+            if self._required:
+                report_guard_error(self._service, "mcp", exc, bearer)
+                await self._send_unavailable(send)
+                return
+            # required=false (миграция) — пропускаем без ctx, как и при AuthError.
 
         token = set_scope(HostScope(ctx=ctx, bearer=bearer))
         try:
@@ -94,6 +107,24 @@ class McpChallengeGuardMiddleware:
                     (b"content-type", b"application/json"),
                     (b"www-authenticate", www_authenticate.encode("latin-1")),
                 ],
+            }
+        )
+        await send({"type": "http.response.body", "body": body})
+
+    async def _send_unavailable(self, send: Any) -> None:
+        # JSON-RPC-ошибка без challenge: проблема на стороне сервера, а не в токене клиента.
+        body = json.dumps(
+            {
+                "jsonrpc": "2.0",
+                "error": {"code": -32603, "message": "auth unavailable"},
+                "id": None,
+            }
+        ).encode("utf-8")
+        await send(
+            {
+                "type": "http.response.start",
+                "status": 503,
+                "headers": [(b"content-type", b"application/json")],
             }
         )
         await send({"type": "http.response.body", "body": body})

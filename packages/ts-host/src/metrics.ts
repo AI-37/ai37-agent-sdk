@@ -49,6 +49,13 @@ const authFailuresTotal = new Counter({
   registers: [registry],
 })
 
+const authGuardErrorsTotal = new Counter({
+  name: 'ai37_agent_auth_guard_errors_total',
+  help: '503 responses from the host auth guards: verification failed for a non-auth reason (config/dependency).',
+  labelNames: ['service'] as const,
+  registers: [registry],
+})
+
 /** Нормализует AgentStatus в label-safe значение (`input-required` → `input_required`). */
 export function normFinalState(status: AgentStatus): string {
   return status === 'input-required' ? 'input_required' : status
@@ -97,6 +104,11 @@ export function recordBillingDenied(service: string, reason: string): void {
 /** 401 из jwtGuard (сбой Authentik/JWKS/верификатора). */
 export function recordAuthFailure(service: string): void {
   safe(() => authFailuresTotal.inc({ service }))
+}
+
+/** 503 из jwtGuard/mcpChallengeGuard: проверка упала не на `AuthError` (конфиг/зависимость). */
+export function recordAuthGuardError(service: string): void {
+  safe(() => authGuardErrorsTotal.inc({ service }))
 }
 
 /** Content-Type для ответа `GET /metrics` (Prometheus text exposition). */

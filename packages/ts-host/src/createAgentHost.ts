@@ -184,6 +184,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
       required,
       overrides: devOverrides,
       buildInfo: info,
+      service,
     })
   }
 

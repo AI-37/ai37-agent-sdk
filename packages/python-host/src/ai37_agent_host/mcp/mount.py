@@ -98,6 +98,8 @@ class MountMcpOptions:
     required: bool
     version: str = "0.0.0"
     overrides: dict[str, Any] = field(default_factory=dict)
+    #: ``service``-лейбл метрик хоста (см. :func:`service_label`).
+    service: str = "unknown"
 
 
 def mount_mcp(app: Any, opts: MountMcpOptions) -> Any:
@@ -147,5 +149,6 @@ def mount_mcp(app: Any, opts: MountMcpOptions) -> Any:
         resource_metadata_url=resource_metadata_url,
         guarded_prefixes=[MCP_PATH],
         overrides=opts.overrides,
+        service=opts.service,
     )
     return session_manager

@@ -9,7 +9,7 @@ import {
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { readClientCapabilities } from './output-modes'
 import { requestScope } from './als'
-import { recordAuthFailure } from './metrics'
+import { recordAuthFailure, recordAuthGuardError } from './metrics'
 
 /**
  * Достаёт нативный `params.configuration.acceptedOutputModes` (формат текста) из тела A2A JSON-RPC
@@ -53,10 +53,51 @@ function readInstructions(body: unknown): string | undefined {
   return raw || undefined
 }
 
+const MAX_LOGGED_MESSAGE = 200
+
+/**
+ * Сообщение ошибки для лога. Сообщение произвольной ошибки из auth/billing-пути может нести
+ * секрет (токен в тексте исключения), поэтому вырезаем токен запроса и всё токеноподобное
+ * (`Bearer …`, JWT `eyJ….….…`) и режем длину.
+ */
+function loggableMessage(e: unknown, bearer: string | undefined): string {
+  let message = e instanceof Error ? e.message : String(e)
+  if (bearer) message = message.split(bearer).join('[redacted]')
+  message = message
+    .replace(/Bearer\s+\S+/gi, 'Bearer [redacted]')
+    .replace(/eyJ[\w-]*\.[\w-]*\.[\w-]*/g, '[redacted-jwt]')
+  return message.length > MAX_LOGGED_MESSAGE
+    ? `${message.slice(0, MAX_LOGGED_MESSAGE)}…`
+    : message
+}
+
+/**
+ * Сбой проверки при `required=true`, не являющийся `AuthError`: конфиг (`BillingConfigurationError`
+ * при пустом `appsAuthToken`), зависимость (introspection/JWKS вне обёртки `AuthError`) или баг.
+ * Запрос завершаем, а не пропускаем анонимом: иначе дыра в конфиге открывает агент без auth
+ * (fail-open). Клиенту — 503 без деталей, детали — в лог (без секретов, см. `loggableMessage`) и
+ * метрику `ai37_agent_auth_guard_errors_total`. Общий для `jwtGuard` и `mcpChallengeGuard`.
+ */
+export function reportGuardError(
+  service: string,
+  guard: 'jwt' | 'mcp',
+  e: unknown,
+  bearer?: string,
+): void {
+  recordAuthGuardError(service)
+  const name = e instanceof Error ? e.name : typeof e
+  console.error(
+    `[ai37-agent-host] ${guard}-guard: проверка запроса упала не на auth ` +
+      `(${name}: ${loggableMessage(e, bearer)}) — запрос отклонён 503, ` +
+      'проверьте конфигурацию auth/billing агента.',
+  )
+}
+
 /**
  * Express-middleware: строит verified `AgentContext` из заголовков и открывает
- * request-scope. При `required` и невалидном/отсутствующем токене → 401.
- * При `required=false` — пропускает без ctx (миграция).
+ * request-scope. При `required`: невалидный/отсутствующий токен (`AuthError`) → 401, любой другой
+ * сбой проверки (конфиг, недоступная зависимость) → 503; в обоих случаях `next()` не вызывается
+ * (fail-closed). При `required=false` — пропускает без ctx (миграция).
  *
  * `overrides` (verifier/billingClient) — точка внедрения dev-режима
  * (`buildDevContextOverrides` из `@ai37/agent-sdk/dev`); по умолчанию пусто → прод-поведение.
@@ -80,36 +121,34 @@ export function jwtGuard(
     const acceptedOutputModes = readAcceptedOutputModes(req.body)
     const supportedCatalogIds = readSupportedCatalogIds(req.body)
     const instructions = readInstructions(req.body)
+    let ctx: AgentContext | undefined
     try {
-      const ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
-      requestScope.run(
-        {
-          ctx,
-          bearer: extractBearer(req.headers),
-          acceptedOutputModes,
-          supportedCatalogIds,
-          instructions,
-          checkpointer,
-        },
-        () => next(),
-      )
+      ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
     } catch (e) {
-      if (e instanceof AuthError && required) {
-        recordAuthFailure(service)
-        res.status(401).json({ error: 'unauthorized', detail: e.message })
+      if (required) {
+        if (e instanceof AuthError) {
+          recordAuthFailure(service)
+          res.status(401).json({ error: 'unauthorized', detail: e.message })
+        } else {
+          reportGuardError(service, 'jwt', e, extractBearer(req.headers))
+          res.status(503).json({ error: 'auth_unavailable' })
+        }
         return
       }
-      requestScope.run(
-        {
-          ctx: undefined,
-          bearer: undefined,
-          acceptedOutputModes,
-          supportedCatalogIds,
-          instructions,
-          checkpointer,
-        },
-        () => next(),
-      )
+      // required=false (миграция) — пропускаем без ctx.
     }
+    // next() вне try: исключение ниже по цепочке не должно попасть в catch проверки и
+    // запустить обработчик второй раз.
+    requestScope.run(
+      {
+        ctx,
+        bearer: ctx ? extractBearer(req.headers) : undefined,
+        acceptedOutputModes,
+        supportedCatalogIds,
+        instructions,
+        checkpointer,
+      },
+      () => next(),
+    )
   }
 }
