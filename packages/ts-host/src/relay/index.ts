@@ -8,7 +8,10 @@ export type {
   RemoteA2aState,
   RemoteA2aProgressEvent,
 } from './execute'
-export { extractText, extractA2ui, isStaleTaskError } from './extract'
+export { extractText, extractA2ui, isStaleTaskError, isTask, taskStateName } from './extract'
+// Готовая фабрика клиентов 1.x с compat 0.3 (резолвер карточки + транспорты) — для chat-backend и consultant.
+export { createAi37ClientFactory } from './client-factory'
+export type { Client, ClientFactory } from '@a2a-js/sdk/client'
 export {
   InMemoryRemoteTaskStore,
 } from './task-store'

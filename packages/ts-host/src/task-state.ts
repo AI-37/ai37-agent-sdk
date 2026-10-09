@@ -1,5 +1,6 @@
 import type { TaskStore } from '@a2a-js/sdk/server'
 import { currentCallContext } from './owner'
+import { TERMINAL_TASK_STATES } from './terminal-states'
 
 /**
  * Состояние хода (`AgentResult.state`, оно же `task.metadata.state`) для REST-ручек агента вне
@@ -30,7 +31,9 @@ export async function loadTaskState(
 
 /**
  * Заменяет состояние задачи `taskId` целиком; остальная задача (статус, артефакты, прочие поля
- * `metadata`) не меняется. `false` — задачи нет (как у `loadTaskState`), запись не делалась.
+ * `metadata`) не меняется. `false` — задачи нет (как у `loadTaskState`) или она уже завершена
+ * (completed/failed/canceled/rejected): запись не делалась. Завершённая задача неизменяема, и
+ * `Ai37TaskStore` такую запись всё равно пропустил бы.
  *
  * Чтение и запись не атомарны: параллельная запись того же `taskId` (ход и ручка одновременно)
  * перетрёт одну из правок, как и прямой `load` + `save`.
@@ -43,6 +46,7 @@ export async function saveTaskState(
   const context = currentCallContext()
   const task = await store.load(taskId, context)
   if (!task) return false
+  if (task.status && TERMINAL_TASK_STATES.has(task.status.state)) return false
   await store.save({ ...task, metadata: { ...task.metadata, state } }, context)
   return true
 }

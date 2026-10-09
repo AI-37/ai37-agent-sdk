@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
-import type { ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server'
+import { Role, TaskState, type StreamResponse, type TaskArtifactUpdateEvent } from '@a2a-js/sdk'
+import type { AgentExecutionEvent, ExecutionEventBus, RequestContext } from '@a2a-js/sdk/server'
 import type { Client } from '@a2a-js/sdk/client'
 import { HostExecutor } from '../src/a2a-executor'
 import { executeRemoteA2aStreaming } from '../src/relay/execute'
@@ -9,17 +10,32 @@ vi.mock('../src/observability/langfuse', () => ({
   injectTraceContext: () => ({}),
 }))
 
+const userMessage = {
+  messageId: 'user-1', contextId: 'chat-stream', taskId: '', role: Role.ROLE_USER,
+  parts: [{ content: { $case: 'text' as const, value: 'question' }, metadata: undefined, filename: '', mediaType: '' }],
+  metadata: undefined, extensions: [], referenceTaskIds: [],
+}
 const requestContext = {
   taskId: 'task-stream',
   contextId: 'chat-stream',
-  userMessage: {
-    kind: 'message', messageId: 'user-1', role: 'user',
-    parts: [{ kind: 'text', text: 'question' }],
-  },
-} as RequestContext
+  userMessage,
+  request: { tenant: '', message: userMessage, configuration: undefined, metadata: undefined },
+} as unknown as RequestContext
+
+const text = (value: string) => ({ content: { $case: 'text', value }, metadata: undefined, filename: '', mediaType: '' })
+
+/**
+ * artifact-update стрима ответа (`answer-<taskId>`). В 1.x событие — обёртка `{ kind, data }`; финал
+ * хода после прогресса тоже идёт artifact-update (`result`), его здесь не считаем.
+ */
+function artifactUpdates(events: AgentExecutionEvent[]): TaskArtifactUpdateEvent[] {
+  return events.flatMap((e) =>
+    e.kind === 'artifactUpdate' && e.data.artifact?.artifactId.startsWith('answer-') ? [e.data] : [],
+  )
+}
 
 function testBus() {
-  const events: Parameters<ExecutionEventBus['publish']>[0][] = []
+  const events: AgentExecutionEvent[] = []
   const finished = vi.fn()
   const bus = { publish: (event: typeof events[number]) => events.push(event), finished } as unknown as ExecutionEventBus
   return { bus, events, finished }
@@ -40,25 +56,31 @@ describe('native A2A answer stream', () => {
       },
     })
     const execution = executor.execute(requestContext, bus)
-    await vi.waitFor(() => expect(events.filter((event) => event.kind === 'artifact-update' && event.append)).toHaveLength(1))
+    await vi.waitFor(() => expect(artifactUpdates(events).filter((event) => event.append)).toHaveLength(1))
     expect(finished).not.toHaveBeenCalled()
-    expect(events[0]).toMatchObject({ kind: 'task', id: 'task-stream', status: { state: 'working' } })
+    expect(events[0]).toMatchObject({
+      kind: 'task',
+      data: { id: 'task-stream', status: { state: TaskState.TASK_STATE_WORKING } },
+    })
     release()
     await execution
 
-    const artifacts = events.filter((event) => event.kind === 'artifact-update')
-    expect(artifacts.map((event) => [event.append, event.lastChunk, event.artifact.parts])).toEqual([
+    const artifacts = artifactUpdates(events)
+    expect(artifacts.map((event) => [event.append, event.lastChunk, event.artifact?.parts])).toEqual([
       [false, false, []],
-      [true, false, [{ kind: 'text', text: 'first ' }]],
-      [true, false, [{ kind: 'text', text: 'second' }]],
+      [true, false, [text('first ')]],
+      [true, false, [text('second')]],
       [true, true, []],
     ])
-    expect(new Set(artifacts.map((event) => event.artifact.artifactId)).size).toBe(1)
+    expect(new Set(artifacts.map((event) => event.artifact?.artifactId)).size).toBe(1)
     expect(finished).toHaveBeenCalledOnce()
 
+    // Те же события глазами клиента 1.x: StreamResponse с payload.$case = kind события.
     const deltas: string[] = []
     const client = {
-      async *sendMessageStream() { for (const event of events) yield event },
+      async *sendMessageStream() {
+        for (const event of events) yield { payload: { $case: event.kind, value: event.data } } as StreamResponse
+      },
     } as unknown as Client
     const result = await executeRemoteA2aStreaming(client, { query: 'question' }, (event) => {
       if (event.type === 'text') deltas.push(event.value)
@@ -76,8 +98,13 @@ describe('native A2A answer stream', () => {
         throw new Error('provider disconnected')
       },
     }).execute(requestContext, bus)
-    expect(events.at(-2)).toMatchObject({ kind: 'artifact-update', append: true, lastChunk: true })
-    expect(events.at(-1)).toMatchObject({ kind: 'task', status: { state: 'failed' } })
+    // Стрим ответа закрыт, финал после прогресса — status-update (второй task в стриме 1.x запрещён).
+    expect(artifactUpdates(events).at(-1)).toMatchObject({ append: true, lastChunk: true })
+    expect(events.at(-1)).toMatchObject({
+      kind: 'statusUpdate',
+      data: { status: { state: TaskState.TASK_STATE_FAILED } },
+    })
+    expect(events.filter((event) => event.kind === 'task')).toHaveLength(1)
     expect(finished).toHaveBeenCalledOnce()
   })
 
@@ -92,9 +119,13 @@ describe('native A2A answer stream', () => {
         return { status: 'completed', message: 'final' }
       },
     }).execute(requestContext, bus)
-    expect(events.filter((event) => event.kind === 'artifact-update')).toEqual([])
-    expect(events.filter((event) => event.kind === 'status-update')).toHaveLength(2)
-    expect(events.at(-1)).toMatchObject({ status: { message: { parts: [{ kind: 'text', text: 'final' }] } } })
+    expect(artifactUpdates(events)).toEqual([])
+    // две вехи прогресса + финальный status-update
+    expect(events.filter((event) => event.kind === 'statusUpdate')).toHaveLength(3)
+    expect(events.at(-1)).toMatchObject({
+      kind: 'statusUpdate',
+      data: { status: { state: TaskState.TASK_STATE_COMPLETED, message: { parts: [text('final')] } } },
+    })
   })
 
   it('keeps simultaneous executions live and their answer artifacts independent', async () => {
@@ -111,12 +142,12 @@ describe('native A2A answer stream', () => {
     })
     const executions = [
       executor.execute(requestContext, first.bus),
-      executor.execute({ ...requestContext, taskId: 'task-other', contextId: 'chat-other' }, second.bus),
+      executor.execute({ ...requestContext, taskId: 'task-other', contextId: 'chat-other' } as RequestContext, second.bus),
     ]
     try {
       await vi.waitFor(() => {
         for (const { events, finished } of [first, second]) {
-          expect(events.filter((event) => event.kind === 'artifact-update' && event.append)).toHaveLength(1)
+          expect(artifactUpdates(events).filter((event) => event.append)).toHaveLength(1)
           expect(finished).not.toHaveBeenCalled()
         }
       })
@@ -126,10 +157,10 @@ describe('native A2A answer stream', () => {
     }
     for (const [index, { events }] of [first, second].entries()) {
       const taskId = index === 0 ? 'task-stream' : 'task-other'
-      const chunks = events.filter((event) => event.kind === 'artifact-update')
+      const chunks = artifactUpdates(events)
       expect(chunks).toHaveLength(3)
-      expect(chunks.every((event) => event.artifact.artifactId === `answer-${taskId}`)).toBe(true)
-      expect(chunks[1].artifact.parts).toEqual([{ kind: 'text', text: taskId }])
+      expect(chunks.every((event) => event.artifact?.artifactId === `answer-${taskId}`)).toBe(true)
+      expect(chunks[1].artifact?.parts).toEqual([text(taskId)])
       expect(chunks[2].lastChunk).toBe(true)
     }
   })

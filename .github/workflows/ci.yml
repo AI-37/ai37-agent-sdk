@@ -72,6 +72,21 @@ jobs:
     env:
       AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
       NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
+    # Живой Postgres 17 для test/task-store.pg.test.ts (@ai37/agent-host/task-store). Тесты создают
+    # себе временные базы, поэтому нужен суперпользователь сервиса.
+    services:
+      postgres:
+        image: postgres:17-alpine
+        env:
+          POSTGRES_PASSWORD: test
+          POSTGRES_DB: a2a
+        ports:
+          - 5432/tcp
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -93,6 +108,11 @@ jobs:
       - name: test
         working-directory: packages/ts-host
         run: npm test
+        env:
+          # job-контекст (порт сервиса) доступен только на уровне шага, не в jobs.<id>.env.
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/a2a
+          # Без базы Postgres-тесты молча пропустились бы; в CI это ошибка.
+          REQUIRE_TEST_DATABASE: '1'
       - name: build
         working-directory: packages/ts-host
         run: npm run build

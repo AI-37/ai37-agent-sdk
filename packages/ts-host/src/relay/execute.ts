@@ -1,8 +1,19 @@
 import { v4 as uuidv4 } from 'uuid'
 import type { Client } from '@a2a-js/sdk/client'
-import type { Message, Task } from '@a2a-js/sdk'
+import {
+  Role,
+  TaskState,
+  type Artifact,
+  type Message,
+  type Part,
+  type SendMessageRequest,
+  type StreamResponse,
+  type Task,
+  type TaskStatusUpdateEvent,
+} from '@a2a-js/sdk'
 import type { A2uiComponent, A2uiAction, A2uiSnapshot, ContextFile } from '../types'
-import { extractText, extractA2ui, isStaleTaskError } from './extract'
+import { dataPart, textPart } from '../parts'
+import { extractText, extractA2ui, isStaleTaskError, isTask } from './extract'
 import { injectTraceContext } from '../observability/langfuse'
 
 /**
@@ -52,13 +63,18 @@ export interface RemoteA2aResult {
   a2ui: (A2uiComponent | A2uiSnapshot)[]
   /** childTaskId (если ответ — Task); потребитель персистит для resume. */
   taskId?: string
+  /**
+   * Состояние ответа в словаре 0.3: `completed`/`input-required`/`failed`, прочее (в т.ч. ответ
+   * сообщением) — `message`. Нормализовано из числового `TaskState` 1.x.
+   */
   state: RemoteA2aState
   /** true, если `resumeTaskId` оказался устаревшим и запрос повторён как свежий диалог. */
   staleResumeDropped: boolean
+  /** Сырой ответ в типах `@a2a-js/sdk` 1.x (сервер 0.3 тоже приходит сюда переведённым). */
   raw: Message | Task
 }
 
-function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Client['sendMessage']>[0] {
+function buildParams(req: RemoteA2aRequest, withResume: boolean): SendMessageRequest {
   const metadata: Record<string, unknown> = {}
   if (req.supportedCatalogIds?.length) {
     metadata.a2uiClientCapabilities = { 'v0.9': { supportedCatalogIds: req.supportedCatalogIds } }
@@ -78,30 +94,59 @@ function buildParams(req: RemoteA2aRequest, withResume: boolean): Parameters<Cli
   // трассировка выключена.
   Object.assign(metadata, injectTraceContext())
 
-  const parts: Message['parts'] = [{ kind: 'text' as const, text: req.query }]
+  const parts: Part[] = [textPart(req.query)]
   // Структурный вход: A2A data-part рядом с текстом → сервер прочитает как AgentInput.data.
   if (req.data && Object.keys(req.data).length > 0) {
-    parts.push({ kind: 'data' as const, data: req.data })
+    parts.push(dataPart(req.data))
   }
-  const message = {
-    kind: 'message' as const,
-    role: 'user' as const,
+  // Пустые contextId/taskId — «не задано» (protobuf-строки не бывают undefined): сервер 1.x и
+  // compat-перевод в 0.3 трактуют их как отсутствие.
+  const message: Message = {
     messageId: uuidv4(),
+    role: Role.ROLE_USER,
     parts,
-    ...(req.contextId ? { contextId: req.contextId } : {}),
-    ...(withResume && req.resumeTaskId ? { taskId: req.resumeTaskId } : {}),
-    ...(Object.keys(metadata).length > 0 ? { metadata } : {}),
+    contextId: req.contextId ?? '',
+    taskId: withResume && req.resumeTaskId ? req.resumeTaskId : '',
+    metadata: Object.keys(metadata).length > 0 ? metadata : undefined,
+    extensions: [],
+    referenceTaskIds: [],
   }
   return {
+    tenant: '',
     message,
-    ...(req.acceptedOutputModes ? { configuration: { acceptedOutputModes: req.acceptedOutputModes } } : {}),
-  } as Parameters<Client['sendMessage']>[0]
+    // returnImmediately:false — блокирующий вызов, как `blocking: true` в 0.3.
+    configuration: req.acceptedOutputModes
+      ? {
+          acceptedOutputModes: req.acceptedOutputModes,
+          taskPushNotificationConfig: undefined,
+          returnImmediately: false,
+        }
+      : undefined,
+    metadata: undefined,
+  }
+}
+
+const STATE_BY_ENUM: Partial<Record<TaskState, RemoteA2aState>> = {
+  [TaskState.TASK_STATE_COMPLETED]: 'completed',
+  [TaskState.TASK_STATE_INPUT_REQUIRED]: 'input-required',
+  [TaskState.TASK_STATE_FAILED]: 'failed',
 }
 
 function toState(raw: Message | Task): RemoteA2aState {
-  if (raw.kind !== 'task') return 'message'
-  const s = raw.status.state
-  return s === 'completed' || s === 'input-required' || s === 'failed' ? s : 'message'
+  if (!isTask(raw)) return 'message'
+  const s = raw.status?.state
+  return (s !== undefined && STATE_BY_ENUM[s]) || 'message'
+}
+
+function toResult(raw: Message | Task, staleResumeDropped: boolean): RemoteA2aResult {
+  return {
+    text: extractText(raw),
+    a2ui: extractA2ui(raw),
+    ...(isTask(raw) ? { taskId: raw.id } : {}),
+    state: toState(raw),
+    staleResumeDropped,
+    raw,
+  }
 }
 
 export async function executeRemoteA2a(
@@ -111,25 +156,18 @@ export async function executeRemoteA2a(
   let staleResumeDropped = false
   let raw: Message | Task
   try {
-    raw = (await client.sendMessage(buildParams(req, true))) as Message | Task
+    raw = await client.sendMessage(buildParams(req, true))
   } catch (e) {
     // Устаревший resume-таск → повторяем как свежий диалог (без taskId). Иначе — пробрасываем.
     if (req.resumeTaskId && isStaleTaskError(e)) {
       staleResumeDropped = true
-      raw = (await client.sendMessage(buildParams(req, false))) as Message | Task
+      raw = await client.sendMessage(buildParams(req, false))
     } else {
       throw e
     }
   }
 
-  return {
-    text: extractText(raw),
-    a2ui: extractA2ui(raw),
-    ...(raw.kind === 'task' ? { taskId: raw.id } : {}),
-    state: toState(raw),
-    staleResumeDropped,
-    raw,
-  }
+  return toResult(raw, staleResumeDropped)
 }
 
 /** Структурный тул-колл сабагента (для `type:'tool'`). */
@@ -160,59 +198,84 @@ export interface RemoteA2aProgressEvent {
   tool?: RemoteA2aToolCall
 }
 
-type A2aStreamItem =
-  | Message
-  | Task
-  | { kind: 'status-update'; taskId: string; contextId: string; status: Task['status']; final: boolean; metadata?: Record<string, unknown> }
-  | { kind: 'artifact-update'; taskId: string; contextId: string; artifact: NonNullable<Task['artifacts']>[number]; append?: boolean; lastChunk?: boolean }
+/** Применяет `artifact-update` к накопленной задаче: `append` дописывает части, иначе — замена. */
+function applyArtifact(task: Task, artifact: Artifact, append: boolean): Task {
+  const artifacts = [...(task.artifacts ?? [])]
+  const idx = artifacts.findIndex((a) => a.artifactId === artifact.artifactId)
+  if (idx >= 0 && append) {
+    artifacts[idx] = { ...artifacts[idx], parts: [...artifacts[idx].parts, ...artifact.parts] }
+  } else if (idx >= 0) {
+    artifacts[idx] = artifact
+  } else {
+    artifacts.push(artifact)
+  }
+  return { ...task, artifacts }
+}
 
-/** Накапливает финальный `Message | Task` из потока и форвардит node/reasoning через onEvent. */
+/**
+ * Применяет `status-update` к накопленной задаче так же, как сервер 1.x: новый статус, `metadata`
+ * сливается по ключам. Сервер на 1.x отдаёт финал хода после прогресса именно `status-update`
+ * (второй `task` в стриме запрещён), и `metadata.state` приходит в нём.
+ */
+function applyStatus(task: Task, update: TaskStatusUpdateEvent): Task {
+  return {
+    ...task,
+    ...(update.status ? { status: update.status } : {}),
+    ...(update.metadata ? { metadata: { ...task.metadata, ...update.metadata } } : {}),
+  }
+}
+
+/** node/reasoning/tool из `status-update.metadata` (progress-конвенция ai37) → onEvent. */
+function forwardStatusMetadata(
+  meta: Record<string, unknown> | undefined,
+  onEvent: (e: RemoteA2aProgressEvent) => void,
+): void {
+  const node = meta?.['ai37/node']
+  const reasoning = meta?.['ai37/reasoning']
+  const tool = meta?.['ai37/tool']
+  if (typeof node === 'string') onEvent({ type: 'node', value: node })
+  if (typeof reasoning === 'string') onEvent({ type: 'reasoning', value: reasoning })
+  if (tool && typeof tool === 'object') {
+    onEvent({ type: 'tool', value: '', tool: tool as RemoteA2aToolCall })
+  }
+}
+
+/**
+ * Накапливает финальный `Message | Task` из потока `StreamResponse` (`payload.$case`) и форвардит
+ * node/reasoning/tool/text через onEvent.
+ */
 async function drainStream(
-  stream: AsyncGenerator<A2aStreamItem, void, undefined>,
+  stream: AsyncGenerator<StreamResponse, void, undefined>,
   onEvent: (e: RemoteA2aProgressEvent) => void,
 ): Promise<Message | Task | undefined> {
   let task: Task | undefined
   let message: Message | undefined
   for await (const ev of stream) {
-    if (ev.kind === 'message') {
-      message = ev
-    } else if (ev.kind === 'task') {
-      task = ev
-    } else if (ev.kind === 'status-update') {
-      const meta = ev.metadata as Record<string, unknown> | undefined
-      const node = meta?.['ai37/node']
-      const reasoning = meta?.['ai37/reasoning']
-      const tool = meta?.['ai37/tool']
-      if (typeof node === 'string') onEvent({ type: 'node', value: node })
-      if (typeof reasoning === 'string') onEvent({ type: 'reasoning', value: reasoning })
-      if (tool && typeof tool === 'object') {
-        onEvent({ type: 'tool', value: '', tool: tool as RemoteA2aToolCall })
-      }
-      if (task && ev.taskId === task.id) task = { ...task, status: ev.status }
-    } else if (ev.kind === 'artifact-update') {
+    const payload = ev.payload
+    if (payload?.$case === 'message') {
+      message = payload.value
+    } else if (payload?.$case === 'task') {
+      task = payload.value
+    } else if (payload?.$case === 'statusUpdate') {
+      const update = payload.value
+      forwardStatusMetadata(update.metadata, onEvent)
+      if (task && update.taskId === task.id) task = applyStatus(task, update)
+    } else if (payload?.$case === 'artifactUpdate') {
+      const update = payload.value
+      const artifact = update.artifact
+      if (!artifact) continue
       // Канон A2A: `append:true` = ИНКРЕМЕНТ (дельта), иначе — ПОЛНЫЙ снапшот (replace). Стрим текста
       // поднимаем ТОЛЬКО при append (part.text = дельта); снапшот-replace как дельту слать нельзя —
       // потребитель их конкатенирует и получит дубли. Финальный текст всё равно соберётся в task и
       // уедет через extractText. data-части (a2ui) не трогаем (уезжают через extractA2ui).
-      if (ev.append) {
-        for (const part of ev.artifact.parts ?? []) {
-          if (part.kind === 'text' && typeof part.text === 'string' && part.text.length > 0) {
-            onEvent({ type: 'text', value: part.text })
+      if (update.append) {
+        for (const part of artifact.parts ?? []) {
+          if (part.content?.$case === 'text' && part.content.value.length > 0) {
+            onEvent({ type: 'text', value: part.content.value })
           }
         }
       }
-      if (task && ev.taskId === task.id) {
-        const artifacts = [...(task.artifacts ?? [])]
-        const idx = artifacts.findIndex((a) => a.artifactId === ev.artifact.artifactId)
-        if (idx >= 0 && ev.append) {
-          artifacts[idx] = { ...artifacts[idx], parts: [...artifacts[idx].parts, ...ev.artifact.parts] }
-        } else if (idx >= 0) {
-          artifacts[idx] = ev.artifact
-        } else {
-          artifacts.push(ev.artifact)
-        }
-        task = { ...task, artifacts }
-      }
+      if (task && update.taskId === task.id) task = applyArtifact(task, artifact, update.append)
     }
   }
   // Финальный результат: message главнее (как в ResultManager.getFinalResult), иначе накопленный task.
@@ -233,17 +296,11 @@ export async function executeRemoteA2aStreaming(
   let staleResumeDropped = false
   let raw: Message | Task | undefined
   try {
-    raw = await drainStream(
-      client.sendMessageStream(buildParams(req, true)) as AsyncGenerator<A2aStreamItem, void, undefined>,
-      onEvent,
-    )
+    raw = await drainStream(client.sendMessageStream(buildParams(req, true)), onEvent)
   } catch (e) {
     if (req.resumeTaskId && isStaleTaskError(e)) {
       staleResumeDropped = true
-      raw = await drainStream(
-        client.sendMessageStream(buildParams(req, false)) as AsyncGenerator<A2aStreamItem, void, undefined>,
-        onEvent,
-      )
+      raw = await drainStream(client.sendMessageStream(buildParams(req, false)), onEvent)
     } else {
       throw e
     }
@@ -252,12 +309,5 @@ export async function executeRemoteA2aStreaming(
     throw new Error('executeRemoteA2aStreaming: поток не дал финального Message/Task')
   }
 
-  return {
-    text: extractText(raw),
-    a2ui: extractA2ui(raw),
-    ...(raw.kind === 'task' ? { taskId: raw.id } : {}),
-    state: toState(raw),
-    staleResumeDropped,
-    raw,
-  }
+  return toResult(raw, staleResumeDropped)
 }

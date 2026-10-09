@@ -17,6 +17,20 @@ export interface AgentShowcaseNorm {
   title?: string
 }
 
+/**
+ * One mode of the agent that the showcase draws as its own tile. It is a caption, not a skill: it
+ * carries no billing gate and does not route — availability, norms and (later) the user's switch
+ * stay with the agent. Display order is the array order; there is no `order` field.
+ */
+export interface AgentShowcaseCapability {
+  /** Slug `^[a-z0-9][a-z0-9-]{0,39}$`, unique within the agent: React key and analytics handle. */
+  id: string
+  title: string
+  summary: string
+  starter?: string
+  examples?: string[]
+}
+
 /** User-facing description of the agent for the product catalog (page and empty chat screen). */
 export interface AgentShowcaseProfile extends Record<string, unknown> {
   title: string
@@ -26,6 +40,7 @@ export interface AgentShowcaseProfile extends Record<string, unknown> {
   starter?: string
   examples?: string[]
   order?: number
+  capabilities?: AgentShowcaseCapability[]
 }
 
 export interface AgentShowcaseExtension {
@@ -42,7 +57,10 @@ const limits = {
   starter: 160,
   norms: { items: 4, code: 80, title: 200 },
   examples: { items: 4, length: 160 },
+  capabilities: 6,
 } as const
+
+const CAPABILITY_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
 
 /**
  * Unlike routing, showcase text is clamped instead of rejected: dropping a whole agent from the
@@ -95,6 +113,42 @@ function normalizeExamples(value: unknown): string[] {
   return result
 }
 
+/** A capability without its own starter or examples is valid: the tile then shows text only. */
+function normalizeCapability(value: unknown): AgentShowcaseCapability | undefined {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return undefined
+  const raw = value as Record<string, unknown>
+  // The id is not cleaned: surrounding whitespace means it is not a slug. Trimming would also make
+  // the SDKs disagree on what whitespace is (`String.prototype.trim` vs Python `str.strip`).
+  const id = typeof raw.id === 'string' ? raw.id : ''
+  const title = clampText(raw.title, limits.title)
+  const summary = clampText(raw.summary, limits.summary)
+  if (!CAPABILITY_ID.test(id) || !title || !summary) return undefined
+  const capability: AgentShowcaseCapability = { id, title, summary }
+  const starter = clampText(raw.starter, limits.starter)
+  if (starter) capability.starter = starter
+  const examples = normalizeExamples(raw.examples)
+  if (examples.length) capability.examples = examples
+  return capability
+}
+
+/**
+ * A broken capability is dropped and the profile survives, the same way a malformed norm is: the
+ * agent itself is still worth showing. A repeated `id` keeps the first occurrence.
+ */
+function normalizeCapabilities(value: unknown): AgentShowcaseCapability[] {
+  if (!Array.isArray(value)) return []
+  const result: AgentShowcaseCapability[] = []
+  const seen = new Set<string>()
+  for (const item of value) {
+    if (result.length >= limits.capabilities) break
+    const capability = normalizeCapability(item)
+    if (!capability || seen.has(capability.id)) continue
+    seen.add(capability.id)
+    result.push(capability)
+  }
+  return result
+}
+
 /** Optional fields are omitted rather than emitted empty: the card stays readable as JSON. */
 function normalizeOptionalFields(
   profile: Record<string, unknown>,
@@ -111,6 +165,8 @@ function normalizeOptionalFields(
   if (typeof profile.order === 'number' && Number.isInteger(profile.order)) {
     optional.order = profile.order
   }
+  const capabilities = normalizeCapabilities(profile.capabilities)
+  if (capabilities.length) optional.capabilities = capabilities
   return optional
 }
 

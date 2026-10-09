@@ -12,7 +12,7 @@ import {
   requestScope,
 } from './als'
 import { parseA2AMessage } from './parse'
-import { toTask } from './build-task'
+import { finalTaskEvents, toTask } from './build-task'
 import { withTurnObservability } from './observability/langfuse'
 import type { AgentHandler, AgentInput, AgentResult } from './types'
 import { observeTurn, recordBillingDenied, normFinalState } from './metrics'
@@ -31,6 +31,8 @@ export class HostExecutor implements AgentExecutor {
     private readonly agentTextModes: string[] = [],
     private readonly agentCatalogIds?: string | string[],
     private readonly service: string = 'unknown',
+    /** Копия формы input-required в артефакте `a2ui-<taskId>` для relay 0.3 (= `legacyCompat` хоста). */
+    private readonly legacyFormArtifact: boolean = true,
   ) {}
 
   async execute(
@@ -40,9 +42,10 @@ export class HostExecutor implements AgentExecutor {
     const startedAt = Date.now()
     const ctx = currentCtx()
     const parsed = parseA2AMessage(rc)
-    // content-negotiation (две оси): формат текста — из нативного `configuration.acceptedOutputModes`;
-    // каталог — из `message.metadata.a2uiClientCapabilities.supportedCatalogIds`. Оба — через ALS (guard).
-    const accepted = currentAcceptedOutputModes()
+    // content-negotiation (две оси): формат текста — из нативного `configuration.acceptedOutputModes`
+    // (в 1.x SDK отдаёт его в `rc.request`; пустой список = клиент не задал, тогда смотрим ALS guard'а);
+    // каталог — из `message.metadata.a2uiClientCapabilities.supportedCatalogIds` через ALS.
+    const accepted = requestedOutputModes(rc) ?? currentAcceptedOutputModes()
     const supportedCatalogIds = currentSupportedCatalogIds()
     const negotiation = negotiateOutput({
       acceptedOutputModes: accepted,
@@ -104,11 +107,20 @@ export class HostExecutor implements AgentExecutor {
 
     // Enforcement: A2UI в Task только если клиент запросил A2UI-mode (иначе — только текст).
     progress.finish()
-    bus.publish(toTask(result, rc.taskId, rc.contextId, negotiation))
+    const final = toTask(result, rc.taskId, rc.contextId, negotiation, {
+      legacyFormArtifact: this.legacyFormArtifact,
+    })
+    for (const event of finalTaskEvents(final, rc.task, progress.started)) bus.publish(event)
     bus.finished()
   }
 
   cancelTask = async (): Promise<void> => {}
+}
+
+/** `configuration.acceptedOutputModes` запроса; undefined, если клиент их не прислал. */
+function requestedOutputModes(rc: RequestContext): string[] | undefined {
+  const modes = rc.request.configuration?.acceptedOutputModes
+  return modes && modes.length > 0 ? modes : undefined
 }
 
 /** Preserve negotiated capabilities, A2UI action and server-owned HITL state. */
@@ -118,9 +130,9 @@ function optionalInputFields(
   accepted: string[] | undefined,
   supportedCatalogIds: string[] | undefined,
 ): Pick<AgentInput, 'action' | 'acceptedOutputModes' | 'supportedCatalogIds' | 'taskState'> {
-  const priorState = (
-    rc.task?.metadata as Record<string, unknown> | undefined
-  )?.state as Record<string, unknown> | undefined
+  // null — состояние, очищенное прошлым ходом (см. finalTaskEvents), для handler'а это «нет».
+  const priorState = ((rc.task?.metadata as Record<string, unknown> | undefined)?.state ??
+    undefined) as Record<string, unknown> | undefined
   return {
     ...(parsed.action ? { action: parsed.action } : {}),
     ...(accepted !== undefined ? { acceptedOutputModes: accepted } : {}),

@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-sdk",
-  "version": "0.1.0-alpha.30",
+  "version": "0.1.0-alpha.31",
   "description": "AI37 agent SDK: JWKS auth + billing + A2A forward for ecosystem agents",
   "type": "module",
   "license": "Apache-2.0",
@@ -40,8 +40,7 @@
     "npm": ">=10"
   },
   "publishConfig": {
-    "registry": "https://npm.app.sp-ai.ru/",
-    "tag": "alpha"
+    "registry": "https://npm.app.sp-ai.ru/"
   },
   "scripts": {
     "build": "tsup",

@@ -10,6 +10,7 @@ from .routing import (
 )
 from .showcase import (
     AI37_SHOWCASE_EXTENSION_URI,
+    AgentShowcaseCapability,
     AgentShowcaseExtension,
     AgentShowcaseNorm,
     AgentShowcaseProfile,
@@ -25,6 +26,7 @@ __all__ = [
     "AgentRoutingExtension",
     "AgentRoutingIntent",
     "AgentRoutingProfile",
+    "AgentShowcaseCapability",
     "AgentShowcaseExtension",
     "AgentShowcaseNorm",
     "AgentShowcaseProfile",

@@ -23,6 +23,7 @@ export {
   parseAgentShowcaseExtension,
 } from './showcase'
 export type {
+  AgentShowcaseCapability,
   AgentShowcaseExtension,
   AgentShowcaseNorm,
   AgentShowcaseProfile,
