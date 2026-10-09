@@ -3,6 +3,11 @@ import { AgentEvent as SdkEvent, type ExecutionEventBus } from '@a2a-js/sdk/serv
 import { textPart } from './parts'
 import type { AgentEvent } from './types'
 
+/** Артефакт стримового текста хода: `answer-<taskId>`. */
+export function answerArtifactId(taskId: string): string {
+  return `answer-${taskId}`
+}
+
 /** One execution's native A2A progress and append-only answer artifact. */
 export class A2aProgress {
   private working = false
@@ -14,7 +19,7 @@ export class A2aProgress {
     private readonly contextId: string,
     private readonly bus: ExecutionEventBus,
   ) {
-    this.artifactId = `answer-${taskId}`
+    this.artifactId = answerArtifactId(taskId)
   }
 
   emit = (event: AgentEvent): void => {
@@ -45,6 +50,11 @@ export class A2aProgress {
   /** Опубликован ли уже `task` (первый прогресс): тогда финал хода — только status/artifact-update. */
   get started(): boolean {
     return this.working
+  }
+
+  /** Стримил ли ход текст в `answer-<taskId>` (тогда артефакт этого хода уже заменил прошлый). */
+  get textStreamed(): boolean {
+    return this.textStarted
   }
 
   private startWorking(): void {

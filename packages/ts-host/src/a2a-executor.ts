@@ -110,7 +110,7 @@ export class HostExecutor implements AgentExecutor {
     const final = toTask(result, rc.taskId, rc.contextId, negotiation, {
       legacyFormArtifact: this.legacyFormArtifact,
     })
-    for (const event of finalTaskEvents(final, rc.task, progress.started)) bus.publish(event)
+    for (const event of finalTaskEvents(final, rc.task, progress.started, progress.textStreamed)) bus.publish(event)
     bus.finished()
   }
 

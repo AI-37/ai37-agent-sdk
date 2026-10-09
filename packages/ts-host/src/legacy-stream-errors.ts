@@ -23,7 +23,9 @@ export function legacyStreamErrorsAsSse(req: Request, res: Response, next: NextF
   }
   const json = res.json.bind(res)
   res.json = (body: unknown) => {
-    if (res.headersSent || !isJsonRpcError(body)) return json(body)
+    // Только ошибки протокола (SDK отдаёт их со статусом 200). Сбой сервера (500) остаётся JSON с
+    // 500: в SSE 200 он пропал бы из мониторинга, а клиент 0.3 и так получит «HTTP 500».
+    if (res.headersSent || res.statusCode !== 200 || !isJsonRpcError(body)) return json(body)
     res.status(200)
     res.setHeader('Content-Type', 'text/event-stream')
     res.setHeader('Cache-Control', 'no-cache')
@@ -36,4 +38,34 @@ export function legacyStreamErrorsAsSse(req: Request, res: Response, next: NextF
 
 function isJsonRpcError(body: unknown): boolean {
   return typeof body === 'object' && body !== null && 'error' in body && 'jsonrpc' in body
+}
+
+/**
+ * `message/send` клиента 0.3 без `configuration.blocking` — блокирующий, как у сервера 0.3
+ * (`blocking !== false`).
+ *
+ * Compat-слой `@a2a-js/sdk` 1.3 переводит отсутствующий `blocking` в `returnImmediately: true`
+ * (`toCoreSendMessageConfiguration`): обработчик отвечает на первом событии задачи, а у агента с
+ * прогрессом это `working` из `A2aProgress`. Клиент 0.3, который прислал `configuration` (например,
+ * только `acceptedOutputModes`) без `blocking`, получил бы незавершённую задачу без текста. Клиент
+ * `@a2a-js/sdk` 0.3 сам ставит `blocking: true`, поэтому наш relay не затронут; это защита для
+ * самописных клиентов 0.3. После перевода в 1.x «не задан» и `false` уже не различить, поэтому
+ * правим сырое тело до compat. Без `configuration` compat и так даёт блокирующий вызов.
+ */
+export function legacyBlockingDefault(req: Request, _res: Response, next: NextFunction): void {
+  const version = req.header('A2A-Version') ?? '0.3'
+  const body = req.body as
+    | { method?: unknown; params?: { configuration?: Record<string, unknown> | null } }
+    | undefined
+  const configuration = body?.params?.configuration
+  if (
+    version === '0.3' &&
+    body?.method === 'message/send' &&
+    configuration !== null &&
+    typeof configuration === 'object' &&
+    configuration.blocking === undefined
+  ) {
+    configuration.blocking = true
+  }
+  next()
 }

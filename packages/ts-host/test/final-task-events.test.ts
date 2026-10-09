@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { TaskState } from '@a2a-js/sdk'
+import { answerArtifactId } from '../src/a2a-progress'
 import { finalTaskEvents, formArtifactId, toAguiSnapshot, toTask } from '../src/build-task'
-import { artifact, data, task } from './fixtures/a2a-v1'
+import { artifact, data, task, text } from './fixtures/a2a-v1'
 
 const NEG = { text: 'text/plain', catalogIds: ['cat'], catalogId: 'cat' }
 const form = { component: 'FormCard', props: {}, catalogId: 'cat' }
@@ -50,6 +51,37 @@ describe('finalTaskEvents: сервер 1.x сливает задачу, хос�
     const [event] = finalTaskEvents(final, undefined, false)
     expect((event.data as typeof final).metadata).toBeUndefined()
     expect((event.data as typeof final).artifacts.map((a) => a.name)).toEqual(['result'])
+  })
+})
+
+describe('finalTaskEvents: стримовый текст прошлого хода (answer-<taskId>)', () => {
+  const priorWithAnswer = () =>
+    task('t', TaskState.TASK_STATE_INPUT_REQUIRED, {
+      artifacts: [artifact(answerArtifactId('t'), [text('ответ прошлого хода')], 'answer')],
+    })
+
+  it('ход без стримового текста — прошлый ответ заменяется пустым, extractText его не покажет', () => {
+    const final = toTask({ status: 'completed' }, 't', 'c', NEG)
+    const [event] = finalTaskEvents(final, priorWithAnswer(), false, false)
+    const answer = (event.data as typeof final).artifacts.find((a) => a.artifactId === answerArtifactId('t'))
+    expect(answer?.parts).toEqual([])
+    expect(answer?.name).toBe('answer')
+  })
+
+  it('ход стримил текст — его артефакт уже заменил прошлый, пустой замены нет', () => {
+    const final = toTask({ status: 'completed' }, 't', 'c', NEG)
+    const events = finalTaskEvents(final, priorWithAnswer(), true, true)
+    const ids = events.flatMap((e) =>
+      e.kind === 'artifactUpdate' ? [(e.data as { artifact: { artifactId: string } }).artifact.artifactId] : [],
+    )
+    expect(ids).not.toContain(answerArtifactId('t'))
+  })
+
+  it('у прошлого хода не было стримового текста — ничего не добавляется', () => {
+    const final = toTask({ status: 'completed' }, 't', 'c', NEG)
+    const prior = task('t', TaskState.TASK_STATE_INPUT_REQUIRED, { artifacts: [] })
+    const [event] = finalTaskEvents(final, prior, false, false)
+    expect((event.data as typeof final).artifacts.some((a) => a.artifactId === answerArtifactId('t'))).toBe(false)
   })
 })
 
