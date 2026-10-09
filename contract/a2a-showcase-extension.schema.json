@@ -31,6 +31,29 @@
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 160 }
     },
-    "order": { "type": "integer" }
+    "order": { "type": "integer" },
+    "capabilities": {
+      "description": "Modes of the agent drawn as separate showcase tiles. A caption, not a skill: no billing gate, no routing; availability, norms and the future user switch stay with the agent. Display order is array order. A malformed or repeated-id item is dropped, the profile survives; an empty list is omitted.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 6,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "title", "summary"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$" },
+          "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+          "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "starter": { "type": "string", "minLength": 1, "maxLength": 160 },
+          "examples": {
+            "type": "array",
+            "maxItems": 4,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+          }
+        }
+      }
+    }
   }
 }
