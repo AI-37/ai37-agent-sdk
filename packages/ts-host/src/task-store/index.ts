@@ -6,6 +6,7 @@ export {
   TERMINAL_TASK_STATES,
   assertTaskStoreReady,
   createPostgresKysely,
+  createPostgresPool,
   createTaskStoreFromEnv,
 } from './store'
 export type { Ai37TaskStoreOptions, CleanupOptions, CleanupResult } from './store'

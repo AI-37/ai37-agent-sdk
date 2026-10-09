@@ -52,11 +52,24 @@ export interface CleanupResult {
 
 const DAY_MS = 24 * 60 * 60 * 1000
 
-/** Kysely на Postgres по строке подключения (`postgres://…`). */
+/**
+ * Kysely на Postgres по строке подключения (`postgres://…`).
+ *
+ * У пула есть обработчик `error`: когда сервер рвёт простаивающее соединение (рестарт или failover
+ * Postgres, `pg_terminate_backend`), `pg.Pool` эмитит `error`, и без слушателя процесс падает
+ * необработанным событием. Пул сам выбрасывает такое соединение, следующий запрос откроет новое.
+ */
 export function createPostgresKysely(databaseUrl: string, poolSize = 5): Kysely<unknown> {
-  return new Kysely<unknown>({
-    dialect: new PostgresDialect({ pool: new pg.Pool({ connectionString: databaseUrl, max: poolSize }) }),
+  return new Kysely<unknown>({ dialect: new PostgresDialect({ pool: createPostgresPool(databaseUrl, poolSize) }) })
+}
+
+/** `pg.Pool` со слушателем `error` (см. `createPostgresKysely`). */
+export function createPostgresPool(databaseUrl: string, poolSize = 5): pg.Pool {
+  const pool = new pg.Pool({ connectionString: databaseUrl, max: poolSize })
+  pool.on('error', (e) => {
+    console.warn(`[ai37-agent-host] task store: idle Postgres connection dropped: ${e.message}`)
   })
+  return pool
 }
 
 /**

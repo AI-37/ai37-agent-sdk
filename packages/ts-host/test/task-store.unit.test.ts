@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { describe, expect, it, vi } from 'vitest'
 import { TaskState, type Task } from '@a2a-js/sdk'
 import { InMemoryTaskStore, ServerCallContext } from '@a2a-js/sdk/server'
 import type { AgentContext } from '@ai37/agent-sdk'
@@ -49,5 +49,22 @@ describe('createTaskStoreFromEnv / assertTaskStoreReady', () => {
 
   it('assertTaskStoreReady для InMemoryTaskStore — no-op', async () => {
     await expect(assertTaskStoreReady(new InMemoryTaskStore())).resolves.toBeUndefined()
+  })
+})
+
+describe('createPostgresPool', () => {
+  it('ошибка простаивающего соединения не роняет процесс: у пула есть слушатель error', async () => {
+    const { createPostgresPool } = await import('../src/task-store/index')
+    const pool = createPostgresPool('postgres://u:p@127.0.0.1:1/x', 1)
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {})
+    try {
+      expect(pool.listenerCount('error')).toBe(1)
+      // Без слушателя emit('error') бросил бы исключение (необработанное событие EventEmitter).
+      expect(() => pool.emit('error', new Error('terminating connection due to administrator command'))).not.toThrow()
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('idle Postgres connection dropped'))
+    } finally {
+      warn.mockRestore()
+      await pool.end()
+    }
   })
 })
