@@ -92,8 +92,10 @@ describe('результат хода', () => {
  * канала и тенанта, то есть всего, ради чего он нужен.
  */
 describe('маска процессора', () => {
-  it('содержимое заменяется меткой с объёмом', () => {
-    expect(langfuseContentMask({ data: SECRET })).toEqual({
+  it('содержимое заменяется меткой с объёмом — строкой JSON', () => {
+    const masked = langfuseContentMask({ data: SECRET })
+    expect(typeof masked).toBe('string')
+    expect(JSON.parse(masked as string)).toEqual({
       redacted: true,
       chars: SECRET.length,
     })
@@ -103,8 +105,16 @@ describe('маска процессора', () => {
     const masked = langfuseContentMask({
       data: { messages: [{ role: 'user', content: SECRET }] },
     })
-    expect(JSON.stringify(masked)).not.toContain('Ромашка')
-    expect(masked).toHaveProperty('redacted', true)
+    expect(masked).not.toContain('Ромашка')
+    expect(JSON.parse(masked as string)).toHaveProperty('redacted', true)
+  })
+
+  it('метка остаётся валидным атрибутом спана: строка, а не объект', () => {
+    // Маску Langfuse пишет обратно в span.attributes; атрибут OTel — примитив. Объект давал
+    // предупреждение медиа-обработчика на каждом спане и невалидный атрибут при экспорте.
+    for (const data of [SECRET, { prompt: SECRET }, [SECRET], 42]) {
+      expect(typeof langfuseContentMask({ data })).toBe('string')
+    }
   })
 
   it('служебная метаданная хода проходит как есть — объектом', () => {
