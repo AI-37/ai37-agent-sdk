@@ -53,6 +53,30 @@ describe('finalTaskEvents: сервер 1.x сливает задачу, хос�
   })
 })
 
+describe('toTask: форма input-required', () => {
+  it('канонично — data-частью в status.message рядом с текстом, копия в артефакте при compat', () => {
+    const t = toTask({ status: 'input-required', message: 'нужны данные', followup: form }, 't', 'c', NEG)
+    const parts = t.status?.message?.parts.map((p) => p.content)
+    expect(parts?.[0]).toEqual({ $case: 'text', value: 'нужны данные' })
+    expect(parts?.[1]).toMatchObject({ $case: 'data', value: { a2ui: [{ component: form, surfaceId: 'surf-t' }] } })
+    expect(t.artifacts.map((a) => a.artifactId)).toEqual([formArtifactId('t')])
+    expect(t.artifacts[0].parts[0].content).toEqual(parts?.[1])
+  })
+
+  it('legacyFormArtifact: false — копии в артефакте нет, форма только в status.message', () => {
+    const t = toTask({ status: 'input-required', followup: form }, 't', 'c', NEG, { legacyFormArtifact: false })
+    expect(t.artifacts).toEqual([])
+    expect(t.status?.message?.parts.some((p) => p.content?.$case === 'data')).toBe(true)
+  })
+
+  it('completed и failed — без data-части в status.message', () => {
+    for (const status of ['completed', 'failed'] as const) {
+      const t = toTask({ status, message: 'x', a2ui: [form] }, 't', 'c', NEG)
+      expect(t.status?.message?.parts.map((p) => p.content?.$case)).toEqual(['text'])
+    }
+  })
+})
+
 describe('toAguiSnapshot', () => {
   it('completed и failed → UNSPECIFIED, input-required остаётся', () => {
     expect(toAguiSnapshot({ status: 'completed', state: { a: 1 } }, 'th').status?.state).toBe(

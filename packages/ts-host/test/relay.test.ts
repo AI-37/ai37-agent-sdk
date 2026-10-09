@@ -36,13 +36,16 @@ function fakeClient(
   return { client, calls }
 }
 
-/** Форма input-required так, как её отдаёт ts-host ≥ 0.2: data-частью артефакта `a2ui-<taskId>`. */
+/**
+ * Форма input-required так, как её отдаёт ts-host ≥ 0.2 с compat 0.3: data-частью в `status.message`
+ * (канон) и копией в артефакте `a2ui-<taskId>` (для relay 0.3).
+ */
 function inputRequiredTaskWithForm(taskId: string): Task {
+  const form = [{ component: 'FormCard', props: { title: 'T' } }]
   return task(taskId, TaskState.TASK_STATE_INPUT_REQUIRED, {
     contextId: 'ctx-1',
-    artifacts: [
-      artifact(`a2ui-${taskId}`, [data({ a2ui: [{ component: 'FormCard', props: { title: 'T' } }] })]),
-    ],
+    message: agentMsg('уточните', data({ a2ui: form })),
+    artifacts: [artifact(`a2ui-${taskId}`, [data({ a2ui: form })])],
     metadata: { state: { step: 1 } },
   })
 }
@@ -75,6 +78,51 @@ describe('executeRemoteA2a (relay)', () => {
     expect(res.a2ui).toHaveLength(1)
     expect((res.a2ui[0] as any).component).toBe('FormCard')
     expect(res.staleResumeDropped).toBe(false)
+  })
+
+  it('форма из status.message и её копия в артефакте не задваиваются; текст — только текстовые части', async () => {
+    const { client } = fakeClient(() => inputRequiredTaskWithForm('task-7'))
+    const res = await executeRemoteA2a(client, { query: 'hi' })
+    expect(res.a2ui).toEqual([{ component: 'FormCard', props: { title: 'T' } }])
+    expect(res.text).toBe('уточните')
+  })
+
+  it('порядок мест формы: status.message → артефакт a2ui-<taskId> → metadata.a2ui', async () => {
+    const pick = async (t: Task) => (await executeRemoteA2a(fakeClient(() => t).client, { query: 'x' })).a2ui
+    const tag = (where: string) => [{ component: 'FormCard', props: { where } }]
+    const all = task('t', TaskState.TASK_STATE_INPUT_REQUIRED, {
+      message: agentMsg('?', data({ a2ui: tag('status') })),
+      artifacts: [artifact('a2ui-t', [data({ a2ui: tag('artifact') })])],
+      metadata: { a2ui: tag('metadata') },
+    })
+    expect(await pick(all)).toEqual(tag('status'))
+    // ts-host 0.2.0 до этого PR и копия без канона: только артефакт.
+    expect(await pick({ ...all, status: { ...all.status!, message: agentMsg('?') } })).toEqual(tag('artifact'))
+    // ts-host 0.1.x / python-host: только metadata.
+    expect(await pick({ ...all, status: { ...all.status!, message: agentMsg('?') }, artifacts: [] })).toEqual(
+      tag('metadata'),
+    )
+  })
+
+  it('пустая форма в status.message — это ответ «формы нет», копии не перебивают', async () => {
+    const t = task('t', TaskState.TASK_STATE_INPUT_REQUIRED, {
+      message: agentMsg('?', data({ a2ui: [] })),
+      metadata: { a2ui: [{ component: 'Old', props: {} }] },
+    })
+    expect((await executeRemoteA2a(fakeClient(() => t).client, { query: 'x' })).a2ui).toEqual([])
+  })
+
+  it('A2UI результата (артефакт result) и форма из status.message собираются вместе', async () => {
+    const t = task('t', TaskState.TASK_STATE_COMPLETED, {
+      message: agentMsg('готово'),
+      artifacts: [
+        artifact('result', [data({ a2ui: [{ component: 'Table', props: {} }], result: {} })], 'result'),
+        artifact('a2ui-t', []),
+      ],
+    })
+    expect((await executeRemoteA2a(fakeClient(() => t).client, { query: 'x' })).a2ui).toEqual([
+      { component: 'Table', props: {} },
+    ])
   })
 
   it('форма в task.metadata.a2ui (агент на ts-host 0.1 / python-host) тоже поднимается', async () => {

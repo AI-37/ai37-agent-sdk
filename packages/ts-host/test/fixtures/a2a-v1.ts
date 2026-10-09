@@ -25,13 +25,13 @@ export const data = (value: unknown): Part => ({
   mediaType: '',
 })
 
-export function agentMsg(value: string): Message {
+export function agentMsg(value: string, ...extra: Part[]): Message {
   return {
     messageId: 'm',
     contextId: 'c',
     taskId: 't',
     role: Role.ROLE_AGENT,
-    parts: [text(value)],
+    parts: [text(value), ...extra],
     metadata: undefined,
     extensions: [],
     referenceTaskIds: [],

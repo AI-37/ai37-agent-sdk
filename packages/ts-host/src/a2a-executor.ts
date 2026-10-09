@@ -31,6 +31,8 @@ export class HostExecutor implements AgentExecutor {
     private readonly agentTextModes: string[] = [],
     private readonly agentCatalogIds?: string | string[],
     private readonly service: string = 'unknown',
+    /** Копия формы input-required в артефакте `a2ui-<taskId>` для relay 0.3 (= `legacyCompat` хоста). */
+    private readonly legacyFormArtifact: boolean = true,
   ) {}
 
   async execute(
@@ -105,7 +107,9 @@ export class HostExecutor implements AgentExecutor {
 
     // Enforcement: A2UI в Task только если клиент запросил A2UI-mode (иначе — только текст).
     progress.finish()
-    const final = toTask(result, rc.taskId, rc.contextId, negotiation)
+    const final = toTask(result, rc.taskId, rc.contextId, negotiation, {
+      legacyFormArtifact: this.legacyFormArtifact,
+    })
     for (const event of finalTaskEvents(final, rc.task, progress.started)) bus.publish(event)
     bus.finished()
   }
