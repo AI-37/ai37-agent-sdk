@@ -74,7 +74,6 @@ jobs:
       - name: install @ai37/agent-host
         working-directory: packages/ts-host
         run: npm ci
-      # prepublishOnly → npm run verify (tsc --noEmit + vitest + tsup) сработает на publish, в т.ч. --dry-run.
       # dist-tag из версии: пререлиз (0.1.0-alpha.N) → `alpha`, релиз (0.2.0) → `latest`. Иначе релиз,
       # опубликованный с `--tag alpha`, не стал бы `latest`, и `npm install` без версии ставил бы старую альфу.
       - name: dist-tag
@@ -86,6 +85,7 @@ jobs:
           echo "version=$version → dist-tag $tag"
           echo "tag=$tag" >> "$GITHUB_OUTPUT"
 
+      # prepublishOnly → npm run verify (tsc --noEmit + vitest + tsup) сработает на publish, в т.ч. --dry-run.
       - name: publish (dry-run)
         if: ${{ inputs.dry_run }}
         working-directory: packages/ts-host
