@@ -92,11 +92,17 @@ export function isLangfuseContentCaptured(): boolean {
   return envBool(process.env.LANGFUSE_CAPTURE_CONTENT, false)
 }
 
-/** Метка вместо содержимого: сам факт и объём сохраняем — они нужны для диагностики. */
+/**
+ * Метка вместо содержимого: сам факт и объём сохраняем — они нужны для диагностики.
+ *
+ * Строкой JSON, а не объектом: маска пишет результат обратно в атрибут спана, а атрибут
+ * OpenTelemetry — примитив. Объект там невалиден, и медиа-обработчик Langfuse на каждом спане
+ * пишет в лог «is not a stringified object».
+ */
 function redactedMarker(data: unknown): unknown {
   if (data === undefined || data === null) return data
   const chars = typeof data === 'string' ? data.length : safeJsonLength(data)
-  return { redacted: true, ...(chars === undefined ? {} : { chars }) }
+  return JSON.stringify({ redacted: true, ...(chars === undefined ? {} : { chars }) })
 }
 
 function safeJsonLength(data: unknown): number | undefined {
