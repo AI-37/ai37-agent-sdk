@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs'
 import { describe, expect, it } from 'vitest'
 import {
   AI37_SHOWCASE_EXTENSION_URI,
@@ -5,6 +6,20 @@ import {
   normalizeAgentShowcaseProfile,
   parseAgentShowcaseExtension,
 } from '../src'
+
+interface ShowcaseVector {
+  name: string
+  input: unknown
+  expected: unknown
+}
+
+// Те же векторы читает Python-тест: оба SDK обязаны нормализовать одинаково.
+const vectors = JSON.parse(
+  readFileSync(
+    new URL('../../../contract/a2a-showcase-extension.vectors.json', import.meta.url),
+    'utf8',
+  ),
+) as { cases: ShowcaseVector[] }
 
 describe('AI37 A2A showcase extension', () => {
   it('builds and parses a full showcase profile', () => {
@@ -146,5 +161,40 @@ describe('AI37 A2A showcase extension', () => {
 
     expect(profile.title).toBe('Расчёт ОВиК')
     expect(profile.summary).toBe('script alert(1) /script расчёт')
+  })
+
+  describe('shared vectors (contract/a2a-showcase-extension.vectors.json)', () => {
+    it.each(vectors.cases)('$name', ({ input, expected }) => {
+      expect(normalizeAgentShowcaseProfile(input)).toEqual(expected)
+    })
+  })
+
+  it('carries capabilities through build and parse', () => {
+    const extension = buildAgentShowcaseExtension({
+      title: 'Поиск по нормативной базе',
+      summary: 'Ответы по корпусу со ссылками на пункты',
+      capabilities: [
+        { id: 'find-requirement', title: 'Поиск требования', summary: 'Найдёт пункт' },
+        { id: 'audit-prep', title: 'Подготовка к проверке', summary: 'Соберёт чек-лист' },
+      ],
+    })
+
+    expect(extension.params.capabilities?.map((capability) => capability.id)).toEqual([
+      'find-requirement',
+      'audit-prep',
+    ])
+    expect(parseAgentShowcaseExtension([extension])).toEqual(extension.params)
+  })
+
+  it('strips markup from capability text like from the rest of the card', () => {
+    const profile = normalizeAgentShowcaseProfile({
+      title: 'т',
+      summary: 'с',
+      capabilities: [
+        { id: 'x', title: '<b>Режим</b>', summary: `Описание${String.fromCharCode(0)}` },
+      ],
+    })
+
+    expect(profile.capabilities).toEqual([{ id: 'x', title: 'b Режим /b', summary: 'Описание' }])
   })
 })

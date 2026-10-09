@@ -3,6 +3,17 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a23] - 2026-10-09
+
+### Added
+
+- `showcase/v1`: необязательный `capabilities[]` (`AgentShowcaseCapability`) — режимы агента
+  отдельными плитками витрины, парити с TS `0.1.0-alpha.31` (план
+  docs/plans/agent-showcase-capabilities.md). Правила те же: slug-`id` без чистки краёв
+  (`fullmatch`, чтобы `"slug\n"` не прошёл), лимиты профиля, не больше 6, битая или с повтором
+  `id` отбрасывается, пустой список не выводится. Тесты гоняют общие векторы
+  `contract/a2a-showcase-extension.vectors.json`.
+
 ## [0.1.0a22] - 2026-10-07
 
 ### Added

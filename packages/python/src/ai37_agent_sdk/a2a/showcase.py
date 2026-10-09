@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any, NotRequired, TypedDict, cast
 
@@ -18,6 +19,18 @@ class AgentShowcaseNorm(TypedDict):
     title: NotRequired[str]
 
 
+class AgentShowcaseCapability(TypedDict):
+    """Режим агента, который витрина рисует отдельной плиткой. Это подпись, а не скилл: своего
+    гейта биллинга нет, на маршрутизацию не влияет. Доступность, нормативы и будущий выключатель
+    остаются у агента. Порядок показа — порядок в массиве, поля `order` нет."""
+
+    id: str
+    title: str
+    summary: str
+    starter: NotRequired[str]
+    examples: NotRequired[list[str]]
+
+
 class AgentShowcaseProfile(TypedDict):
     """Описание агента для витрины продукта: страница «Агенты» и пустой экран чата."""
 
@@ -28,6 +41,7 @@ class AgentShowcaseProfile(TypedDict):
     starter: NotRequired[str]
     examples: NotRequired[list[str]]
     order: NotRequired[int]
+    capabilities: NotRequired[list[AgentShowcaseCapability]]
 
 
 class AgentShowcaseExtension(TypedDict):
@@ -46,6 +60,9 @@ _NORM_CODE_MAX = 80
 _NORM_TITLE_MAX = 200
 _EXAMPLES_MAX_ITEMS = 4
 _EXAMPLE_MAX = 160
+_CAPABILITIES_MAX_ITEMS = 6
+# Тот же шаблон, что в TS. fullmatch, а не match с `$`: `$` в Python пропускает хвостовой `\n`.
+_CAPABILITY_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 
 
 def _clamp(value: object, max_length: int) -> str:
@@ -99,6 +116,46 @@ def _examples(value: object) -> list[str]:
     return result
 
 
+def _capability(value: object) -> AgentShowcaseCapability | None:
+    """Возможность без своей затравки и примеров валидна: плитка покажет только текст."""
+    if not isinstance(value, Mapping):
+        return None
+    # id не чистим: пробелы по краям — уже не slug. Так TS и Python не расходятся в том, что
+    # считать пробелом (`str.strip` и `String.prototype.trim` режут разные символы).
+    raw_id = value.get("id")
+    capability_id = raw_id if isinstance(raw_id, str) else ""
+    title = _clamp(value.get("title"), _TITLE_MAX)
+    summary = _clamp(value.get("summary"), _SUMMARY_MAX)
+    if not _CAPABILITY_ID.fullmatch(capability_id) or not title or not summary:
+        return None
+    capability: AgentShowcaseCapability = {"id": capability_id, "title": title, "summary": summary}
+    starter = _clamp(value.get("starter"), _STARTER_MAX)
+    if starter:
+        capability["starter"] = starter
+    examples = _examples(value.get("examples"))
+    if examples:
+        capability["examples"] = examples
+    return capability
+
+
+def _capabilities(value: object) -> list[AgentShowcaseCapability]:
+    """Битая возможность отбрасывается, профиль остаётся — так же, как с кривым нормативом: сам
+    агент показать всё равно стоит. При повторе `id` остаётся первое вхождение."""
+    if not isinstance(value, list):
+        return []
+    result: list[AgentShowcaseCapability] = []
+    seen: set[str] = set()
+    for item in value:
+        if len(result) >= _CAPABILITIES_MAX_ITEMS:
+            break
+        capability = _capability(item)
+        if capability is None or capability["id"] in seen:
+            continue
+        seen.add(capability["id"])
+        result.append(capability)
+    return result
+
+
 def _optional_fields(profile: Mapping[str, Any]) -> dict[str, Any]:
     """Пустые опциональные поля не выводим: карточка остаётся читаемой как JSON."""
     optional: dict[str, Any] = {}
@@ -117,6 +174,9 @@ def _optional_fields(profile: Mapping[str, Any]) -> dict[str, Any]:
     order = profile.get("order")
     if isinstance(order, int) and not isinstance(order, bool):
         optional["order"] = order
+    capabilities = _capabilities(profile.get("capabilities"))
+    if capabilities:
+        optional["capabilities"] = capabilities
     return optional
 
 

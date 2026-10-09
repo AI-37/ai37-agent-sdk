@@ -1,3 +1,6 @@
+import json
+from pathlib import Path
+
 import pytest
 
 from ai37_agent_sdk import (
@@ -6,6 +9,13 @@ from ai37_agent_sdk import (
     normalize_agent_showcase_profile,
     parse_agent_showcase_extension,
 )
+
+# Те же векторы читает TS-тест: оба SDK обязаны нормализовать одинаково.
+_VECTORS = json.loads(
+    (
+        Path(__file__).resolve().parents[3] / "contract" / "a2a-showcase-extension.vectors.json"
+    ).read_text(encoding="utf-8")
+)["cases"]
 
 
 def test_builds_and_parses_full_profile():
@@ -142,3 +152,37 @@ def test_control_characters_and_angle_brackets_are_stripped():
     )
     assert profile["title"] == "Расчёт ОВиК"
     assert profile["summary"] == "script alert(1) /script расчёт"
+
+
+@pytest.mark.parametrize("vector", _VECTORS, ids=[vector["name"] for vector in _VECTORS])
+def test_shared_vectors(vector):
+    assert normalize_agent_showcase_profile(vector["input"]) == vector["expected"]
+
+
+def test_capabilities_survive_build_and_parse():
+    extension = build_agent_showcase_extension(
+        {
+            "title": "Поиск по нормативной базе",
+            "summary": "Ответы по корпусу со ссылками на пункты",
+            "capabilities": [
+                {"id": "find-requirement", "title": "Поиск требования", "summary": "Найдёт пункт"},
+                {"id": "audit-prep", "title": "Подготовка к проверке", "summary": "Чек-лист"},
+            ],
+        }
+    )
+    assert [c["id"] for c in extension["params"]["capabilities"]] == [
+        "find-requirement",
+        "audit-prep",
+    ]
+    assert parse_agent_showcase_extension([extension]) == extension["params"]
+
+
+def test_capability_text_is_stripped_like_the_rest_of_the_card():
+    profile = normalize_agent_showcase_profile(
+        {
+            "title": "т",
+            "summary": "с",
+            "capabilities": [{"id": "x", "title": "<b>Режим</b>", "summary": "Описание\x00"}],
+        }
+    )
+    assert profile["capabilities"] == [{"id": "x", "title": "b Режим /b", "summary": "Описание"}]
