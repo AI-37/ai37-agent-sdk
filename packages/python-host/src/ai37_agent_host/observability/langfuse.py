@@ -19,6 +19,7 @@ module-local singleton — Python импортирует модуль едино
 
 from __future__ import annotations
 
+import json
 import logging
 import os
 import re
@@ -27,7 +28,7 @@ from typing import Any
 
 from ..als import HostLangfuseScope, current_scope
 from ..types import Ai37Metadata
-from .trace_v1 import trace_metadata
+from .trace_v1 import TRACE_SCHEMA_VERSION, trace_metadata
 
 logger = logging.getLogger(__name__)
 
@@ -42,6 +43,60 @@ def _env_bool(value: str | None, default: bool) -> bool:
     if value is None or value == "":
         return default
     return value.lower() in ("true", "1", "yes", "on")
+
+
+def is_langfuse_content_captured() -> bool:
+    """Писать ли в трейс СОДЕРЖИМОЕ хода: текст пользователя, промпты, ответы модели, результат.
+
+    По умолчанию НЕТ — паритет с ``isLangfuseContentCaptured`` ts-host. Хост общий, агенты на нём
+    обрабатывают персональные данные третьих лиц, а трейс привязан к ``userId``/``sessionId`` и
+    уезжает туда, где стоит Langfuse. Структура и тайминги — да, содержимое — нет. Включать
+    осознанно: ``LANGFUSE_CAPTURE_CONTENT=true`` — только там, где Langfuse в своём контуре и у
+    обработки содержимого есть правовое основание.
+    """
+    return _env_bool(os.environ.get("LANGFUSE_CAPTURE_CONTENT"), False)
+
+
+def _is_own_trace_metadata(data: Any) -> bool:
+    """Служебная метаданная хода (``trace_metadata``) — не содержимое: turnId, статус, канал,
+    тенант.
+
+    Маска SDK применяется и к metadata, поэтому её пропускаем по маркеру схемы — иначе трейс лишился
+    бы всего, ради чего он нужен. Бывает и словарём, и уже сериализованной строкой.
+    """
+    if isinstance(data, str):
+        markers = (
+            f'"schemaVersion":"{TRACE_SCHEMA_VERSION}"',
+            f'"schemaVersion": "{TRACE_SCHEMA_VERSION}"',
+        )
+        return any(marker in data for marker in markers)
+    return isinstance(data, dict) and data.get("schemaVersion") == TRACE_SCHEMA_VERSION
+
+
+def _redacted_marker(data: Any) -> Any:
+    """Метка вместо содержимого: сам факт и объём сохраняем — они нужны для диагностики.
+
+    Словарём: Python SDK сериализует результат маски сам, в атрибут спана уходит строка JSON.
+    """
+    if data is None:
+        return None
+    if isinstance(data, str):
+        chars: int | None = len(data)
+    else:
+        try:
+            chars = len(json.dumps(data, ensure_ascii=False, default=str))
+        except Exception:  # noqa: BLE001 - объём лишь подсказка, без него метка всё равно ставится
+            chars = None
+    return {"redacted": True, **({"chars": chars} if chars is not None else {})}
+
+
+def langfuse_content_mask(*, data: Any, **_kwargs: Any) -> Any:
+    """Маска клиента Langfuse (``Langfuse(mask=...)``): применяется ко ВСЕМ наблюдениям перед
+    экспортом, включая те, что строит ``langfuse.langchain.CallbackHandler`` (промпты и ответы
+    модели) — их хост иначе не контролирует. Служебную метаданную пропускаем, остальное — метка.
+    Паритет с ``langfuseContentMask`` ts-host.
+    """
+    return data if _is_own_trace_metadata(data) else _redacted_marker(data)
 
 
 def is_langfuse_enabled() -> bool:
@@ -69,6 +124,8 @@ def _ensure_client() -> Any:
             host=os.environ.get("LANGFUSE_BASE_URL") or os.environ.get("LANGFUSE_HOST"),
             environment=os.environ.get("LANGFUSE_TRACING_ENVIRONMENT"),
             release=os.environ.get("LANGFUSE_RELEASE"),
+            # Без захвата содержимого — маска на всё, кроме служебной метаданной хода.
+            mask=None if is_langfuse_content_captured() else langfuse_content_mask,
         )
         logger.info("[ai37-agent-host] Langfuse (OTel) трассировка включена")
     except Exception as exc:  # noqa: BLE001 - трассировка не должна ронять сервис
@@ -170,7 +227,14 @@ def _apply_trace_attributes(client: Any, args: BeginTurnArgs, tags: list[str]) -
         runId=args.task_id,
         status="working",
         intent=args.metadata.intent.skill if args.metadata.intent else None,
-        payloadMode="inline-truncated" if args.text is not None else "inline",
+        # Честная метка режима: по умолчанию содержимое хода в трейс не пишется вовсе.
+        payloadMode=(
+            "inline"
+            if args.text is None
+            else "inline-truncated"
+            if is_langfuse_content_captured()
+            else "redacted"
+        ),
         channel=args.metadata.channel,
         app_id=args.metadata.app_id,
         billing_org_id=args.billing_org_id,
