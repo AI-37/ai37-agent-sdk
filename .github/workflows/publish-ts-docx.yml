@@ -47,9 +47,20 @@ jobs:
           cache: npm
           cache-dependency-path: packages/ts-docx/package-lock.json
       - run: npm ci
+      # dist-tag из версии: пререлиз (0.1.0-alpha.N) → `alpha`, релиз (0.2.0) → `latest`. Иначе релиз,
+      # опубликованный с `--tag alpha`, не стал бы `latest`, и `npm install` без версии ставил бы старую альфу.
+      - name: dist-tag
+        id: disttag
+        working-directory: packages/ts-docx
+        run: |
+          version="$(node -p "require('./package.json').version")"
+          case "$version" in *-*) tag=alpha ;; *) tag=latest ;; esac
+          echo "version=$version → dist-tag $tag"
+          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+
       - name: publish (dry-run)
         if: ${{ inputs.dry_run }}
-        run: npm publish --tag alpha --dry-run
+        run: npm publish --tag ${{ steps.disttag.outputs.tag }} --dry-run
       - name: publish
         if: ${{ !inputs.dry_run }}
-        run: npm publish --tag alpha
+        run: npm publish --tag ${{ steps.disttag.outputs.tag }}
