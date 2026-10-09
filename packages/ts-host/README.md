@@ -171,6 +171,16 @@ createAgentHost({ card, handler, agentContext, taskStore }).listen(8080);
   **Метки пода Job'а — НЕ `selectorLabels`**: иначе Service агента будет слать трафик в под CronJob'а.
   Дайте Job'у свои метки (`app.kubernetes.io/component: task-store-retention`).
 
+**Схему ведёт сам сервис** (`TASK_STORE_EXTERNAL_SCHEMA=true`, опция `externalSchema`). Так устроен
+chat-backend: база под Prisma, таблица `a2a_tasks` описана моделью и создаётся Prisma-миграцией (чужую
+таблицу `prisma migrate dev` принял бы за дрейф). Журнала `a2a-db` у такой таблицы нет, поэтому:
+
+- `assertTaskStoreReady`, `check` и `cleanup` проверяют таблицу, набор колонок и ширину `id`/`context_id`,
+  журнал не требуют;
+- `migrate` отказывается (exit 1): `a2a-db upgrade` полез бы в таблицу сервиса;
+- миграция сервиса обязана повторять DDL `migrate` (колонки, `varchar(255) collate "C"`, PK, индексы).
+  Новую миграцию upstream сервис повторяет своей; пропущенная колонка уронит старт на проверке колонок.
+
 Тесты стора идут против настоящего Postgres: `TEST_DATABASE_URL` (роль с правом `CREATE DATABASE`,
 каждый блок создаёт и удаляет свою базу). Локально:
 

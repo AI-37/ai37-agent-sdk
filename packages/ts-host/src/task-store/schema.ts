@@ -81,17 +81,34 @@ export async function assertNotForeignTable(db: AnyDb, tableName: string): Promi
   }
 }
 
+export interface CheckTaskStoreSchemaOptions {
+  /**
+   * Схему ведёт сам сервис (например, Prisma-миграцией в базе chat-backend), а не `a2a-db`: журнала
+   * миграций `a2a_<table>_migrations` нет и не будет. Проверяются только таблица, колонки и ширина
+   * id. Будущую миграцию upstream такой сервис повторяет своей миграцией, иначе старт упадёт на
+   * проверке колонок.
+   */
+  externalSchema?: boolean
+}
+
 /**
  * Схема готова к работе: таблица есть, это таблица задач A2A, её создал `a2a-db` (есть журнал
- * миграций), `id`/`context_id` шириной 255. Иначе — `TaskStoreSchemaError` с подсказкой.
+ * миграций; при `externalSchema` не требуется), `id`/`context_id` шириной 255. Иначе —
+ * `TaskStoreSchemaError` с подсказкой.
  */
-export async function checkTaskStoreSchema(db: AnyDb, tableName: string = TASK_TABLE_NAME): Promise<void> {
-  const hint = 'Run `ai37-agent-host-task-store migrate` first.'
+export async function checkTaskStoreSchema(
+  db: AnyDb,
+  tableName: string = TASK_TABLE_NAME,
+  opts: CheckTaskStoreSchemaOptions = {},
+): Promise<void> {
+  const hint = opts.externalSchema
+    ? 'The schema is managed by the service (TASK_STORE_EXTERNAL_SCHEMA): apply its own migrations.'
+    : 'Run `ai37-agent-host-task-store migrate` first.'
   if (!(await tableExists(db, tableName))) {
     throw new TaskStoreSchemaError(`table ${tableName} not found. ${hint}`)
   }
   await assertNotForeignTable(db, tableName)
-  if (!(await tableExists(db, ledgerTableFor(tableName)))) {
+  if (!opts.externalSchema && !(await tableExists(db, ledgerTableFor(tableName)))) {
     throw new TaskStoreSchemaError(
       `table ${tableName} has no migration ledger ${ledgerTableFor(tableName)}: ` +
         `it was not created by a2a-db. ${hint}`,

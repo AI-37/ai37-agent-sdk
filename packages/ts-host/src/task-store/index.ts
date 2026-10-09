@@ -8,6 +8,7 @@ export {
   createPostgresKysely,
   createPostgresPool,
   createTaskStoreFromEnv,
+  externalSchemaFromEnv,
 } from './store'
 export type { Ai37TaskStoreOptions, CleanupOptions, CleanupResult } from './store'
 export { migrateTaskStore } from './migrate'
@@ -19,3 +20,4 @@ export {
   checkTaskStoreSchema,
   ledgerTableFor,
 } from './schema'
+export type { CheckTaskStoreSchemaOptions } from './schema'
