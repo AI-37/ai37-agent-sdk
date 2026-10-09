@@ -14,7 +14,7 @@ import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { toPublicAgentCard, toSdkAgentCard, type Ai37AgentCardInput } from './agent-card'
 import { hostUserBuilder } from './owner'
 import { HostRequestHandler } from './request-handler'
-import { legacyStreamErrorsAsSse } from './legacy-stream-errors'
+import { legacyBlockingDefault, legacyStreamErrorsAsSse } from './legacy-stream-errors'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -161,8 +161,9 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   app.use(
     base,
     guard,
-    // Клиенту 0.3 ошибка до первого события стрима — событием SSE, как у сервера 0.3.
-    ...(legacyCompat ? [legacyStreamErrorsAsSse] : []),
+    // Клиенту 0.3: ошибка до первого события стрима — событием SSE, как у сервера 0.3;
+    // `message/send` без `blocking` — блокирующий, как у сервера 0.3.
+    ...(legacyCompat ? [legacyStreamErrorsAsSse, legacyBlockingDefault] : []),
     jsonRpcHandler({
       requestHandler,
       // JWT проверяет guard (ALS), здесь только владелец задачи `<org_id>:<sub>` для TaskStore.

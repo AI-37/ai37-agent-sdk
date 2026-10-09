@@ -1,4 +1,5 @@
 import { v4 as uuidv4 } from 'uuid'
+import { answerArtifactId } from './a2a-progress'
 import { Role, TaskState, type Artifact, type Message, type Task, type TaskStatus } from '@a2a-js/sdk'
 import { AgentEvent as SdkEvent, type AgentExecutionEvent } from '@a2a-js/sdk/server'
 import { dataPart, textPart } from './parts'
@@ -168,8 +169,10 @@ export function toTask(
  *
  * Сервер 1.x не заменяет сохранённую задачу, а сливает с ней новую: `metadata` по ключам, артефакты
  * по `artifactId`. Поэтому то, что прошлый ход оставил, а этот не дал, надо очистить явно, иначе оно
- * доживёт до ответа: форма прошлого шага (артефакт `a2ui-<taskId>` → пустой) и `metadata.state`
- * (→ `null`, читатели считают его отсутствием). На 0.3 задача заменялась целиком.
+ * доживёт до ответа: форма прошлого шага (артефакт `a2ui-<taskId>` → пустой), стримовый текст
+ * прошлого хода (`answer-<taskId>` → пустой, если этот ход текст не стримил: иначе `extractText`
+ * показал бы прошлый ответ) и `metadata.state` (→ `null`, читатели считают его отсутствием). На 0.3
+ * задача заменялась целиком.
  *
  * `lifecycleStarted` — исполнение уже опубликовало `task` (прогресс). Тогда второй `task` в стриме
  * запрещён, и финал уходит `artifact-update` по каждому артефакту + `status-update` с метаданными.
@@ -179,12 +182,18 @@ export function finalTaskEvents(
   task: Task,
   prior: Task | undefined,
   lifecycleStarted: boolean,
+  textStreamed = false,
 ): AgentExecutionEvent[] {
   const formId = formArtifactId(task.id)
   const artifacts = [...task.artifacts]
   const priorForm = prior?.artifacts?.find((a) => a.artifactId === formId)
   if (priorForm?.parts.length && !artifacts.some((a) => a.artifactId === formId)) {
     artifacts.push(formArtifact(task.id, undefined))
+  }
+  const answerId = answerArtifactId(task.id)
+  const priorAnswer = prior?.artifacts?.find((a) => a.artifactId === answerId)
+  if (!textStreamed && priorAnswer?.parts.length && !artifacts.some((a) => a.artifactId === answerId)) {
+    artifacts.push({ ...priorAnswer, parts: [] })
   }
   let metadata = task.metadata
   const priorState = prior?.metadata?.state
