@@ -85,7 +85,8 @@ async run({ input }) {
 
 На следующем `message/send` с тем же `taskId` host грузит прошлый Task и отдаёт его состояние в
 `input.taskState`. По умолчанию хранилище — `InMemoryTaskStore` (per-process). Для durable
-(переживает рестарт/реплики) передайте свой `taskStore` в `createAgentHost({ ..., taskStore })`.
+(переживает рестарт/реплики) — Postgres-стор `Ai37TaskStore` из `@ai37/agent-host/task-store`, см.
+раздел «Стор задач на Postgres» ниже.
 `TaskStore` и `InMemoryTaskStore` хост реэкспортирует, своя зависимость от `@a2a-js/sdk` ради них
 агенту не нужна.
 
@@ -115,6 +116,69 @@ await saveTaskState(taskStore, taskId, { ...state, draft }); // false — зад
 На AG-UI `taskId = threadId`, задача живёт весь тред. Её снимок хост пишет без терминального
 статуса (`completed`/`failed` хода → `TASK_STATE_UNSPECIFIED`), иначе после первого `completed` тред
 бы замёрз.
+
+## Стор задач на Postgres (`@ai37/agent-host/task-store`)
+
+Durable A2A TaskStore: upstream `DatabaseTaskStore` из `@a2a-js/sdk` 1.x плюс то, чего в нём нет
+(паритет с python-host `PostgresTaskStore`):
+
+- **владелец** задачи — `<org_id>:<sub>` из JWT хода; чужой `taskId` не читается и не
+  перезаписывается (та же id другого владельца — отдельная строка);
+- **завершённая задача неизменяема**: запись поверх completed/failed/canceled/rejected пропускается
+  с предупреждением (снимок AG-UI со статусом `UNSPECIFIED` — не завершённый, пишется каждым ходом);
+- **id до 255 символов** (`th_<uuid>` старых тредов — 39), длиннее — `RequestMalformedError`;
+- **гигиена строки**: `history` режется до последних 20 сообщений (`historyLimit`), вехи прогресса
+  (`ai37/node`, `ai37/reasoning`, `ai37/tool`) в `metadata` не сохраняются;
+- **схема — шагом деплоя, проверка — на старте**, **ретенция — CronJob'ом**.
+
+`kysely` и `pg` — optional peers: ставит только агент, которому нужен Postgres.
+
+```bash
+npm i @ai37/agent-host kysely pg
+```
+
+```ts
+import { createAgentHost } from "@ai37/agent-host";
+import { assertTaskStoreReady, createTaskStoreFromEnv } from "@ai37/agent-host/task-store";
+
+// DATABASE_URL → Ai37TaskStore; без него в production — ошибка (тихого отката на память нет),
+// в dev/тестах — InMemoryTaskStore.
+const taskStore = createTaskStoreFromEnv();
+await assertTaskStoreReady(taskStore); // нет таблицы / чужая / узкие колонки → под не стартует
+createAgentHost({ card, handler, agentContext, taskStore }).listen(8080);
+```
+
+Таблица — `public.a2a_tasks` (схема — текущая для роли, обычно `public`), журнал миграций
+`a2a_a2a_tasks_migrations`, лок мигратора `a2a_migrations_lock`. Схему создаёт и проверяет CLI
+(строка подключения — только из `DATABASE_URL`):
+
+| Команда | Что делает |
+| --- | --- |
+| `ai37-agent-host-task-store migrate` | чужая таблица `a2a_tasks` с другой схемой → отказ без изменений; `a2a-db upgrade --store tasks` (SQL upstream); `id`/`context_id` → `varchar(255)`; `check`. Идемпотентно, параллельные запуски разводит лок мигратора |
+| `ai37-agent-host-task-store check` | таблица есть, это таблица задач A2A от `a2a-db`, ширина 255; иначе exit 1 и понятное сообщение |
+| `ai37-agent-host-task-store cleanup` | завершённые старше `--terminal-days` (7), незавершённые старше `--stale-days` (14, не меньше terminal; `--keep-stale` — не трогать), пачками `--batch-size` (1000). Строки без таймстемпа не удаляются |
+
+**Деплой (чарт агента).**
+
+- `DATABASE_URL` — из runtime-секрета terraform (база на platform Postgres, права `CREATE` и DML).
+- **initContainer `migrate`** перед основным контейнером, тот же образ:
+  `command: ["npx", "--no-install", "ai37-agent-host-task-store", "migrate"]` (или
+  `node node_modules/@ai37/agent-host/dist/cli/task-store.js migrate`). Реплики запускают его
+  одновременно — это безопасно.
+- **CronJob `task-store-retention`** раз в сутки ночью, тот же образ:
+  `ai37-agent-host-task-store cleanup --terminal-days $(TASK_STORE_TERMINAL_DAYS) --stale-days
+  $(TASK_STORE_STALE_DAYS)` (несекретные vars `<ENV>_APP_*` с дефолтами 7 и 14 в `values.yaml`).
+  **Метки пода Job'а — НЕ `selectorLabels`**: иначе Service агента будет слать трафик в под CronJob'а.
+  Дайте Job'у свои метки (`app.kubernetes.io/component: task-store-retention`).
+
+Тесты стора идут против настоящего Postgres: `TEST_DATABASE_URL` (роль с правом `CREATE DATABASE`,
+каждый блок создаёт и удаляет свою базу). Локально:
+
+```bash
+docker run -d --name ts-host-pg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55471:5432 postgres:17-alpine
+TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55471/postgres npm test
+docker rm -f ts-host-pg
+```
 
 ## Протокол A2A: 1.0 и 0.3 одновременно
 
