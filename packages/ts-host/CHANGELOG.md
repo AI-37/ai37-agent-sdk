@@ -23,12 +23,18 @@
   Клиент 1.x выбирает `1.0`, клиент 0.3 читает `url`. Обработчику SDK хост отдаёт карточку 1.x,
   собранную из `Ai37AgentCardInput` (схемы безопасности переводятся в protobuf-форму).
 - **Владелец задачи** `<org_id>:<sub>` уходит в стор и через compat-трафик: тот же `hostUserBuilder`.
-- **Форма `input-required` едет в артефакте**, не в `task.metadata.a2ui`: data-часть
-  `{ a2ui: [...] }` артефакта `a2ui-<taskId>` (`name: 'input-required'`). В стриме 1.x после первого
-  события прогресса второй `task` запрещён, финал хода уходит `artifact-update` + `status-update`, а
-  relay 0.3 метаданные `status-update` не читает. Артефакты читают все relay (`extractA2ui` смотрит и
-  в артефакты, и в `metadata.a2ui`, так что агенты на старом хосте и python-host по-прежнему
-  читаются). `metadata.state` остаётся в `metadata`.
+- **Форма `input-required` — в `status.message`**, не в `task.metadata.a2ui`: рядом с текстом паузы
+  идёт data-часть `{ a2ui: [...] }`. Это канон A2A: на паузе агент в `status.message` объясняет, что
+  ему нужно, и так же кладёт формы расширение A2UI для A2A; артефакт по канону — результат задачи.
+  `metadata.state` остаётся в `metadata`.
+- **Копия формы в артефакте `a2ui-<taskId>` — только пока включён `legacyCompat`.** Relay 0.3
+  (ts-host до 0.2.0) форму в `status.message` не ищет, а в стриме 1.x финал хода после прогресса
+  приходит `status-update`, из которого старый `drainStream` берёт только статус. Копию он видит в
+  артефактах. `createAgentHost({ legacyCompat: false })` — копии нет. Снимок AG-UI копию не пишет.
+- **`extractA2ui` читает форму в порядке** `status.message` → артефакт `a2ui-<taskId>` →
+  `task.metadata.a2ui` и берёт первое найденное место (это копии, они не складываются). Последнее —
+  для агентов на ts-host 0.1.x и python-host, они пока кладут форму туда. A2UI результата
+  (`completed`) по-прежнему из data-частей остальных артефактов.
 - **Задача теперь сливается, а не заменяется.** Сервер 1.x мёржит новую задачу с сохранённой
   (`metadata` по ключам, артефакты по id). Хост явно очищает то, что прошлый ход оставил, а этот не
   дал: форму прошлого шага (пустой артефакт `a2ui-<taskId>`) и `metadata.state` (`null`, для
@@ -77,7 +83,7 @@
 5. Код, который читал ответ агента сам (`raw.kind`, `part.kind === 'data'`, `status.state ===
    'input-required'`), переводится на типы 1.x: `isTask(raw)`, `part.content?.$case === 'data'`
    (`part.content.value`), `taskStateName(raw.status?.state)`. Форма `input-required` — через
-   `extractA2ui`, она теперь в артефакте.
+   `extractA2ui`: она теперь в `status.message` (и копией в артефакте, пока у агента `legacyCompat`).
 6. Свой A2A-клиент — через `createAi37ClientFactory(fetchImpl)`: compat 0.3 на клиенте нужен всегда
    (агенты на старом хосте, внешние агенты пользователей). `fetchImpl` не должен перезаписывать
    `A2A-Version`.

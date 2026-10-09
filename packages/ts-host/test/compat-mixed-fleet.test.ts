@@ -108,6 +108,16 @@ async function startHost(): Promise<HostServer> {
   return { url, seen, close: () => new Promise<void>((resolve) => server.close(() => resolve())) }
 }
 
+/** Форма из status.message ответа 1.x (data-часть `{ a2ui }`) — канонное место с ts-host 0.2. */
+function statusForm(raw: unknown): unknown[] | undefined {
+  const parts = (raw as { status?: { message?: { parts: { content?: { $case: string; value: any } }[] } } })
+    .status?.message?.parts
+  return parts?.find((p) => p.content?.$case === 'data')?.content?.value.a2ui
+}
+
+const hasFormArtifact = (raw: unknown): boolean =>
+  ((raw as { artifacts?: { artifactId: string }[] }).artifacts ?? []).some((a) => a.artifactId.startsWith('a2ui-'))
+
 const formStep = (a2ui: unknown[]): unknown[] =>
   a2ui.map((item) => ((item as { component: { props: { step: number } } }).component.props.step))
 
@@ -146,6 +156,9 @@ describe('клиент 0.3 (relay ts-host 0.1) → хост на @a2a-js/sdk 1.x
     expect(r1.state).toBe('input-required')
     expect(r1.text).toBe('шаг 1')
     expect(formStep(r1.a2ui)).toEqual([1])
+    // На проводе форма и в status.message (data-часть 0.3), и копией в артефакте; relay 0.3 читает копию.
+    const msgParts = (r1.raw as TaskV03).status.message?.parts ?? []
+    expect(msgParts.map((p) => p.kind)).toEqual(['text', 'data'])
     // Запрос клиента 0.3 сервер видит без A2A-Version — значит, ушёл в compat.
     expect(host.seen.at(-1)?.['a2a-version']).toBeUndefined()
 
@@ -228,7 +241,7 @@ describe('клиент 0.3 (relay ts-host 0.1) → хост на @a2a-js/sdk 1.x
 })
 
 describe('legacyCompat: false', () => {
-  it('карточка без 0.3-интерфейса, клиент 0.3 не принят, клиент 1.x работает', async () => {
+  it('карточка без 0.3-интерфейса, клиент 0.3 не принят, клиент 1.x работает; копии формы нет', async () => {
     const server: Server = createServer()
     await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
     const url = `http://127.0.0.1:${(server.address() as AddressInfo).port}`
@@ -239,6 +252,7 @@ describe('legacyCompat: false', () => {
         skills: [],
       },
       handler: wizard,
+      catalogId: CATALOG,
       legacyCompat: false,
       agentContext: { auth: { issuer: 'i', audience: 'a', required: false }, billing: { baseUrl: 'http://x' } },
     })
@@ -258,7 +272,16 @@ describe('legacyCompat: false', () => {
       })
       expect((await legacy.json()).error).toBeDefined()
       const client = await createAi37ClientFactory().createFromUrl(url)
-      expect((await executeRemoteA2a(client, { query: 'x' })).state).toBe('input-required')
+      for (const stream of [false, true]) {
+        const req = { query: stream ? 'progress' : 'x', supportedCatalogIds: [CATALOG] }
+        const res = stream
+          ? await executeRemoteA2aStreaming(client, req, () => {})
+          : await executeRemoteA2a(client, req)
+        expect(res.state).toBe('input-required')
+        expect(formStep(res.a2ui)).toEqual([1])
+        expect(formStep(statusForm(res.raw) ?? [])).toEqual([1])
+        expect(hasFormArtifact(res.raw)).toBe(false)
+      }
     } finally {
       await new Promise<void>((resolve) => server.close(() => resolve()))
     }
@@ -371,6 +394,9 @@ describe('клиент 1.x → хост 1.x: интерфейс 1.0', () => {
     expect(host.seen.at(-1)?.['a2a-version']).toBe('1.0')
     expect(r1.state).toBe('input-required')
     expect(formStep(r1.a2ui)).toEqual([1])
+    // Новый relay берёт форму из status.message (канон); копия в артефакте есть, но не задваивает.
+    expect(formStep(statusForm(r1.raw) ?? [])).toEqual([1])
+    expect(hasFormArtifact(r1.raw)).toBe(true)
 
     const r2 = await executeRemoteA2a(client, { ...req, resumeTaskId: r1.taskId, action: { name: 'apply', context: {} } })
     expect(formStep(r2.a2ui)).toEqual([2])
@@ -399,6 +425,8 @@ describe('клиент 1.x → хост 1.x: интерфейс 1.0', () => {
     ])
     expect(r1.state).toBe('input-required')
     expect(formStep(r1.a2ui)).toEqual([1])
+    // Финал после прогресса пришёл status-update'ом — форма в его status.message.
+    expect(formStep(statusForm(r1.raw) ?? [])).toEqual([1])
     const r2 = await executeRemoteA2aStreaming(client, { ...req, resumeTaskId: r1.taskId }, () => {})
     expect(formStep(r2.a2ui)).toEqual([2])
     const r3 = await executeRemoteA2aStreaming(client, { ...req, resumeTaskId: r1.taskId }, () => {})

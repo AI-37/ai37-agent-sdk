@@ -41,13 +41,18 @@ const handler: AgentHandler = {
 
 type WireArtifact = { artifactId: string; name?: string; parts: { kind: string; data?: any }[] }
 
+type WireMessage = { parts: { kind: string; text?: string; data?: any }[] }
+
 /**
- * Форма input-required из ответа 0.3: с ts-host 0.2 она едет data-частью артефакта `a2ui-<taskId>`
- * (раньше — `task.metadata.a2ui`), см. build-task `toTask`.
+ * Форма input-required из ответа 0.3. С ts-host 0.2 она едет data-частью в `status.message`, а копия
+ * для relay 0.3 — в артефакте `a2ui-<taskId>` (раньше — `task.metadata.a2ui`), см. build-task
+ * `toTask`. Хелпер требует, чтобы оба места совпадали.
  */
-function formOf(result: { id: string; artifacts?: WireArtifact[] }): any[] {
+function formOf(result: { id: string; artifacts?: WireArtifact[]; status?: { message?: WireMessage } }): any[] {
+  const fromStatus = result.status?.message?.parts.find((p) => p.kind === 'data')?.data?.a2ui ?? []
   const art = result.artifacts?.find((a) => a.artifactId === `a2ui-${result.id}`)
-  return art?.parts[0]?.data?.a2ui ?? []
+  expect(art?.parts[0]?.data?.a2ui ?? []).toEqual(fromStatus)
+  return fromStatus
 }
 
 /** data-часть артефакта `result` (completed). */

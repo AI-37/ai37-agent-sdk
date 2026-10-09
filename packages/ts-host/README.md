@@ -126,9 +126,12 @@ await saveTaskState(taskStore, taskId, { ...state, draft }); // false — зад
   интерфейсы хост строит сам.
 - Клиент 0.3 ходит без `A2A-Version` и попадает в compat-слой SDK; когниция видит один и тот же
   `AgentInput`.
-- Форма `input-required` уходит data-частью артефакта `a2ui-<taskId>` (`{ a2ui: [...] }`), в
-  `metadata` задачи — `state`. `extractA2ui` из relay читает оба места.
-- `createAgentHost({ legacyCompat: false })` выключает 0.3 и убирает 0.3-интерфейс из карточки.
+- Форма `input-required` уходит data-частью `{ a2ui: [...] }` в `status.message`, рядом с текстом паузы
+  (канон A2A и расширения A2UI для A2A); в `metadata` задачи — `state`. Пока включён compat 0.3, та же
+  форма лежит копией в артефакте `a2ui-<taskId>`: её читает relay 0.3. `extractA2ui` ищет форму в
+  `status.message`, затем в артефакте, затем в `metadata.a2ui` (агенты на ts-host 0.1 и python-host).
+- `createAgentHost({ legacyCompat: false })` выключает 0.3, убирает 0.3-интерфейс из карточки и копию
+  формы в артефакте.
 
 Звать другого агента — через relay и готовую фабрику клиентов (compat 0.3 на клиенте включён всегда:
 агенты на старом хосте и внешние агенты пользователей могут жить на 0.3 годами):

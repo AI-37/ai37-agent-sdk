@@ -33,17 +33,22 @@ function ensureEnvelopeSurfaceIds(
 /** Дефолт без негоциации: текст-only (каталог не согласован → A2UI не шлём). */
 const TEXT_ONLY: OutputNegotiation = { text: 'text/plain', catalogIds: [], catalogId: null }
 
+/**
+ * Сообщение агента: текст и, для паузы `input-required`, форма data-частью `{ a2ui: [...] }`
+ * (канонное место формы, см. `toTask`).
+ */
 export function agentMessage(
   taskId: string,
   contextId: string,
   text: string,
+  form?: A2uiSnapshot[],
 ): Message {
   return {
     messageId: uuidv4(),
     contextId,
     taskId,
     role: Role.ROLE_AGENT,
-    parts: [textPart(text)],
+    parts: form ? [textPart(text), dataPart({ a2ui: form })] : [textPart(text)],
     metadata: undefined,
     extensions: [],
     referenceTaskIds: [],
@@ -55,8 +60,9 @@ function status(state: TaskState, message?: Message): TaskStatus {
 }
 
 /**
- * Id артефакта формы `input-required`. Стабилен в пределах задачи: следующий ход заменяет форму на
- * месте (или очищает её, см. `finalTaskEvents`), а не копит старые формы рядом с новой.
+ * Id артефакта с копией формы `input-required` для relay 0.3 (см. `toTask`). Стабилен в пределах
+ * задачи: следующий ход заменяет копию на месте (или очищает её, см. `finalTaskEvents`), а не копит
+ * старые формы рядом с новой.
  */
 export function formArtifactId(taskId: string): string {
   return `a2ui-${taskId}`
@@ -82,17 +88,21 @@ function formArtifact(taskId: string, a2ui: A2uiSnapshot[] | undefined): Artifac
  * Клиенту 0.3 compat-слой SDK отдаёт ту же задачу в форме 0.3: `kind:'task'`, состояние строкой,
  * data-часть как `{ kind: 'data', data }`.
  *
- * Форма `input-required` едет data-частью артефакта `a2ui-<taskId>` (`{ a2ui: [...] }`), а не в
- * `task.metadata.a2ui`, как было на 0.3. Причина в стриме 1.x: после первого события прогресса
- * сервер не принимает второй `task`, финал уходит `status-update` + `artifact-update`, а relay 0.3
- * (`drainStream` до 0.2.0) метаданные `status-update` не читает и форму потерял бы. Артефакты читают
- * все версии relay (`extractA2ui` смотрит и туда, и в `metadata.a2ui`).
+ * Форма `input-required` по канону A2A — в `status.message`: на паузе агент в этом сообщении говорит,
+ * что ему нужно, рядом с текстом идёт data-часть `{ a2ui: [...] }` (так формы кладёт и расширение
+ * A2UI для A2A). Артефакт — результат задачи, форме там не место.
+ *
+ * `legacyFormArtifact` (по умолчанию `true`, хост передаёт свой `legacyCompat`) — та же форма ещё и
+ * копией в артефакте `a2ui-<taskId>`. Это для relay 0.3 (ts-host до 0.2.0): в стриме 1.x финал хода
+ * после прогресса приходит `status-update`, а старый `drainStream` берёт из него только статус и
+ * читает форму из артефактов. Копия уходит вместе с compat 0.3.
  */
 export function toTask(
   result: AgentResult,
   taskId: string,
   contextId: string,
   negotiation: OutputNegotiation = TEXT_ONLY,
+  opts: { legacyFormArtifact?: boolean } = {},
 ): Task {
   // A2UI отдаётся только для согласованных каталогов (per-component роутинг); иначе пусто (агент даёт текст).
   // Компоненты остаются СЫРЫМИ деревьями (`{component, props, children?, catalogId?}`) — уплощение в
@@ -118,14 +128,15 @@ export function toTask(
   }
 
   if (result.status === 'input-required') {
+    // Формы уезжают конвертами с гарантированным surfaceId (см. ensureEnvelopeSurfaceIds).
+    const form = ensureEnvelopeSurfaceIds(followup ? [followup] : a2ui, taskId)
     return {
       ...base,
       status: status(
         TaskState.TASK_STATE_INPUT_REQUIRED,
-        agentMessage(taskId, contextId, result.message ?? 'Уточните'),
+        agentMessage(taskId, contextId, result.message ?? 'Уточните', form),
       ),
-      // Формы уезжают конвертами с гарантированным surfaceId (см. ensureEnvelopeSurfaceIds).
-      artifacts: [formArtifact(taskId, ensureEnvelopeSurfaceIds(followup ? [followup] : a2ui, taskId))],
+      artifacts: (opts.legacyFormArtifact ?? true) ? [formArtifact(taskId, form)] : [],
       metadata: result.state !== undefined ? { state: result.state } : undefined,
     }
   }
@@ -213,7 +224,8 @@ export function toAguiSnapshot(
   threadId: string,
   negotiation: OutputNegotiation = TEXT_ONLY,
 ): Task {
-  const task = toTask(result, threadId, threadId, negotiation)
+  // Снимок читает только хост (state); копия формы для relay 0.3 тут не нужна.
+  const task = toTask(result, threadId, threadId, negotiation, { legacyFormArtifact: false })
   if (task.status?.state === TaskState.TASK_STATE_INPUT_REQUIRED) return task
   return { ...task, status: status(TaskState.TASK_STATE_UNSPECIFIED, task.status?.message) }
 }

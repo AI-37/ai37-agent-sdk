@@ -55,26 +55,50 @@ export function extractText(result: Message | Task): string {
   return text.trim()
 }
 
-/**
- * A2UI из ответа сабагента: `completed` → `artifact.parts[data].data.a2ui`,
- * `input-required` (форма) → `task.metadata.a2ui`. Элементы — сырые деревья
- * `{component, props, children?, catalogId?}` и/или конверты `A2uiSnapshot`
- * (стабильные id + dataModel, сквозной контракт lookup) — пробрасываются как
- * есть: оркестратор кладёт их в свой `result.a2ui`, host эмитит с теми же id.
- */
-export function extractA2ui(result: Message | Task): (A2uiComponent | A2uiSnapshot)[] {
-  if (!isTask(result)) return []
-  const out: (A2uiComponent | A2uiSnapshot)[] = []
-  for (const artifact of result.artifacts ?? []) {
-    for (const part of artifact.parts ?? []) {
-      if (part.content?.$case === 'data') {
-        const a2ui = (part.content.value as { a2ui?: unknown } | undefined)?.a2ui
-        if (Array.isArray(a2ui)) out.push(...(a2ui as (A2uiComponent | A2uiSnapshot)[]))
-      }
-    }
+type A2uiItem = A2uiComponent | A2uiSnapshot
+
+/** `a2ui` из data-частей (`{ a2ui: [...] }`); undefined — ни одной такой части нет. */
+function partsA2ui(parts: ReadonlyArray<Part> | undefined): A2uiItem[] | undefined {
+  let found: A2uiItem[] | undefined
+  for (const part of parts ?? []) {
+    if (part.content?.$case !== 'data') continue
+    const a2ui = (part.content.value as { a2ui?: unknown } | undefined)?.a2ui
+    if (Array.isArray(a2ui)) found = [...(found ?? []), ...(a2ui as A2uiItem[])]
   }
-  const metaA2ui = (result.metadata as { a2ui?: unknown } | undefined)?.a2ui
-  if (Array.isArray(metaA2ui)) out.push(...(metaA2ui as (A2uiComponent | A2uiSnapshot)[]))
+  return found
+}
+
+/**
+ * Форма паузы `input-required`. Мест три, берётся первое, где она есть (они копии друг друга, а не
+ * части):
+ *  1. `status.message` — data-часть `{ a2ui }` рядом с текстом. Каноничное место (ts-host ≥ 0.2).
+ *  2. артефакт `a2ui-<taskId>` — копия для relay 0.3, пока у агента включён `legacyCompat`.
+ *  3. `task.metadata.a2ui` — агенты на ts-host 0.1.x и python-host.
+ */
+function formA2ui(task: Task): A2uiItem[] {
+  const fromStatus = partsA2ui(task.status?.message?.parts)
+  if (fromStatus) return fromStatus
+  const formArtifact = task.artifacts?.find((a) => a.artifactId === `a2ui-${task.id}`)
+  const fromArtifact = partsA2ui(formArtifact?.parts)
+  if (fromArtifact) return fromArtifact
+  const fromMetadata = (task.metadata as { a2ui?: unknown } | undefined)?.a2ui
+  return Array.isArray(fromMetadata) ? (fromMetadata as A2uiItem[]) : []
+}
+
+/**
+ * A2UI из ответа сабагента: результат (`completed`) — из data-частей артефактов, кроме артефакта
+ * формы; форма паузы — по `formA2ui`. Элементы — сырые деревья `{component, props, children?,
+ * catalogId?}` и/или конверты `A2uiSnapshot` (стабильные id + dataModel, сквозной контракт lookup) —
+ * пробрасываются как есть: оркестратор кладёт их в свой `result.a2ui`, host эмитит с теми же id.
+ */
+export function extractA2ui(result: Message | Task): A2uiItem[] {
+  if (!isTask(result)) return []
+  const out: A2uiItem[] = []
+  for (const artifact of result.artifacts ?? []) {
+    if (artifact.artifactId === `a2ui-${result.id}`) continue
+    out.push(...(partsA2ui(artifact.parts) ?? []))
+  }
+  out.push(...formA2ui(result))
   return out
 }
 

@@ -63,7 +63,8 @@ export interface AgentHostOptions {
    * Принимать ли на A2A-эндпоинте клиентов протокола 0.3 (compat-слой `@a2a-js/sdk`). По умолчанию
    * `true`: на 0.3 ещё chat-backend до своего перехода, MCP-агрегатор и внешние клиенты. Запрос без
    * заголовка `A2A-Version` или с `0.3` уходит в compat, с `1.0` — в обработчик 1.x. Выключать после
-   * перевода последнего внутреннего клиента (план docs#465, решение 8).
+   * перевода последнего внутреннего клиента (план docs#465, решение 8). Вместе с compat выключается и
+   * копия формы `input-required` в артефакте `a2ui-<taskId>` (её читает только relay 0.3).
    */
   legacyCompat?: boolean
   /**
@@ -120,7 +121,7 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   const requestHandler = new HostRequestHandler(
     toSdkAgentCard(opts.card, { legacyCompat }),
     taskStore,
-    new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
+    new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service, legacyCompat),
     undefined,
     undefined,
     undefined,
