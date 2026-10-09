@@ -3,6 +3,37 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.2.1]
+
+Postgres-стор задач — третий срез фазы 1 плана docs `plans/ts-a2a-sdk-1x-database-task-store.md`
+(§3.3, §3.4 п. 3, решения владельца 08.10). Паритет с python-host `PostgresTaskStore`.
+
+### Added
+- Subpath **`@ai37/agent-host/task-store`**: `Ai37TaskStore` — upstream `DatabaseTaskStore`
+  (`@a2a-js/sdk/server/database`, таблица `public.a2a_tasks`) плюс:
+  - владелец задачи из контекста вызова (`<org_id>:<sub>` от `hostUserBuilder`/`currentCallContext`);
+  - неизменяемость завершённой задачи: `save` поверх completed/failed/canceled/rejected пропускается с
+    предупреждением; снимок AG-UI (`UNSPECIFIED`) пишется каждым ходом;
+  - id/contextId до 255 символов, длиннее — `RequestMalformedError`;
+  - `history` режется до последних `historyLimit` (20) сообщений, ключи прогресса `ai37/node`,
+    `ai37/reasoning`, `ai37/tool` в `metadata` не сохраняются (сервер 1.x копил бы их в строке);
+  - `assertReady()`, `cleanup({ terminalDays, staleDays, batchSize })`, `fromDatabaseUrl()`, `close()`.
+- `assertTaskStoreReady(store)` — проверка схемы на старте (для не-Postgres сторов — no-op);
+  `createTaskStoreFromEnv()` — `DATABASE_URL` → `Ai37TaskStore`, без него в production — ошибка,
+  иначе `InMemoryTaskStore`; `migrateTaskStore`, `checkTaskStoreSchema`, `TaskStoreSchemaError`.
+- CLI **`ai37-agent-host-task-store migrate | check | cleanup`** (только `DATABASE_URL`):
+  - `migrate` — отказ на чужой таблице `a2a_tasks`, затем `a2a-db upgrade --store tasks
+    --tasks-table-name a2a_tasks` (журнал `a2a_a2a_tasks_migrations`), `id`/`context_id` →
+    `varchar(255) collate "C"`, `check`;
+  - `check` — таблица есть, колонки задачи на месте, журнал миграций есть, ширина 255, иначе exit 1;
+  - `cleanup` — завершённые старше 7 дней, незавершённые старше 14 (флаги дней, `--keep-stale`),
+    пачками; строки без таймстемпа (`status_last_updated = 0`) не удаляются.
+- `kysely` (`^0.28.17 || ^0.29.0`) и `pg` (`^8`) — optional peerDependencies: корневой entry и
+  остальные subpath их не грузят.
+
+### Changed
+- `saveTaskState` в завершённую задачу ничего не пишет и возвращает `false` (как «задачи нет»).
+
 ## [0.2.0]
 
 Хост переезжает на `@a2a-js/sdk` ^1.3.0 и выходит из альфы (план docs
