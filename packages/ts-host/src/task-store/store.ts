@@ -31,6 +31,12 @@ export interface Ai37TaskStoreOptions {
   historyLimit?: number
   /** Куда писать предупреждения (пропуск записи в завершённую задачу). По умолчанию `console.warn`. */
   warn?: (message: string) => void
+  /**
+   * Схему таблицы ведёт сам сервис (Prisma-миграция и т.п.), а не `a2a-db`: `assertReady` не требует
+   * журнала миграций, проверяет таблицу, колонки и ширину id. CLI `migrate` в этом режиме
+   * отказывается. Из окружения — `TASK_STORE_EXTERNAL_SCHEMA=true` (`createTaskStoreFromEnv`, CLI).
+   */
+  externalSchema?: boolean
 }
 
 export interface CleanupOptions {
@@ -99,6 +105,7 @@ export class Ai37TaskStore extends DatabaseTaskStore {
   private readonly resolveOwner: NonNullable<DatabaseTaskStoreOptions['ownerResolver']>
   private readonly historyLimit: number
   private readonly warn: (message: string) => void
+  private readonly externalSchema: boolean
   private owned = false
 
   constructor(db: Kysely<unknown>, opts: Ai37TaskStoreOptions = {}) {
@@ -110,6 +117,7 @@ export class Ai37TaskStore extends DatabaseTaskStore {
     this.resolveOwner = ownerResolver
     this.historyLimit = opts.historyLimit ?? 20
     this.warn = opts.warn ?? ((m) => console.warn(m))
+    this.externalSchema = opts.externalSchema ?? false
   }
 
   /** Стор со своим пулом соединений; `close()` его закрывает. */
@@ -143,7 +151,7 @@ export class Ai37TaskStore extends DatabaseTaskStore {
 
   /** Падает (`TaskStoreSchemaError`), если схема не готова: под не должен стартовать без `migrate`. */
   async assertReady(): Promise<void> {
-    await checkTaskStoreSchema(this.kysely, this.table)
+    await checkTaskStoreSchema(this.kysely, this.table, { externalSchema: this.externalSchema })
   }
 
   /**
@@ -224,17 +232,26 @@ export async function assertTaskStoreReady(store: TaskStore): Promise<void> {
 /**
  * Стор задач из окружения. Есть `DATABASE_URL` — `Ai37TaskStore`; нет — `InMemoryTaskStore`, но
  * только если стор не обязателен (по умолчанию обязателен при `NODE_ENV=production`): в проде без
- * базы хост не стартует, тихого отката на память нет.
+ * базы хост не стартует, тихого отката на память нет. `TASK_STORE_EXTERNAL_SCHEMA=true` — схему
+ * ведёт сервис (см. `Ai37TaskStoreOptions.externalSchema`); явная опция важнее переменной.
  */
 export function createTaskStoreFromEnv(
   opts: Ai37TaskStoreOptions & { env?: NodeJS.ProcessEnv; required?: boolean; poolSize?: number } = {},
 ): TaskStore {
   const env = opts.env ?? process.env
   const url = env.DATABASE_URL
-  if (url) return Ai37TaskStore.fromDatabaseUrl(url, opts)
+  if (url) {
+    const externalSchema = opts.externalSchema ?? externalSchemaFromEnv(env)
+    return Ai37TaskStore.fromDatabaseUrl(url, { ...opts, externalSchema })
+  }
   const required = opts.required ?? env.NODE_ENV === 'production'
   if (required) {
     throw new Error('[ai37-agent-host] task store: DATABASE_URL is not set (required in production)')
   }
   return new InMemoryTaskStore()
+}
+
+/** `TASK_STORE_EXTERNAL_SCHEMA`: схему таблицы задач ведёт сам сервис, а не `a2a-db`. */
+export function externalSchemaFromEnv(env: NodeJS.ProcessEnv): boolean {
+  return env.TASK_STORE_EXTERNAL_SCHEMA === 'true'
 }

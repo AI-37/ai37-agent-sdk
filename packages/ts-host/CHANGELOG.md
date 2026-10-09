@@ -3,6 +3,21 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.2.2]
+
+### Added
+- **Схему стора задач ведёт сам сервис**: опция `Ai37TaskStoreOptions.externalSchema` и переменная
+  `TASK_STORE_EXTERNAL_SCHEMA=true` (её читают `createTaskStoreFromEnv` и CLI). Для chat-backend, где
+  таблица `a2a_tasks` — модель Prisma и создаётся Prisma-миграцией (решение 4 плана docs
+  `plans/ts-a2a-sdk-1x-database-task-store.md`, §3.3 п. 6). В этом режиме `assertReady`/`check`/`cleanup`
+  проверяют таблицу, колонки и ширину id без журнала `a2a_a2a_tasks_migrations`, а `migrate`
+  отказывается (exit 1). `checkTaskStoreSchema(db, table, { externalSchema })`,
+  `externalSchemaFromEnv(env)`.
+
+### Fixed
+- Таблицу, созданную не `a2a-db`, `assertReady` отклонял всегда: chat-backend с Prisma-таблицей по
+  плану не мог бы стартовать, а CronJob `cleanup` падал бы на проверке.
+
 ## [0.2.1]
 
 Postgres-стор задач — третий срез фазы 1 плана docs `plans/ts-a2a-sdk-1x-database-task-store.md`

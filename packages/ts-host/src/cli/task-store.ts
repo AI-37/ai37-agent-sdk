@@ -1,5 +1,5 @@
 import { parseArgs } from 'node:util'
-import { Ai37TaskStore, createPostgresKysely } from '../task-store/store'
+import { Ai37TaskStore, createPostgresKysely, externalSchemaFromEnv } from '../task-store/store'
 import { migrateTaskStore } from '../task-store/migrate'
 import { TASK_TABLE_NAME, TaskStoreSchemaError, checkTaskStoreSchema } from '../task-store/schema'
 
@@ -10,7 +10,8 @@ const USAGE = `ai37-agent-host-task-store — схема и ретенция A2A
   ai37-agent-host-task-store check    [--table a2a_tasks]
   ai37-agent-host-task-store cleanup  [--table a2a_tasks] [--terminal-days 7] [--stale-days 14 | --keep-stale] [--batch-size 1000]
 
-Строка подключения — только из DATABASE_URL.
+Строка подключения — только из DATABASE_URL. TASK_STORE_EXTERNAL_SCHEMA=true — схему ведёт сам сервис
+(Prisma-миграция): check и cleanup не требуют журнала a2a-db, migrate отказывается.
 
   migrate   чужая таблица с тем же именем → отказ; a2a-db upgrade --store tasks; id/context_id → varchar(255); check
   check     таблица есть, это таблица задач A2A от a2a-db, id/context_id шириной 255 (иначе exit 1)
@@ -30,8 +31,19 @@ function positiveInt(name: string, raw: string | undefined, fallback: number): n
   return value
 }
 
-async function runCommand(command: string, values: Record<string, string | boolean | undefined>, url: string): Promise<string> {
+async function runCommand(
+  command: string,
+  values: Record<string, string | boolean | undefined>,
+  url: string,
+  externalSchema: boolean,
+): Promise<string> {
   const table = (values.table as string | undefined) ?? TASK_TABLE_NAME
+  if (command === 'migrate' && externalSchema) {
+    // a2a-db upgrade полез бы в таблицу, которую создал и ведёт сервис, и завёл бы рядом свой журнал.
+    throw new TaskStoreSchemaError(
+      'migrate is disabled: TASK_STORE_EXTERNAL_SCHEMA=true, the schema is managed by the service',
+    )
+  }
   const db = createPostgresKysely(url, 1)
   try {
     if (command === 'migrate') {
@@ -39,7 +51,7 @@ async function runCommand(command: string, values: Record<string, string | boole
       return `ai37 task store: table ${table} ready`
     }
     if (command === 'check') {
-      await checkTaskStoreSchema(db, table)
+      await checkTaskStoreSchema(db, table, { externalSchema })
       return `ai37 task store: ok (${table})`
     }
     const terminalDays = positiveInt('terminal-days', values['terminal-days'] as string | undefined, 7)
@@ -47,7 +59,7 @@ async function runCommand(command: string, values: Record<string, string | boole
       ? undefined
       : positiveInt('stale-days', values['stale-days'] as string | undefined, 14)
     const batchSize = positiveInt('batch-size', values['batch-size'] as string | undefined, 1000)
-    const store = new Ai37TaskStore(db, { tableName: table })
+    const store = new Ai37TaskStore(db, { tableName: table, externalSchema })
     await store.assertReady()
     const result = await store.cleanup({ terminalDays, staleDays, batchSize })
     return (
@@ -94,7 +106,14 @@ export async function main(argv: string[], io: CliIo): Promise<number> {
     return 1
   }
   try {
-    io.out(await runCommand(command, parsed.values as Record<string, string | boolean | undefined>, url))
+    io.out(
+      await runCommand(
+        command,
+        parsed.values as Record<string, string | boolean | undefined>,
+        url,
+        externalSchemaFromEnv(io.env),
+      ),
+    )
     return 0
   } catch (e) {
     // Схема не та или не готова, неверные дни — понятное сообщение без стектрейса. Прочее (сеть,

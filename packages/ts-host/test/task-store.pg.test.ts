@@ -18,6 +18,7 @@ import {
   assertTaskStoreReady,
   checkTaskStoreSchema,
   createPostgresKysely,
+  createTaskStoreFromEnv,
   migrateTaskStore,
 } from '../src/task-store/index'
 import { main as cli } from '../src/cli/task-store'
@@ -159,6 +160,99 @@ describe.skipIf(!BASE_URL)('схема: migrate / check (Postgres)', () => {
       expect(lines.at(-1)).toBe('ERR ai37 task store: DATABASE_URL is not set')
       expect(await cli([], io({ DATABASE_URL: url }))).toBe(2)
       expect(await cli(['drop'], io({ DATABASE_URL: url }))).toBe(2)
+    } finally {
+      await drop()
+    }
+  })
+})
+
+/**
+ * Таблица, которую создаёт сам сервис, а не a2a-db: тот же SQL, что Prisma-миграция chat-backend
+ * (`prisma/migrations/*_a2a_tasks`). Журнала `a2a_a2a_tasks_migrations` у неё нет.
+ */
+async function createServiceManagedTable(db: Kysely<unknown>): Promise<void> {
+  await sql`
+    create table "a2a_tasks" (
+      "tenant" varchar(255) collate "C" not null,
+      "owner" varchar(255) collate "C" not null,
+      "id" varchar(255) collate "C" not null,
+      "context_id" varchar(255) collate "C" not null,
+      "status_last_updated" bigint not null,
+      "status_state" varchar(255) collate "C",
+      "status" text,
+      "artifacts" text,
+      "history" text,
+      "metadata" text,
+      "protocol_version" varchar(255),
+      constraint "a2a_tasks_pkey" primary key ("tenant", "owner", "id")
+    )
+  `.execute(db)
+  await sql`create index "a2a_tasks_scope_context_updated_idx" on "a2a_tasks" ("tenant", "owner", "context_id", "status_last_updated", "id")`.execute(db)
+  await sql`create index "a2a_tasks_scope_updated_idx" on "a2a_tasks" ("tenant", "owner", "status_last_updated", "id")`.execute(db)
+}
+
+describe.skipIf(!BASE_URL)('схема ведёт сервис: externalSchema / TASK_STORE_EXTERNAL_SCHEMA (Postgres)', () => {
+  it('без режима нужен журнал a2a-db; с режимом — таблица, колонки и ширина', async () => {
+    const { db, drop } = await freshDatabase()
+    try {
+      await expect(checkTaskStoreSchema(db, 'a2a_tasks', { externalSchema: true })).rejects.toThrow(
+        /not found.*managed by the service/,
+      )
+      await createServiceManagedTable(db)
+      await expect(checkTaskStoreSchema(db)).rejects.toThrow(/no migration ledger/)
+      await expect(new Ai37TaskStore(db).assertReady()).rejects.toThrow(/no migration ledger/)
+      await checkTaskStoreSchema(db, 'a2a_tasks', { externalSchema: true })
+      await expect(new Ai37TaskStore(db, { externalSchema: true }).assertReady()).resolves.toBeUndefined()
+      // Ширину и колонки режим не прощает.
+      await sql`alter table a2a_tasks alter column context_id type varchar(36) collate "C"`.execute(db)
+      await expect(new Ai37TaskStore(db, { externalSchema: true }).assertReady()).rejects.toThrow(
+        /too narrow \(context_id=36\)/,
+      )
+    } finally {
+      await drop()
+    }
+  })
+
+  it('createTaskStoreFromEnv берёт режим из TASK_STORE_EXTERNAL_SCHEMA; save/load работают', async () => {
+    const { url, db, drop } = await freshDatabase()
+    try {
+      await createServiceManagedTable(db)
+      const strict = createTaskStoreFromEnv({ env: { DATABASE_URL: url } }) as Ai37TaskStore
+      const managed = createTaskStoreFromEnv({
+        env: { DATABASE_URL: url, TASK_STORE_EXTERNAL_SCHEMA: 'true' },
+      }) as Ai37TaskStore
+      try {
+        await expect(assertTaskStoreReady(strict)).rejects.toThrow(/no migration ledger/)
+        await expect(assertTaskStoreReady(managed)).resolves.toBeUndefined()
+        const task = makeTask('t-ext', TaskState.TASK_STATE_INPUT_REQUIRED, { contextId: 'th_' + randomUUID() })
+        await managed.save(task, ctx('alice'))
+        expect((await managed.load('t-ext', ctx('alice')))?.contextId).toBe(task.contextId)
+        expect(await managed.load('t-ext', ctx('bob'))).toBeUndefined()
+      } finally {
+        await strict.close()
+        await managed.close()
+      }
+    } finally {
+      await drop()
+    }
+  })
+
+  it('CLI с TASK_STORE_EXTERNAL_SCHEMA: check и cleanup работают, migrate отказывается и журнал не заводит', async () => {
+    const { url, db, drop } = await freshDatabase()
+    try {
+      await createServiceManagedTable(db)
+      const lines: string[] = []
+      const io = (env: NodeJS.ProcessEnv) => ({ env, out: (l: string) => lines.push(l), err: (l: string) => lines.push(`ERR ${l}`) })
+      const managed = { DATABASE_URL: url, TASK_STORE_EXTERNAL_SCHEMA: 'true' }
+      expect(await cli(['check'], io({ DATABASE_URL: url }))).toBe(1)
+      expect(await cli(['check'], io(managed))).toBe(0)
+      expect(lines.at(-1)).toBe('ai37 task store: ok (a2a_tasks)')
+      expect(await cli(['cleanup'], io(managed))).toBe(0)
+      expect(lines.at(-1)).toBe('ai37 task store: deleted 0 terminal (>7d), 0 stale (>14d)')
+      expect(await cli(['migrate'], io(managed))).toBe(1)
+      expect(lines.at(-1)).toMatch(/^ERR ai37 task store: migrate is disabled: TASK_STORE_EXTERNAL_SCHEMA=true/)
+      const ledger = await sql`select 1 from information_schema.tables where table_name = 'a2a_a2a_tasks_migrations'`.execute(db)
+      expect(ledger.rows).toHaveLength(0)
     } finally {
       await drop()
     }
