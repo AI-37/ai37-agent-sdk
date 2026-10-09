@@ -1,7 +1,6 @@
 import express, { type Express } from 'express'
 import { AGENT_CARD_PATH } from '@a2a-js/sdk'
 import {
-  DefaultRequestHandler,
   InMemoryTaskStore,
   type TaskStore,
 } from '@a2a-js/sdk/server'
@@ -14,6 +13,8 @@ import {
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
 import { toPublicAgentCard, toSdkAgentCard, type Ai37AgentCardInput } from './agent-card'
 import { hostUserBuilder } from './owner'
+import { HostRequestHandler } from './request-handler'
+import { legacyStreamErrorsAsSse } from './legacy-stream-errors'
 import { jwtGuard } from './auth-guard'
 import { HostExecutor } from './a2a-executor'
 import { aguiRouter } from './agui'
@@ -24,8 +25,9 @@ import { renderMetrics, metricsContentType, serviceLabel } from './metrics'
 
 export interface AgentHostOptions {
   /**
-   * Карточка агента (discovery) в словаре хоста: поля A2A 0.3 + `x-ai37`. Карточку 0.3 из
-   * `@a2a-js/sdk` можно передать как есть; публичную гибридную форму хост строит сам.
+   * Карточка агента (discovery) в словаре хоста: поля A2A 0.3 + `x-ai37`. Из неё хост строит
+   * карточку 1.x для обработчика SDK и публичную гибридную (0.3-поля + `supportedInterfaces`
+   * с JSON-RPC 1.0 и 0.3), которую отдаёт своим роутом.
    */
   card: Ai37AgentCardInput
   /** Когниция агента (intent/work/critic/respond внутри). */
@@ -57,6 +59,13 @@ export interface AgentHostOptions {
    * Не задан → `currentCheckpointer()` вернёт undefined (агент строит граф без durable-состояния).
    */
   checkpointer?: BaseCheckpointSaver
+  /**
+   * Принимать ли на A2A-эндпоинте клиентов протокола 0.3 (compat-слой `@a2a-js/sdk`). По умолчанию
+   * `true`: на 0.3 ещё chat-backend до своего перехода, MCP-агрегатор и внешние клиенты. Запрос без
+   * заголовка `A2A-Version` или с `0.3` уходит в compat, с `1.0` — в обработчик 1.x. Выключать после
+   * перевода последнего внутреннего клиента (план docs#465, решение 8).
+   */
+  legacyCompat?: boolean
   /**
    * «Экспорт» агента как MCP Resource Server: монтирует `/mcp` (StreamableHTTP) +
    * protected-resource-metadata (OAuth-discovery на Authentik) за тем же токен-guard'ом,
@@ -107,14 +116,24 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   // Один стор на оба пути (A2A + AG-UI), чтобы state переживал ходы в обоих.
   const taskStore = opts.taskStore ?? new InMemoryTaskStore()
 
-  const requestHandler = new DefaultRequestHandler(
-    toSdkAgentCard(opts.card),
+  const legacyCompat = opts.legacyCompat ?? true
+  const requestHandler = new HostRequestHandler(
+    toSdkAgentCard(opts.card, { legacyCompat }),
     taskStore,
     new HostExecutor(opts.handler, agentTextModes, agentCatalogIds, service),
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    undefined,
+    // Шина события задачи закрывается сразу после хода, и на input-required тоже. По умолчанию SDK
+    // держит её живой ради resubscribe к паузе, которого у нас нет; брошенная пауза HITL оставила
+    // бы шину в памяти процесса навсегда. Продолжение паузы открывает новую шину.
+    { keepBusAliveStates: [] },
   )
 
   // Карточка своим роутом, а не agentCardHandler SDK: см. toPublicAgentCard (x-ai37 + 1.0-интерфейсы).
-  const publicCard = toPublicAgentCard(opts.card)
+  const publicCard = toPublicAgentCard(opts.card, { legacyCompat })
   app.get(`/${AGENT_CARD_PATH}`, (_req, res) => {
     res.json(publicCard)
   })
@@ -141,10 +160,14 @@ export function createAgentHost(opts: AgentHostOptions): Express {
   app.use(
     base,
     guard,
+    // Клиенту 0.3 ошибка до первого события стрима — событием SSE, как у сервера 0.3.
+    ...(legacyCompat ? [legacyStreamErrorsAsSse] : []),
     jsonRpcHandler({
       requestHandler,
       // JWT проверяет guard (ALS), здесь только владелец задачи `<org_id>:<sub>` для TaskStore.
+      // Compat-трафик 0.3 идёт через тот же userBuilder.
       userBuilder: hostUserBuilder,
+      legacyCompat: { enabled: legacyCompat },
     }),
   )
 

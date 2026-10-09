@@ -1,4 +1,6 @@
-import type { ExecutionEventBus } from '@a2a-js/sdk/server'
+import { TaskState } from '@a2a-js/sdk'
+import { AgentEvent as SdkEvent, type ExecutionEventBus } from '@a2a-js/sdk/server'
+import { textPart } from './parts'
 import type { AgentEvent } from './types'
 
 /** One execution's native A2A progress and append-only answer artifact. */
@@ -24,33 +26,41 @@ export class A2aProgress {
     }
     if (event.type !== 'node' && event.type !== 'reasoning') return
     this.startWorking()
-    this.bus.publish({
-      kind: 'status-update',
-      taskId: this.taskId,
-      contextId: this.contextId,
-      status: { state: 'working', timestamp: new Date().toISOString() },
-      final: false,
-      metadata: event.type === 'node'
-        ? { 'ai37/node': event.node }
-        : { 'ai37/reasoning': event.delta },
-    })
+    this.bus.publish(
+      SdkEvent.statusUpdate({
+        taskId: this.taskId,
+        contextId: this.contextId,
+        status: { state: TaskState.TASK_STATE_WORKING, message: undefined, timestamp: new Date().toISOString() },
+        metadata: event.type === 'node'
+          ? { 'ai37/node': event.node }
+          : { 'ai37/reasoning': event.delta },
+      }),
+    )
   }
 
   finish(): void {
     if (this.textStarted) this.publishText('', true, true)
   }
 
+  /** Опубликован ли уже `task` (первый прогресс): тогда финал хода — только status/artifact-update. */
+  get started(): boolean {
+    return this.working
+  }
+
   private startWorking(): void {
     if (this.working) return
     this.working = true
-    this.bus.publish({
-      kind: 'task',
-      id: this.taskId,
-      contextId: this.contextId,
-      status: { state: 'working', timestamp: new Date().toISOString() },
-      history: [],
-      metadata: {},
-    })
+    // Первое событие исполнения в 1.x обязано быть task или message (иначе сервер рвёт стрим).
+    this.bus.publish(
+      SdkEvent.task({
+        id: this.taskId,
+        contextId: this.contextId,
+        status: { state: TaskState.TASK_STATE_WORKING, message: undefined, timestamp: new Date().toISOString() },
+        artifacts: [],
+        history: [],
+        metadata: {},
+      }),
+    )
   }
 
   private appendText(delta: string): void {
@@ -64,17 +74,22 @@ export class A2aProgress {
   }
 
   private publishText(text: string, append: boolean, lastChunk: boolean): void {
-    this.bus.publish({
-      kind: 'artifact-update',
-      taskId: this.taskId,
-      contextId: this.contextId,
-      artifact: {
-        artifactId: this.artifactId,
-        name: 'answer',
-        parts: text ? [{ kind: 'text', text }] : [],
-      },
-      append,
-      lastChunk,
-    })
+    this.bus.publish(
+      SdkEvent.artifactUpdate({
+        taskId: this.taskId,
+        contextId: this.contextId,
+        artifact: {
+          artifactId: this.artifactId,
+          name: 'answer',
+          description: '',
+          parts: text ? [textPart(text)] : [],
+          metadata: undefined,
+          extensions: [],
+        },
+        append,
+        lastChunk,
+        metadata: undefined,
+      }),
+    )
   }
 }

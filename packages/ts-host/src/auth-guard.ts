@@ -13,9 +13,10 @@ import { recordAuthFailure } from './metrics'
 
 /**
  * Достаёт нативный `params.configuration.acceptedOutputModes` (формат текста) из тела A2A JSON-RPC
- * (`message/send`/`message/stream`). `@a2a-js/sdk` не пробрасывает `configuration` в
- * `RequestContext`, поэтому читаем здесь, в express-слое (тело уже распарсено `express.json()`),
- * и кладём в ALS — executor возьмёт оттуда. Для AG-UI-тела `params` нет → `undefined`.
+ * (`message/send`/`message/stream` в 0.3, `SendMessage`/`SendStreamingMessage` в 1.0 — поле
+ * одинаковое) и кладёт в ALS. Исполнитель A2A сам берёт его из `rc.request.configuration` SDK 1.x,
+ * а ALS остаётся для downstream (`currentAcceptedOutputModes` у оркестратора). Для AG-UI-тела
+ * `params` нет → `undefined`.
  */
 function readAcceptedOutputModes(body: unknown): string[] | undefined {
   const params = (body as { params?: unknown } | undefined)?.params as

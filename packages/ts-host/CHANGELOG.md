@@ -3,6 +3,85 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.2.0]
+
+Хост переезжает на `@a2a-js/sdk` ^1.3.0 и выходит из альфы (план docs
+`plans/ts-a2a-sdk-1x-database-task-store.md`, §3.4 срез 2). Агентам на `^0.1.0-alpha.N` caret эту
+версию не подтянет, переход только явным бампом. Postgres-стор задач — в 0.2.1.
+
+### Changed
+- **Сервер A2A на SDK 1.x.** `DefaultRequestHandler` 1.x, события исполнения через
+  `AgentEvent.task/statusUpdate/artifactUpdate`, части сообщения через `content.$case`, состояния —
+  числовой `TaskState`. Контракт `AgentHandler` (`AgentInput`, `AgentResult.status` строками,
+  `state`) не изменился.
+- **Compat 0.3 на сервере включён по умолчанию** (`legacyCompat` в `jsonRpcHandler`). Запрос без
+  заголовка `A2A-Version` или с `0.3` обрабатывается compat-слоем, с `1.0` — обработчиком 1.x.
+  Исполнитель видит только типы 1.x. Выключается опцией `createAgentHost({ legacyCompat: false })`,
+  тогда и карточка не объявляет 0.3.
+- **Карточка.** Публичная гибридная (своим роутом, `x-ai37` как есть): поля 0.3 верхнего уровня +
+  `supportedInterfaces`, где JSON-RPC объявлен дважды, `1.0` и `0.3` (`duplicateInterfacesForLegacy`).
+  Клиент 1.x выбирает `1.0`, клиент 0.3 читает `url`. Обработчику SDK хост отдаёт карточку 1.x,
+  собранную из `Ai37AgentCardInput` (схемы безопасности переводятся в protobuf-форму).
+- **Владелец задачи** `<org_id>:<sub>` уходит в стор и через compat-трафик: тот же `hostUserBuilder`.
+- **Форма `input-required` едет в артефакте**, не в `task.metadata.a2ui`: data-часть
+  `{ a2ui: [...] }` артефакта `a2ui-<taskId>` (`name: 'input-required'`). В стриме 1.x после первого
+  события прогресса второй `task` запрещён, финал хода уходит `artifact-update` + `status-update`, а
+  relay 0.3 метаданные `status-update` не читает. Артефакты читают все relay (`extractA2ui` смотрит и
+  в артефакты, и в `metadata.a2ui`, так что агенты на старом хосте и python-host по-прежнему
+  читаются). `metadata.state` остаётся в `metadata`.
+- **Задача теперь сливается, а не заменяется.** Сервер 1.x мёржит новую задачу с сохранённой
+  (`metadata` по ключам, артефакты по id). Хост явно очищает то, что прошлый ход оставил, а этот не
+  дал: форму прошлого шага (пустой артефакт `a2ui-<taskId>`) и `metadata.state` (`null`, для
+  handler'а это «нет состояния»). Без этого форма шага 1 всплывала бы в ответе шага 2 и в completed.
+- `configuration.acceptedOutputModes` исполнитель берёт из `rc.request.configuration` (SDK 1.x его
+  наконец отдаёт), чтение тела в `jwtGuard` осталось для ALS и downstream.
+- Шина исполнения закрывается сразу после хода, и на `input-required` тоже (`keepBusAliveStates:
+  []`). SDK по умолчанию держит её живой ради resubscribe к паузе, которого у нас нет; брошенная
+  пауза оставляла бы шину в памяти процесса навсегда.
+- **Relay** (`@ai37/agent-host/relay`) на клиенте 1.x: `SendMessageRequest` 1.x, стрим
+  `StreamResponse` (`payload.$case`), `metadata` из `status-update` сливается в задачу (как на
+  сервере). `RemoteA2aResult.state` по-прежнему строка 0.3 (`'input-required'`), нормализованная из
+  `TaskState`. `RemoteA2aResult.raw` — `Message | Task` в типах 1.x.
+- `isStaleTaskError` узнаёт классы ошибок 1.x: `TaskNotFoundError` и `UnsupportedOperationError` с
+  «terminal» в тексте (сообщение в завершённую задачу). Код -32001 и текстовые маркеры 0.3 остались.
+- `toTask`/`agentMessage`/`toAguiSnapshot` возвращают типы 1.x. Снимок AG-UI без терминального
+  статуса пишется как `TASK_STATE_UNSPECIFIED`.
+
+### Added
+- `createAi37ClientFactory(fetchImpl?)` в `@ai37/agent-host/relay`: `ClientFactory` 1.x с compat 0.3
+  на резолвере карточки и на транспортах JSON-RPC и HTTP+JSON. `fetchImpl` уходит в оба. Реэкспорт
+  типов `Client` и `ClientFactory`.
+- `taskStateName(state)` — `TaskState` 1.x → строка 0.3; `isTask(result)` — задача или сообщение
+  (в 1.x у них нет `kind`).
+- Опция `AgentHostOptions.legacyCompat` (по умолчанию `true`).
+
+### Fixed (смешанный парк 0.3/1.x, найдено тестами на живом 1.3.0)
+- Клиенту 0.3 терминальная задача отдаётся как `TaskNotFoundError` (-32001). Клиент
+  `@a2a-js/sdk` 0.3 превращает -32004 в ошибку со своим текстом, «terminal» теряется, и relay 0.3
+  ронял ход вместо повтора новым диалогом (`HostRequestHandler`).
+- Клиенту 0.3 ошибка до первого события `message/stream` отдаётся событием SSE, как у сервера 0.3.
+  `jsonRpcHandler` 1.x отвечает в этом случае JSON, а клиент 0.3 (0.3.13 и 0.3.14) такой ответ не
+  разбирает: relay 0.3 не узнавал «задача не найдена» и не переигрывал ход. Ровно этот повтор
+  восстанавливает паузы, потерянные при переезде агента на новый стор.
+
+### Миграция для потребителей
+1. Бамп `@ai37/agent-host` до `^0.2.0` (лучше сразу до 0.2.1 со стором). `@a2a-js/sdk` из прямых
+   зависимостей убрать; если импорт остался — поднять до `^1.3.0`.
+2. Карточка: тип `Ai37AgentCardInput` из `@ai37/agent-host` вместо `AgentCard` из `@a2a-js/sdk`
+   (поля те же). Свои `supportedInterfaces` в карточке не нужны, хост строит их сам.
+3. `TaskStore` — из `@ai37/agent-host`. `@ai37/a2a-redis-task-store` с 1.x не работает (нет
+   `list()`, типы 0.3); стор на Postgres приедет в 0.2.1. До него — `InMemoryTaskStore`.
+4. REST-ручки, которые сами читают/пишут стор, — через `loadTaskState`/`saveTaskState` (0.1.0-alpha.49)
+   или `taskStore.load(id, currentCallContext())`: в 1.x контекст обязателен, без него стор не найдёт
+   задачу владельца.
+5. Код, который читал ответ агента сам (`raw.kind`, `part.kind === 'data'`, `status.state ===
+   'input-required'`), переводится на типы 1.x: `isTask(raw)`, `part.content?.$case === 'data'`
+   (`part.content.value`), `taskStateName(raw.status?.state)`. Форма `input-required` — через
+   `extractA2ui`, она теперь в артефакте.
+6. Свой A2A-клиент — через `createAi37ClientFactory(fetchImpl)`: compat 0.3 на клиенте нужен всегда
+   (агенты на старом хосте, внешние агенты пользователей). `fetchImpl` не должен перезаписывать
+   `A2A-Version`.
+
 ## [0.1.0-alpha.49]
 
 Подготовка к `@a2a-js/sdk` 1.x, ещё на 0.3 (план docs `plans/ts-a2a-sdk-1x-database-task-store.md`,

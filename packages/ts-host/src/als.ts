@@ -12,10 +12,10 @@ export interface HostScope {
   ctx?: AgentContext
   bearer?: string
   /**
-   * `acceptedOutputModes` (формат текста) из нативного A2A `params.configuration`.
-   * Guard читает его из тела JSON-RPC в express-слое, т.к. `@a2a-js/sdk` НЕ пробрасывает
-   * `configuration` в `RequestContext` исполнителя. На AG-UI-пути дополняется роутером из
-   * `forwardedProps.ai37.acceptedOutputModes`.
+   * `acceptedOutputModes` (формат текста) из нативного A2A `params.configuration`. Guard читает его
+   * из тела JSON-RPC (форма 0.3 и 1.0 здесь совпадает); исполнитель A2A сначала берёт
+   * `rc.request.configuration` из SDK 1.x. В ALS значение нужно downstream: оркестратор форвардит
+   * его сабагентам. На AG-UI-пути дополняется роутером из `forwardedProps.ai37.acceptedOutputModes`.
    */
   acceptedOutputModes?: string[]
   /**

@@ -29,7 +29,8 @@ app.listen(8080);
 ## Что даёт host
 
 - `/.well-known/agent-card.json` — discovery;
-- `/a2a/v1` — A2A JSON-RPC (`message/send`, `message/stream`), за JWT-guard;
+- `/a2a/v1` — A2A JSON-RPC за JWT-guard: протокол 1.0 (`SendMessage`, `SendStreamingMessage`, …,
+  заголовок `A2A-Version: 1.0`) и 0.3 (`message/send`, `message/stream`; без заголовка) — см. ниже;
 - `/agui` — AG-UI SSE (стрим событий когниции);
 - `/api/v1/health`, `/api/v1/version`;
 - JWT-guard через `AgentContext.fromRequest` (`@ai37/agent-sdk`) + request-scope (claims/billing → handler).
@@ -91,7 +92,7 @@ async run({ input }) {
 **Владелец задачи.** Хост передаёт стору `ServerCallContext` с пользователем из JWT хода:
 `userName = "<org_id>:<sub>"` (как python-host). Так делают и A2A-путь (`userBuilder` обработчика),
 и AG-UI-путь. Стор `@a2a-js/sdk` 1.x адресует задачу парой (владелец, id), поэтому чужой `taskId`
-не открывает чужую паузу. На 0.3 стор контекст игнорирует, но хост передаёт его уже сейчас.
+не открывает чужую паузу.
 
 **REST-ручки агента** (протокол, черновик формы, рекомендации) работают с состоянием хода через
 хелперы, а не через `taskStore.load/save`:
@@ -112,7 +113,34 @@ await saveTaskState(taskStore, taskId, { ...state, draft }); // false — зад
 Если нужен сам стор, `currentCallContext()` даёт тот же контекст: `taskStore.load(id, currentCallContext())`.
 
 На AG-UI `taskId = threadId`, задача живёт весь тред. Её снимок хост пишет без терминального
-статуса (`completed`/`failed` хода → `unknown`), иначе после первого `completed` тред бы замёрз.
+статуса (`completed`/`failed` хода → `TASK_STATE_UNSPECIFIED`), иначе после первого `completed` тред
+бы замёрз.
+
+## Протокол A2A: 1.0 и 0.3 одновременно
+
+Хост стоит на `@a2a-js/sdk` 1.x и по умолчанию принимает клиентов 0.3 (`legacyCompat`): во время
+перехода chat-backend, MCP-агрегатор и внешние клиенты обновляются не вместе с агентами.
+
+- Карточка гибридная: поля 0.3 (`url`, `protocolVersion`, `x-ai37`) + `supportedInterfaces`, где
+  JSON-RPC объявлен версиями `1.0` и `0.3`. Агент описывает карточку как раньше (`Ai37AgentCardInput`),
+  интерфейсы хост строит сам.
+- Клиент 0.3 ходит без `A2A-Version` и попадает в compat-слой SDK; когниция видит один и тот же
+  `AgentInput`.
+- Форма `input-required` уходит data-частью артефакта `a2ui-<taskId>` (`{ a2ui: [...] }`), в
+  `metadata` задачи — `state`. `extractA2ui` из relay читает оба места.
+- `createAgentHost({ legacyCompat: false })` выключает 0.3 и убирает 0.3-интерфейс из карточки.
+
+Звать другого агента — через relay и готовую фабрику клиентов (compat 0.3 на клиенте включён всегда:
+агенты на старом хосте и внешние агенты пользователей могут жить на 0.3 годами):
+
+```ts
+import { createAi37ClientFactory, executeRemoteA2a } from "@ai37/agent-host/relay";
+
+const client = await createAi37ClientFactory(fetchWithAuth).createFromUrl(agentBaseUrl);
+const res = await executeRemoteA2a(client, { query, contextId, resumeTaskId });
+// res.state: 'completed' | 'input-required' | 'failed' | 'message' (строки 0.3)
+// res.staleResumeDropped: пауза устарела (нет задачи или она завершена), ход повторён новым диалогом
+```
 
 ## Артефакты: результат хода, который нужен дольше хода
 

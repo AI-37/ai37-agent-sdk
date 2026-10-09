@@ -15,16 +15,20 @@ export interface ParsedMessage {
   traceCarrier?: Record<string, string>
 }
 
-/** Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37 + A2UI-действие. */
+/**
+ * Нормализует A2A-сообщение: текст + data-part + конверт metadata.ai37 + A2UI-действие. Части 1.x
+ * различаются по `content.$case`; сообщение клиента 0.3 compat-слой SDK уже перевёл в эту форму.
+ */
 export function parseA2AMessage(rc: RequestContext): ParsedMessage {
-  const parts = rc.userMessage.parts
-  const textPart = parts.find((p) => p.kind === 'text')
-  const dataPart = parts.find((p) => p.kind === 'data')
-  const text = textPart?.kind === 'text' ? textPart.text : undefined
-  const data = (dataPart?.kind === 'data' ? dataPart.data : {}) as Record<
-    string,
-    unknown
-  >
+  const parts = rc.userMessage.parts ?? []
+  let text: string | undefined
+  let data: Record<string, unknown> | undefined
+  for (const part of parts) {
+    const content = part.content
+    if (content?.$case === 'text' && text === undefined) text = content.value
+    if (content?.$case === 'data' && data === undefined) data = toRecord(content.value)
+  }
+  data ??= {}
   const action = readA2uiAction(rc)
   const traceCarrier = readTraceCarrier(rc)
   return {
@@ -71,6 +75,12 @@ function readA2uiAction(rc: RequestContext): A2uiAction | undefined {
   if (typeof ua.surfaceId === 'string') action.surfaceId = ua.surfaceId
   if (typeof ua.sourceComponentId === 'string') action.sourceComponentId = ua.sourceComponentId
   return action
+}
+
+function toRecord(value: unknown): Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : {}
 }
 
 /** metadata.ai37 может прийти в message.metadata, data.ai37 или data.metadata.ai37. */

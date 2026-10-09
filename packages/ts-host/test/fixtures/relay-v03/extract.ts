@@ -1,26 +1,21 @@
-import { TaskState, type Message, type Part, type Task } from '@a2a-js/sdk'
-import { TaskNotFoundError, UnsupportedOperationError } from '@a2a-js/sdk/errors'
-import type { A2uiComponent, A2uiSnapshot } from '../types'
+// Снимок relay из @ai37/agent-host 0.1.0-alpha.49 (последний на @a2a-js/sdk 0.3) — клиент 0.3 в
+// тестах смешанного парка. Импорты переписаны на npm-алиас a2a-sdk-v03, трассировка заглушена;
+// логика не менялась. Не править: это фикстура «как ведёт себя старый оркестратор».
+import type { Message, Task } from 'a2a-sdk-v03'
+import type { A2uiComponent, A2uiSnapshot } from '../../../src/types'
 
 /**
  * Чистые хелперы разбора ответа удалённого A2A-агента (Message | Task). Без ALS/NestJS/LangChain —
  * переносимы в любой relay. Подняты из chat-backend `remote-agent-registry`.
  */
 
-function partsText(parts: ReadonlyArray<Part> | undefined): string {
-  let text = ''
-  for (const part of parts ?? []) {
-    if (part.content?.$case === 'text') text += part.content.value
-  }
-  return text
-}
+type TextPart = { kind: string; text?: string }
 
-/**
- * Результат `sendMessage` (`Message | Task`) — задача? В 1.x у них нет `kind`: у сообщения есть
- * `messageId` и `role`, у задачи — `id` и `status`.
- */
-export function isTask(result: Message | Task): result is Task {
-  return !('messageId' in result)
+function partsText(parts: ReadonlyArray<TextPart>): string {
+  return parts
+    .filter((p) => p.kind === 'text' && typeof p.text === 'string')
+    .map((p) => p.text)
+    .join('')
 }
 
 /**
@@ -41,17 +36,19 @@ export function isTask(result: Message | Task): result is Task {
  * артефакты и есть единственный источник.
  */
 function collectTaskText(task: Task): string {
-  const statusText = partsText(task.status?.message?.parts)
+  const statusText = task.status.message?.parts
+    ? partsText(task.status.message.parts as TextPart[])
+    : ''
   if (statusText) return statusText
 
   const chunks: string[] = []
-  for (const artifact of task.artifacts ?? []) chunks.push(partsText(artifact.parts))
+  for (const artifact of task.artifacts ?? []) chunks.push(partsText(artifact.parts as TextPart[]))
   return chunks.filter(Boolean).join('\n\n')
 }
 
 /** Текст из результата `sendMessage` (Message | Task). */
 export function extractText(result: Message | Task): string {
-  const text = isTask(result) ? collectTaskText(result) : partsText(result.parts)
+  const text = result.kind === 'task' ? collectTaskText(result) : partsText(result.parts as TextPart[])
   return text.trim()
 }
 
@@ -63,12 +60,12 @@ export function extractText(result: Message | Task): string {
  * есть: оркестратор кладёт их в свой `result.a2ui`, host эмитит с теми же id.
  */
 export function extractA2ui(result: Message | Task): (A2uiComponent | A2uiSnapshot)[] {
-  if (!isTask(result)) return []
+  if (result.kind !== 'task') return []
   const out: (A2uiComponent | A2uiSnapshot)[] = []
   for (const artifact of result.artifacts ?? []) {
-    for (const part of artifact.parts ?? []) {
-      if (part.content?.$case === 'data') {
-        const a2ui = (part.content.value as { a2ui?: unknown } | undefined)?.a2ui
+    for (const part of artifact.parts) {
+      if (part.kind === 'data') {
+        const a2ui = (part.data as { a2ui?: unknown } | undefined)?.a2ui
         if (Array.isArray(a2ui)) out.push(...(a2ui as (A2uiComponent | A2uiSnapshot)[]))
       }
     }
@@ -80,14 +77,9 @@ export function extractA2ui(result: Message | Task): (A2uiComponent | A2uiSnapsh
 
 /**
  * Ошибка «таск устарел/не найден/в терминальном состоянии» — повод повторить БЕЗ `resumeTaskId`
- * (свежий диалог). Покрывает классы ошибок `@a2a-js/sdk` 1.x (`TaskNotFoundError`; сервер 1.2+
- * отвечает на сообщение в терминальную задачу `UnsupportedOperationError` с «terminal state» в
- * тексте), JSON-RPC-код -32001 и текстовые маркеры (сервер 0.3 отдаёт терминальную задачу как
- * invalid request с тем же текстом).
+ * (свежий диалог). Покрывает A2A `TaskNotFoundError` (-32001) и текстовые маркеры.
  */
 export function isStaleTaskError(err: unknown): boolean {
-  if (err instanceof TaskNotFoundError) return true
-  if (err instanceof UnsupportedOperationError && /terminal/i.test(err.message)) return true
   const code = (err as { code?: unknown } | undefined)?.code
   if (code === -32001) return true
   const msg = String((err as { message?: unknown } | undefined)?.message ?? err ?? '').toLowerCase()
@@ -96,26 +88,4 @@ export function isStaleTaskError(err: unknown): boolean {
       (msg.includes('not found') || msg.includes('final') || msg.includes('terminal'))) ||
     msg.includes('cannot be continued')
   )
-}
-
-/** Имена состояний задачи в словаре A2A 0.3 — в нём их хранит и сравнивает потребитель relay. */
-const STATE_NAMES: Record<number, string> = {
-  [TaskState.TASK_STATE_UNSPECIFIED]: 'unknown',
-  [TaskState.TASK_STATE_SUBMITTED]: 'submitted',
-  [TaskState.TASK_STATE_WORKING]: 'working',
-  [TaskState.TASK_STATE_COMPLETED]: 'completed',
-  [TaskState.TASK_STATE_FAILED]: 'failed',
-  [TaskState.TASK_STATE_CANCELED]: 'canceled',
-  [TaskState.TASK_STATE_INPUT_REQUIRED]: 'input-required',
-  [TaskState.TASK_STATE_REJECTED]: 'rejected',
-  [TaskState.TASK_STATE_AUTH_REQUIRED]: 'auth-required',
-}
-
-/**
- * Числовое состояние задачи 1.x (`TaskState.TASK_STATE_INPUT_REQUIRED`) → строка 0.3
- * (`'input-required'`). Например, chat-backend хранит в `RemoteAgentTask.state` строки 0.3 и после
- * перехода на 1.x продолжает их писать. Неизвестное значение → `'unknown'`.
- */
-export function taskStateName(state: TaskState | undefined): string {
-  return state === undefined ? 'unknown' : (STATE_NAMES[state] ?? 'unknown')
 }
