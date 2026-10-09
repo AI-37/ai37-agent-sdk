@@ -49,6 +49,12 @@ _auth_failures_total = Counter(
     "401 responses from the host auth guard.",
     ["service"],
 )
+_auth_guard_errors_total = Counter(
+    "ai37_agent_auth_guard_errors_total",
+    "503 responses from the host auth guards: verification failed for a non-auth reason "
+    "(config/dependency).",
+    ["service"],
+)
 
 
 def norm_final_state(status: str) -> str:
@@ -92,3 +98,8 @@ def record_billing_denied(service: str, reason: str) -> None:
 def record_auth_failure(service: str) -> None:
     """401 из AuthGuardMiddleware (сбой Authentik/JWKS/верификатора)."""
     _safe(lambda: _auth_failures_total.labels(service).inc())
+
+
+def record_auth_guard_error(service: str) -> None:
+    """503 из auth-guard'ов хоста: сбой проверки не на ``AuthError`` (конфиг/зависимость)."""
+    _safe(lambda: _auth_guard_errors_total.labels(service).inc())

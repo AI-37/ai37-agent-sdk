@@ -34,6 +34,8 @@ export interface MountMcpOptions {
   required: boolean
   overrides?: AgentContextOverrides
   buildInfo?: Record<string, unknown>
+  /** `service`-лейбл метрик хоста (см. `serviceLabel`). */
+  service?: string
 }
 
 /**
@@ -88,6 +90,7 @@ export function mountMcp(app: Express, opts: MountMcpOptions): void {
       opts.required,
       resourceMetadataUrl,
       opts.overrides ?? {},
+      opts.service,
     ),
     mcpHttpHandler(opts.mcp, serverInfo),
   )

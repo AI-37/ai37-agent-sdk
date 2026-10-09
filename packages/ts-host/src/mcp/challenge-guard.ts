@@ -7,6 +7,7 @@ import {
   type AgentContextSettings,
 } from '@ai37/agent-sdk'
 import { requestScope } from '../als'
+import { reportGuardError } from '../auth-guard'
 
 /**
  * MCP-вариант JWT-guard'а. Отличие от `jwtGuard` (A2A/AG-UI) — в поведении на 401: по
@@ -15,6 +16,9 @@ import { requestScope } from '../als'
  * (multi-issuer JWT → JWKS, иначе → introspection API-ключа), и так же открывается ALS-scope
  * (`requestScope`), чтобы MCP-tool handler мог прочитать `currentCtx()` — кто вызвал.
  *
+ * Fail-closed как у `jwtGuard`: при `required` сбой проверки не на `AuthError` (конфиг, недоступная
+ * зависимость) → 503 без `WWW-Authenticate` (новый токен тут не поможет), `next()` не вызывается.
+ *
  * `resourceMetadataUrl` — абсолютный URL protected-resource-metadata (см. `protectedResourceMetadataUrl`).
  */
 export function mcpChallengeGuard(
@@ -22,20 +26,18 @@ export function mcpChallengeGuard(
   required: boolean,
   resourceMetadataUrl: string,
   overrides: AgentContextOverrides = {},
+  service: string = 'unknown',
 ) {
   return async (
     req: Request,
     res: Response,
     next: NextFunction,
   ): Promise<void> => {
+    let ctx: AgentContext | undefined
     try {
-      const ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
-      requestScope.run(
-        { ctx, bearer: extractBearer(req.headers) },
-        () => next(),
-      )
+      ctx = await AgentContext.fromRequest(req.headers, settings, overrides)
     } catch (e) {
-      if (e instanceof AuthError && required) {
+      if (required && e instanceof AuthError) {
         // Challenge по RFC 9728/9110: клиент извлечёт resource_metadata и пойдёт за токеном.
         res.setHeader(
           'WWW-Authenticate',
@@ -49,8 +51,20 @@ export function mcpChallengeGuard(
         })
         return
       }
+      if (required) {
+        reportGuardError(service, 'mcp', e, extractBearer(req.headers))
+        res.status(503).json({
+          jsonrpc: '2.0',
+          error: { code: -32603, message: 'auth unavailable' },
+          id: null,
+        })
+        return
+      }
       // required=false (миграция) — пропускаем без ctx.
-      requestScope.run({ ctx: undefined, bearer: undefined }, () => next())
     }
+    requestScope.run(
+      { ctx, bearer: ctx ? extractBearer(req.headers) : undefined },
+      () => next(),
+    )
   }
 }
