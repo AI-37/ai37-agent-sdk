@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.32] - 2026-10-10
+
+### Security
+
+- `AgentContext.toJSON()` и `util.inspect` отдают выжимку `AgentContextLogView` (`sub`, `orgId`,
+  `billingOrgId`, `orgRole`, `hasToken`, `hasLlmKey`) — без JWT, ключа LLM, email и клиента
+  биллинга. Агенты кладут ctx в state целиком, и `logger.info({ state })` писал токен и ключ в логи
+  (план docs `plans/agent-log-secret-redaction.md`). Поля `rawToken` и `llmKey` у объекта читаются
+  как раньше.
+
 ## [0.1.0-alpha.31] - 2026-10-09
 
 ### Added

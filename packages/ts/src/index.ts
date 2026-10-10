@@ -7,6 +7,7 @@ export * from './auth'
 export * from './a2a'
 export { AgentContext } from './context'
 export type {
+  AgentContextLogView,
   AgentContextSettings,
   AgentContextOverrides,
   ReportUsageInput,

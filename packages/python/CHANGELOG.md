@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a24] - 2026-10-10
+
+### Security
+
+- `AgentContext.log_view()` и `__repr__` — выжимка без JWT, ключа LLM и email (`sub`, `org_id`,
+  `billing_org_id`, `org_role`, `has_token`, `has_llm_key`). Парити с TS `0.1.0-alpha.32`
+  (`toJSON`), план docs `plans/agent-log-secret-redaction.md`.
+
 ## [0.1.0a23] - 2026-10-09
 
 ### Added

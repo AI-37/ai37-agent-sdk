@@ -99,3 +99,35 @@ def test_assert_role_raises_when_insufficient():
     with pytest.raises(AuthError) as exc:
         user.assert_role("EDITOR")
     assert exc.value.code == "forbidden_role"
+
+
+def test_repr_and_log_view_hide_token_key_and_email():
+    """Агенты кладут ctx в state целиком; repr и log_view не выдают JWT, ключ LLM и email."""
+    ctx = make_test_context(
+        claims={
+            "sub": "u1",
+            "org_id": "o1",
+            "billing_org_id": "org1",
+            "org_role": "OWNER",
+            "email": "person@example.test",
+        },
+        billing=InMemoryBillingClient(runtime_state=fixtures.runtime_state.active()),
+    )
+    ctx.assert_execution_allowed()
+    assert ctx.llm_key == "sk-test-llm"
+
+    view = ctx.log_view()
+    printed = repr({"state": {"ctx": ctx}})
+
+    assert view == {
+        "sub": "u1",
+        "org_id": "o1",
+        "billing_org_id": "org1",
+        "org_role": "OWNER",
+        "has_token": True,
+        "has_llm_key": True,
+    }
+    assert "sk-test-llm" not in printed
+    assert "person@example.test" not in printed
+    assert ctx.raw_token == "test.token"
+    assert "test.token" not in printed

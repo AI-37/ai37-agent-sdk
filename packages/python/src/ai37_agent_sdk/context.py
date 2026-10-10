@@ -200,6 +200,25 @@ class AgentContext:
         """Ключ LLM-шлюза из последнего preflight (или None)."""
         return self._cached_state.llm_key if self._cached_state else None
 
+    def log_view(self) -> dict[str, Any]:
+        """Безопасное представление для логов: идентификаторы и флаги, без JWT, ключа LLM и email.
+
+        Парити с TS ``AgentContext.toJSON()``: агенты кладут ctx в state целиком, и лог state
+        не должен выдавать токен и ключ. ``raw_token``/``llm_key`` у объекта читаются как раньше.
+        """
+        claims = self.claims or {}
+        return {
+            "sub": claims.get("sub"),
+            "org_id": self.org_id,
+            "billing_org_id": self.billing_org_id,
+            "org_role": claims.get("org_role"),
+            "has_token": bool(self.raw_token),
+            "has_llm_key": bool(self.llm_key),
+        }
+
+    def __repr__(self) -> str:
+        return f"AgentContext({self.log_view()!r})"
+
     def _require_billing_org_id(self) -> str:
         value = self.billing_org_id
         if not value:
