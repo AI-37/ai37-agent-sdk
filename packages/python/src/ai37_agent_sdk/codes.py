@@ -3,6 +3,7 @@ from enum import Enum
 
 class BillingFeatureCode(str, Enum):
     DaylightCalcAgent = "daylight-calc-agent"
+    DocumentSearchAgent = "document-search-agent"
     DocumentService = "document-service"
     ElevatorCalcAgent = "elevator-calc-agent"
     HvacCalcAgent = "hvac-calc-agent"
@@ -16,6 +17,7 @@ class BillingFeatureCode(str, Enum):
 
 class BillingPrivilegeCode(str, Enum):
     DaylightCalcAllowed = "daylight-calc-allowed"
+    DocumentSearchAllowed = "document-search-allowed"
     ElevatorCalcAllowed = "elevator-calc-allowed"
     HvacAirExchangeAllowed = "hvac-air-exchange-allowed"
     HvacCalcAllowed = "hvac-calc-allowed"

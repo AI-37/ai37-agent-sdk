@@ -7,6 +7,11 @@
       "name": "Daylight Calculation Agent"
     },
     {
+      "code": "document-search-agent",
+      "constant": "DocumentSearchAgent",
+      "name": "Document Search Agent"
+    },
+    {
       "code": "document-service",
       "constant": "DocumentService",
       "name": "Документы организации"
@@ -57,6 +62,11 @@
       "code": "daylight-calc-allowed",
       "constant": "DaylightCalcAllowed",
       "name": "Daylight Calculation Allowed"
+    },
+    {
+      "code": "document-search-allowed",
+      "constant": "DocumentSearchAllowed",
+      "name": "Document Search Allowed"
     },
     {
       "code": "elevator-calc-allowed",

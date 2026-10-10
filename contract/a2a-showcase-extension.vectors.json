@@ -335,6 +335,126 @@
         ],
         "order": 1
       }
+    },
+    {
+      "name": "a capability keeps a well-formed skill reference, snake_case and kebab-case alike",
+      "input": {
+        "title": "Минстрой: контрагенты и цены",
+        "summary": "Проверка контрагентов по ИНН и подтверждение цен строительных ресурсов",
+        "capabilities": [
+          {
+            "id": "counterparty-check",
+            "title": "Верификация контрагента",
+            "summary": "Проверка юрлица или ИП по ИНН",
+            "skill": "verify_single"
+          },
+          {
+            "id": "org-documents",
+            "title": "Документы организации",
+            "summary": "Ответы по загруженным документам",
+            "skill": "org-documents"
+          }
+        ]
+      },
+      "expected": {
+        "title": "Минстрой: контрагенты и цены",
+        "summary": "Проверка контрагентов по ИНН и подтверждение цен строительных ресурсов",
+        "capabilities": [
+          {
+            "id": "counterparty-check",
+            "title": "Верификация контрагента",
+            "summary": "Проверка юрлица или ИП по ИНН",
+            "skill": "verify_single"
+          },
+          {
+            "id": "org-documents",
+            "title": "Документы организации",
+            "summary": "Ответы по загруженным документам",
+            "skill": "org-documents"
+          }
+        ]
+      }
+    },
+    {
+      "name": "a malformed skill reference is dropped, the tile stays",
+      "input": {
+        "title": "Минстрой: контрагенты и цены",
+        "summary": "Проверка контрагентов по ИНН и подтверждение цен строительных ресурсов",
+        "capabilities": [
+          {
+            "id": "padded",
+            "title": "С пробелом",
+            "summary": "Ссылка с пробелом по краю",
+            "skill": " verify_single"
+          },
+          {
+            "id": "spaces",
+            "title": "С пробелами",
+            "summary": "Ссылка с пробелом внутри",
+            "skill": "verify single"
+          },
+          {
+            "id": "number",
+            "title": "Число",
+            "summary": "Ссылка не строкой",
+            "skill": 42
+          },
+          {
+            "id": "empty",
+            "title": "Пусто",
+            "summary": "Пустая ссылка",
+            "skill": ""
+          },
+          {
+            "id": "too-long",
+            "title": "Длинная",
+            "summary": "Ссылка длиннее 64 символов",
+            "skill": "sssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssssss"
+          },
+          {
+            "id": "newline",
+            "title": "Перевод строки",
+            "summary": "Хвостовой перевод строки",
+            "skill": "verify_single\n"
+          }
+        ]
+      },
+      "expected": {
+        "title": "Минстрой: контрагенты и цены",
+        "summary": "Проверка контрагентов по ИНН и подтверждение цен строительных ресурсов",
+        "capabilities": [
+          {
+            "id": "padded",
+            "title": "С пробелом",
+            "summary": "Ссылка с пробелом по краю"
+          },
+          {
+            "id": "spaces",
+            "title": "С пробелами",
+            "summary": "Ссылка с пробелом внутри"
+          },
+          {
+            "id": "number",
+            "title": "Число",
+            "summary": "Ссылка не строкой"
+          },
+          {
+            "id": "empty",
+            "title": "Пусто",
+            "summary": "Пустая ссылка"
+          },
+          {
+            "id": "too-long",
+            "title": "Длинная",
+            "summary": "Ссылка длиннее 64 символов"
+          },
+          {
+            "id": "newline",
+            "title": "Перевод строки",
+            "summary": "Хвостовой перевод строки"
+          }
+        ]
+      }
     }
   ]
 }

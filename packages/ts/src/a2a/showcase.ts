@@ -9,8 +9,9 @@ export const AI37_SHOWCASE_EXTENSION_URI =
 
 /**
  * A norm the agent computes by. `title` is the full name and is not printed everywhere:
- * compact cards show the code alone. An empty list means the surface writes «Норматив
- * уточняется» — an invented reference is worse than a missing one.
+ * compact cards show the code alone. An empty list means the agent cites no norms, and the surface
+ * prints nothing: an invented reference is worse than a missing one, and «Норматив уточняется» on
+ * an agent that checks counterparties would be a promise nobody intends to keep.
  */
 export interface AgentShowcaseNorm {
   code: string
@@ -18,9 +19,11 @@ export interface AgentShowcaseNorm {
 }
 
 /**
- * One mode of the agent that the showcase draws as its own tile. It is a caption, not a skill: it
- * carries no billing gate and does not route — availability, norms and (later) the user's switch
- * stay with the agent. Display order is the array order; there is no `order` field.
+ * One mode of the agent that the showcase draws as its own tile. It is a caption, not a skill, and
+ * it does not route. A tile may point at one of the card's skills (`skill`): the catalog then shows
+ * it only to organizations that pass that skill's gate (`x-ai37.skills[skill].billing`) on top of
+ * the agent's own. The gate stays in one place, the card's billing block; the tile only refers to
+ * it. Display order is the array order; there is no `order` field.
  */
 export interface AgentShowcaseCapability {
   /** Slug `^[a-z0-9][a-z0-9-]{0,39}$`, unique within the agent: React key and analytics handle. */
@@ -29,6 +32,11 @@ export interface AgentShowcaseCapability {
   summary: string
   starter?: string
   examples?: string[]
+  /**
+   * Id of a skill in the same card (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`). The normalizer cannot see
+   * the skills list, so it only checks the shape; whether the skill exists is the catalog's call.
+   */
+  skill?: string
 }
 
 /** User-facing description of the agent for the product catalog (page and empty chat screen). */
@@ -61,6 +69,8 @@ const limits = {
 } as const
 
 const CAPABILITY_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
+// Skill ids are not slugs: Python agents name them `verify_single`, TS agents `document-search`.
+const SKILL_ID = /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/
 
 /**
  * Unlike routing, showcase text is clamped instead of rejected: dropping a whole agent from the
@@ -123,12 +133,21 @@ function normalizeCapability(value: unknown): AgentShowcaseCapability | undefine
   const title = clampText(raw.title, limits.title)
   const summary = clampText(raw.summary, limits.summary)
   if (!CAPABILITY_ID.test(id) || !title || !summary) return undefined
-  const capability: AgentShowcaseCapability = { id, title, summary }
+  return { id, title, summary, ...normalizeCapabilityOptionalFields(raw) }
+}
+
+function normalizeCapabilityOptionalFields(
+  raw: Record<string, unknown>,
+): Pick<AgentShowcaseCapability, 'starter' | 'examples' | 'skill'> {
+  const optional: Pick<AgentShowcaseCapability, 'starter' | 'examples' | 'skill'> = {}
   const starter = clampText(raw.starter, limits.starter)
-  if (starter) capability.starter = starter
+  if (starter) optional.starter = starter
   const examples = normalizeExamples(raw.examples)
-  if (examples.length) capability.examples = examples
-  return capability
+  if (examples.length) optional.examples = examples
+  // A malformed reference is dropped, the tile stays: showing it ungated beats losing it, and the
+  // agent's own gate still applies. Not trimmed, for the same reason as the id.
+  if (typeof raw.skill === 'string' && SKILL_ID.test(raw.skill)) optional.skill = raw.skill
+  return optional
 }
 
 /**
