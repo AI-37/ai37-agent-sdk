@@ -108,6 +108,16 @@ function buildVerifier(
   return jwt ?? opaque
 }
 
+/** Безопасное представление `AgentContext` в логах и `JSON.stringify`. */
+export interface AgentContextLogView {
+  sub?: string
+  orgId?: string
+  billingOrgId?: string
+  orgRole?: OrgRole
+  hasToken: boolean
+  hasLlmKey: boolean
+}
+
 export class AgentContext {
   readonly claims?: Claims
   readonly rawToken?: string
@@ -202,6 +212,28 @@ export class AgentContext {
   /** Ключ LLM-шлюза из последнего полученного runtime state (preflight). */
   get llmKey(): string | null | undefined {
     return this.cachedState?.llmKey
+  }
+
+  /**
+   * Что видно при сериализации: идентификаторы и флаги, без JWT, ключа LLM, email и клиента биллинга.
+   * Агенты кладут ctx в state целиком, и `logger.info({ state })` выдавал токен и ключ в логи:
+   * pino и `JSON.stringify` вызывают `toJSON` на любой глубине, так что выжимка закрывает все такие
+   * места разом. Поля `rawToken`/`llmKey` у самого объекта читаются как раньше.
+   */
+  toJSON(): AgentContextLogView {
+    return {
+      sub: this.claims?.sub,
+      orgId: this.orgId,
+      billingOrgId: this.billingOrgId,
+      orgRole: this.claims?.org_role,
+      hasToken: Boolean(this.rawToken),
+      hasLlmKey: Boolean(this.llmKey),
+    }
+  }
+
+  /** `console.log(ctx)` и `util.inspect` показывают ту же выжимку, что и `toJSON`. */
+  [Symbol.for('nodejs.util.inspect.custom')](): AgentContextLogView {
+    return this.toJSON()
   }
 
   private requireBillingOrgId(): string {
