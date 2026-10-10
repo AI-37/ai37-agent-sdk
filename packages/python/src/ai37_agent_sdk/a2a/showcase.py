@@ -12,23 +12,30 @@ AI37_SHOWCASE_EXTENSION_URI = "https://schemas.ai37.ru/a2a/extensions/showcase/v
 
 class AgentShowcaseNorm(TypedDict):
     """Норматив, по которому считает агент. `title` — полное наименование, печатается не везде:
-    на компактных карточках остаётся только код. Пустой список означает «Норматив уточняется» —
-    выдуманная ссылка хуже отсутствующей."""
+    на компактных карточках остаётся только код. Пустой список значит, что агент на нормативы не
+    ссылается, и поверхность ничего не печатает: выдуманная ссылка хуже отсутствующей, а
+    «Норматив уточняется» у проверки контрагентов обещал бы то, чего никто не собирается делать."""
 
     code: str
     title: NotRequired[str]
 
 
 class AgentShowcaseCapability(TypedDict):
-    """Режим агента, который витрина рисует отдельной плиткой. Это подпись, а не скилл: своего
-    гейта биллинга нет, на маршрутизацию не влияет. Доступность, нормативы и будущий выключатель
-    остаются у агента. Порядок показа — порядок в массиве, поля `order` нет."""
+    """Режим агента, который витрина рисует отдельной плиткой. Это подпись, а не скилл, на
+    маршрутизацию она не влияет. Плитка может сослаться на скилл своей карточки (`skill`): тогда
+    каталог показывает её только организациям, которые проходят гейт этого скилла
+    (`x-ai37.skills[skill].billing`) в дополнение к гейту агента. Гейт живёт в одном месте, в
+    биллинге карточки, плитка на него только ссылается. Порядок показа — порядок в массиве, поля
+    `order` нет."""
 
     id: str
     title: str
     summary: str
     starter: NotRequired[str]
     examples: NotRequired[list[str]]
+    # id скилла той же карточки. Нормализатор списка скиллов не видит и проверяет только форму:
+    # есть ли такой скилл, решает каталог.
+    skill: NotRequired[str]
 
 
 class AgentShowcaseProfile(TypedDict):
@@ -63,6 +70,8 @@ _EXAMPLE_MAX = 160
 _CAPABILITIES_MAX_ITEMS = 6
 # Тот же шаблон, что в TS. fullmatch, а не match с `$`: `$` в Python пропускает хвостовой `\n`.
 _CAPABILITY_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
+# id скилла — не slug: у Python-агентов `verify_single`, у TS-агентов `document-search`.
+_SKILL_ID = re.compile(r"[A-Za-z0-9][A-Za-z0-9_-]{0,63}")
 
 
 def _clamp(value: object, max_length: int) -> str:
@@ -135,6 +144,11 @@ def _capability(value: object) -> AgentShowcaseCapability | None:
     examples = _examples(value.get("examples"))
     if examples:
         capability["examples"] = examples
+    # Кривая ссылка отбрасывается, плитка остаётся: показать её без гейта лучше, чем потерять, а
+    # гейт агента всё равно действует. Не чистим по той же причине, что и id.
+    skill = value.get("skill")
+    if isinstance(skill, str) and _SKILL_ID.fullmatch(skill):
+        capability["skill"] = skill
     return capability
 
 

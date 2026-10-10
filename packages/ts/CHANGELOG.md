@@ -3,6 +3,25 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.33] - 2026-10-10
+
+### Added
+
+- Фича `document-search-agent` (`BillingFeatureCode.DocumentSearchAgent`) и привилегия
+  `document-search-allowed` (`BillingPrivilegeCode.DocumentSearchAllowed`) для агента поиска (план
+  docs `plans/agent-catalog-entitled-only.md`).
+- `showcase/v1`: у возможности необязательное `skill` — id скилла той же карточки. Каталог
+  показывает плитку только организациям, которые проходят гейт этого скилла
+  (`x-ai37.skills[skill].billing`) в дополнение к гейту агента. Нормализатор проверяет только форму
+  (`^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$`, без чистки краёв): кривая ссылка отбрасывается, плитка
+  остаётся. Общие векторы `contract/a2a-showcase-extension.vectors.json` дополнены.
+
+### Changed
+
+- Пустой `norms` в `showcase/v1` значит «агент на нормативы не ссылается», поверхность ничего не
+  печатает (раньше: «Норматив уточняется»). Изменилось только описание контракта, поведение
+  нормализатора прежнее.
+
 ## [0.1.0-alpha.32] - 2026-10-10
 
 ### Security

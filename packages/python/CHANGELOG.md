@@ -3,6 +3,21 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a25] - 2026-10-10
+
+### Added
+
+- Фича `document-search-agent` (`BillingFeatureCode.DocumentSearchAgent`) и привилегия
+  `document-search-allowed` (`BillingPrivilegeCode.DocumentSearchAllowed`), парити с TS
+  `0.1.0-alpha.33`.
+- `showcase/v1`: необязательное `skill` у возможности (`AgentShowcaseCapability`), парити с TS
+  `0.1.0-alpha.33`. Форма проверяется `fullmatch`, чтобы хвостовой перевод строки не прошёл.
+
+### Changed
+
+- Пустой `norms` в `showcase/v1` значит «агент на нормативы не ссылается»; поведение нормализатора
+  прежнее.
+
 ## [0.1.0a24] - 2026-10-10
 
 ### Security
