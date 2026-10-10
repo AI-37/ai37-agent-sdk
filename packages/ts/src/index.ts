@@ -6,6 +6,14 @@ export * from './billing'
 export * from './auth'
 export * from './a2a'
 export { AgentContext } from './context'
+export {
+  REDACTED,
+  SECRET_KEY_PATTERN,
+  agentLoggerOptions,
+  redactForLog,
+  redactSecretsInText,
+} from './log-redaction'
+export type { AgentLoggerOptions } from './log-redaction'
 export type {
   AgentContextLogView,
   AgentContextSettings,

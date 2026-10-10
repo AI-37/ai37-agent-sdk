@@ -7,11 +7,20 @@
 
 ### Security
 
+- Маскировка секретов в логах агентов (план docs `plans/agent-log-secret-redaction.md`): правила
+  живут в SDK, агенты получают новые бампом.
+  - `agentLoggerOptions({ level, name })` — опции pino: объект записи маскируется по имени поля и
+    по виду значения, текст сообщения — по виду значения. pino в зависимости SDK не добавляется.
+  - `redactForLog(value)` — копия для лога: строковые значения полей, чьё имя подходит под
+    `SECRET_KEY_PATTERN` (`token|secret|passw|pwd|api-key|llm-key|private-key|access-key|authorization|cookie|credential`),
+    заменяются на `[REDACTED]` на любой глубине; числа не трогаются; циклы и глубина ограничены;
+    ошибки копируются с тем же классом.
+  - `redactSecretsInText(text)` — JWT, `Bearer …`, `sk-…` в любой строке.
+  - Bindings дочернего логгера (`logger.child({...})`) pino 9 через форматтеры не пропускает —
+    секреты в `child()` не класть.
 - `AgentContext.toJSON()` и `util.inspect` отдают выжимку `AgentContextLogView` (`sub`, `orgId`,
   `billingOrgId`, `orgRole`, `hasToken`, `hasLlmKey`) — без JWT, ключа LLM, email и клиента
-  биллинга. Агенты кладут ctx в state целиком, и `logger.info({ state })` писал токен и ключ в логи
-  (план docs `plans/agent-log-secret-redaction.md`). Поля `rawToken` и `llmKey` у объекта читаются
-  как раньше.
+  биллинга. Поля `rawToken` и `llmKey` у объекта читаются как раньше.
 
 ## [0.1.0-alpha.31] - 2026-10-09
 

@@ -7,9 +7,11 @@
 
 ### Security
 
+- Маскировка секретов в логах — парити с TS `0.1.0-alpha.32`: `redact_for_log`,
+  `redact_secrets_in_text`, `SECRET_KEY_PATTERN`, `SecretRedactingFilter` (`logging.Filter`:
+  текст сообщения, аргументы, поля `extra`). Объект с `log_view()` заменяется выжимкой.
 - `AgentContext.log_view()` и `__repr__` — выжимка без JWT, ключа LLM и email (`sub`, `org_id`,
-  `billing_org_id`, `org_role`, `has_token`, `has_llm_key`). Парити с TS `0.1.0-alpha.32`
-  (`toJSON`), план docs `plans/agent-log-secret-redaction.md`.
+  `billing_org_id`, `org_role`, `has_token`, `has_llm_key`).
 
 ## [0.1.0a23] - 2026-10-09
 

@@ -59,6 +59,13 @@ from .context import (
     AuthSettings,
     BillingSettings,
 )
+from .log_redaction import (
+    REDACTED,
+    SECRET_KEY_PATTERN,
+    SecretRedactingFilter,
+    redact_for_log,
+    redact_secrets_in_text,
+)
 from .output_modes import (
     OUTPUT_MODE_MARKDOWN,
     OUTPUT_MODE_MARKDOWN_SPAI,
@@ -116,6 +123,11 @@ __all__ = [
     "parse_agent_showcase_extension",
     # context
     "AgentContext",
+    "REDACTED",
+    "SECRET_KEY_PATTERN",
+    "SecretRedactingFilter",
+    "redact_for_log",
+    "redact_secrets_in_text",
     "AgentContextSettings",
     "AuthSettings",
     "BillingSettings",
