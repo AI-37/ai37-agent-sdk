@@ -606,22 +606,32 @@ async def _run_turn(
 
     task = asyncio.create_task(driver())
     try:
-        while True:
-            try:
-                # Queue.get отменяется безопасно: недождавшееся событие останется в очереди.
-                event = await asyncio.wait_for(queue.get(), timeout=AGUI_HEARTBEAT_S)
-            except TimeoutError:
-                yield _PING
-                continue
-            if event is _STOP:
-                break
-            yield encoder.encode(event)
+        async for frame in _frames(queue, encoder):
+            yield frame
     finally:
-        if not task.done():
-            # Клиент ушёл до конца хода (Starlette отменил ответ) — ход отменяем, а не доигрываем.
-            task.cancel()
-        with contextlib.suppress(asyncio.CancelledError):
-            await task
+        await _finish_turn(task)
+
+
+async def _frames(queue: asyncio.Queue[Any], encoder: Any) -> AsyncIterator[str]:
+    """SSE-кадры из очереди хода до ``_STOP``; после ``AGUI_HEARTBEAT_S`` тишины — ``: ping``."""
+    while True:
+        try:
+            # Queue.get отменяется безопасно: недождавшееся событие останется в очереди.
+            event = await asyncio.wait_for(queue.get(), timeout=AGUI_HEARTBEAT_S)
+        except TimeoutError:
+            yield _PING
+            continue
+        if event is _STOP:
+            return
+        yield encoder.encode(event)
+
+
+async def _finish_turn(task: asyncio.Task[None]) -> None:
+    """Дождаться хода; клиент ушёл раньше (Starlette отменил ответ) — отменить, не доигрывать."""
+    if not task.done():
+        task.cancel()
+    with contextlib.suppress(asyncio.CancelledError):
+        await task
 
 
 # ── фабрика Starlette-routes (монтируется в create_agent_host под /agui) ──────
