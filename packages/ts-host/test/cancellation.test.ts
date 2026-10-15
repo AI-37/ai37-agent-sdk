@@ -252,6 +252,21 @@ describe('relay: отмена вызова', () => {
     expect(cancels).toEqual([{ tenant: '', id: 'child-9', metadata: undefined }])
   })
 
+  it('после вызова слушатель на сигнале хода снят: поздняя отмена relay не трогает', async () => {
+    const ac = new AbortController()
+    const added: unknown[] = []
+    const removed: unknown[] = []
+    const signal = ac.signal
+    const add = signal.addEventListener.bind(signal)
+    const remove = signal.removeEventListener.bind(signal)
+    signal.addEventListener = ((t: string, l: never, o?: never) => (added.push(l), add(t, l, o))) as never
+    signal.removeEventListener = ((t: string, l: never) => (removed.push(l), remove(t, l))) as never
+    const client = { sendMessage: async () => task('t1', TaskState.TASK_STATE_COMPLETED) } as unknown as Client
+    await executeRemoteA2a(client, { query: 'q', signal })
+    expect(removed).toEqual(expect.arrayContaining(added))
+    expect(added.length).toBeGreaterThan(0)
+  })
+
   it('уже отменённый сигнал — вызова не происходит', async () => {
     const { client } = cancellableStream()
     const ac = new AbortController()

@@ -175,10 +175,13 @@ class RelayWatchdog {
   private readonly timers: ReturnType<typeof setTimeout>[] = []
   private idleTimer: ReturnType<typeof setTimeout> | undefined
 
+  private readonly onOuterAbort = (): void => this.abort(this.req.signal?.reason)
+
   constructor(private readonly req: RemoteA2aRequest) {
     const outer = req.signal
     if (outer?.aborted) this.abort(outer.reason)
-    else outer?.addEventListener('abort', () => this.abort(outer.reason), { once: true })
+    // Сигнал хода живёт дольше вызова (за ход — несколько сабагентов): слушатель снимает dispose().
+    else outer?.addEventListener('abort', this.onOuterAbort, { once: true })
     const deadline = req.requestTimeoutMs
     if (deadline !== undefined) {
       this.timers.push(
@@ -216,6 +219,7 @@ class RelayWatchdog {
   dispose(): void {
     this.stopIdle()
     for (const t of this.timers) clearTimeout(t)
+    this.req.signal?.removeEventListener('abort', this.onOuterAbort)
   }
 
   private abort(reason: unknown): void {
