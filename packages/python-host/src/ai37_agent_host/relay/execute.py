@@ -235,13 +235,45 @@ async def _events(stream: Any, idle_timeout_ms: int | None) -> AsyncIterator[Any
         yield sr
 
 
+def _cancel_remote_task(client: Any, task_id: str | None) -> None:
+    """``tasks/cancel`` агенту фоном: ошибка старого хоста или завершённой задачи не нужна."""
+    cancel = getattr(client, "cancel_task", None)
+    if not task_id or cancel is None:
+        return
+    from a2a.types import CancelTaskRequest
+
+    async def _run() -> None:
+        with contextlib.suppress(Exception):
+            await cancel(CancelTaskRequest(id=task_id))
+
+    _background.add(job := asyncio.ensure_future(_run()))
+    job.add_done_callback(_background.discard)
+
+
+#: Ссылки на фоновые отмены, чтобы сборщик мусора не снял задачу до завершения.
+_background: set[asyncio.Future[None]] = set()
+
+
 async def _drain(
-    stream: Any, on_event: OnEvent | None, idle_timeout_ms: int | None = None
+    client: Any,
+    stream: Any,
+    on_event: OnEvent | None,
+    idle_timeout_ms: int | None = None,
+    known_task_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Накопить финальный Message|Task (dict) из ``StreamResponse``, форвардя node/reasoning."""
     task: dict[str, Any] | None = None
     message: dict[str, Any] | None = None
-    async for sr in _events(stream, idle_timeout_ms):
+    events = _events(stream, idle_timeout_ms)
+    while True:
+        try:
+            sr = await anext(events)
+        except StopAsyncIteration:
+            break
+        except (TimeoutError, asyncio.CancelledError):
+            # Обрыв HTTP агента не останавливает — просим отменить задачу явно.
+            _cancel_remote_task(client, (task or {}).get("id") or known_task_id)
+            raise
         which = sr.WhichOneof("payload")
         if which == "message":
             message = MessageToDict(sr.message, preserving_proto_field_name=False)
@@ -287,12 +319,12 @@ async def _send(
 ) -> tuple[dict[str, Any] | None, bool]:
     idle = req.idle_timeout_ms
     try:
-        raw = await _drain(client.send_message(_build_request(req, True)), on_event, idle)
-        return raw, False
+        stream = client.send_message(_build_request(req, True))
+        return await _drain(client, stream, on_event, idle, req.resume_task_id), False
     except Exception as exc:  # noqa: BLE001 - решаем по типу ошибки ниже
         if req.resume_task_id and is_stale_task_error(exc):
-            raw = await _drain(client.send_message(_build_request(req, False)), on_event, idle)
-            return raw, True
+            stream = client.send_message(_build_request(req, False))
+            return await _drain(client, stream, on_event, idle), True
         raise
 
 

@@ -23,6 +23,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 import uuid
 from collections.abc import AsyncIterator
@@ -616,7 +617,11 @@ async def _run_turn(
                 break
             yield encoder.encode(event)
     finally:
-        await task
+        if not task.done():
+            # Клиент ушёл до конца хода (Starlette отменил ответ) — ход отменяем, а не доигрываем.
+            task.cancel()
+        with contextlib.suppress(asyncio.CancelledError):
+            await task
 
 
 # ── фабрика Starlette-routes (монтируется в create_agent_host под /agui) ──────

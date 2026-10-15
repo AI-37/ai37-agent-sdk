@@ -38,8 +38,8 @@ export async function buildMcpServer(
         annotations: { ...(t.annotations ?? {}), title: t.title },
         inputSchema: t.inputSchema ?? defaultInputSchema,
       },
-      async (args: Record<string, unknown>) => {
-        const result = await t.handler(args, ctx)
+      async (args: Record<string, unknown>, extra: { signal?: AbortSignal }) => {
+        const result = await t.handler(args, ctx, extra?.signal)
         // McpToolResult — подмножество CallToolResult; форма совпадает.
         return result as Awaited<
           ReturnType<Parameters<McpServer['registerTool']>[2]>

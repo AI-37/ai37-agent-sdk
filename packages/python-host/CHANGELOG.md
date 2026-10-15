@@ -20,6 +20,10 @@
   metadata. `A2aProgress` получил необязательный `keepalive_s`; `HostExecutor` его включает.
 - **Таймауты relay:** `RemoteA2aRequest.idle_timeout_ms` и `request_timeout_ms` — `TimeoutError` с
   понятным текстом; поток при простое закрывается.
+- **Отмена хода.** `HostExecutor.cancel` публикует `canceled` (сам ход a2a-sdk уже прервал через
+  `CancelledError` — питоновский аналог `AgentRequest.signal`; раньше задача оставалась `working`).
+  Обрыв потока AG-UI отменяет задачу хода, а не доигрывает её. Relay при отмене вызова или таймауте
+  шлёт агенту `tasks/cancel` по id задачи.
 
 ## [0.1.0a24] - 2026-10-09
 
