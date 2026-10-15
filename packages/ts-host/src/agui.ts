@@ -31,6 +31,13 @@ import { BillingExecutionDeniedError } from '@ai37/agent-sdk'
  * `a2ui-surface` с `content.a2ui_operations` (v0.9) — рендерится CopilotKit нативно через
  * ai37Catalog. Tool-call `render_a2ui` НЕ используем (он в CopilotKit для LLM-генерации UI).
  */
+/**
+ * Пауза между SSE-комментариями `: ping`, пока ход молчит. Должна быть меньше самого короткого
+ * таймаута простоя на пути к клиенту (undici в BFF — 120 с, nginx), иначе долгий вызов LLM оборвут.
+ * Комментарии SSE клиенты AG-UI пропускают, в событиях протокола их нет.
+ */
+export const AGUI_HEARTBEAT_MS = 15_000
+
 type RunAgentInputLike = {
   threadId?: string
   runId?: string
@@ -143,7 +150,8 @@ export function aguiRouter(
       scope.turn = { contextId: threadId, taskId: threadId }
       scope.acceptedOutputModes = accepted
       if (supportedCatalogIds.length > 0) scope.supportedCatalogIds = supportedCatalogIds
-      // Инструкция владельца (жёсткая политика) в scope — Ai37ChatCompletions подмешает её в LLM-вызовы.
+      // Инструкция владельца (жёсткая политика) в scope — её дописывает в системный промпт
+      // `withPartnerInstructions` в когниции агента; сам Ai37ChatCompletions её не трогает.
       if (typeof metadata.instructions === 'string' && metadata.instructions.trim()) {
         scope.instructions = metadata.instructions.trim()
       }
@@ -258,6 +266,9 @@ export function aguiRouter(
       }
     }
 
+    const heartbeat = setInterval(() => {
+      if (!res.writableEnded) res.write(': ping\n\n')
+    }, AGUI_HEARTBEAT_MS)
     try {
       emitEvent({ type: EventType.RUN_STARTED, threadId, runId })
 
@@ -343,6 +354,7 @@ export function aguiRouter(
       endReasoning()
       emitEvent({ type: EventType.RUN_ERROR, message: String(e) })
     } finally {
+      clearInterval(heartbeat)
       // RED-метрики хода (agui): finalState = result.status (или 'failed' при throw).
       observeTurn(service, 'agui', normFinalState(finalState), (Date.now() - startedAt) / 1000)
       // Langfuse-батч уже досослан внутри `withTurnObservability` (forceFlush на закрытии turn-спана).

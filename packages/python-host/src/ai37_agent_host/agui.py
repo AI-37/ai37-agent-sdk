@@ -480,6 +480,13 @@ class _Emitter:
 _STOP = object()
 
 
+#: Пауза тишины, после которой в поток уходит SSE-комментарий ``: ping`` (паритет
+#: ``AGUI_HEARTBEAT_MS``). Меньше самого короткого таймаута простоя на пути к клиенту;
+#: клиенты AG-UI комментарии пропускают.
+AGUI_HEARTBEAT_S = 15.0
+_PING = ": ping\n\n"
+
+
 async def _run_turn(
     handler: AgentHandler,
     body: dict[str, Any],
@@ -599,7 +606,12 @@ async def _run_turn(
     task = asyncio.create_task(driver())
     try:
         while True:
-            event = await queue.get()
+            try:
+                # Queue.get отменяется безопасно: недождавшееся событие останется в очереди.
+                event = await asyncio.wait_for(queue.get(), timeout=AGUI_HEARTBEAT_S)
+            except TimeoutError:
+                yield _PING
+                continue
             if event is _STOP:
                 break
             yield encoder.encode(event)

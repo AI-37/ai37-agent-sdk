@@ -27,7 +27,7 @@ from a2a.types import Task, TaskState, TaskStatus
 from ai37_agent_sdk import BillingExecutionDeniedError
 from google.protobuf.json_format import MessageToDict
 
-from .a2a_progress import A2aProgress
+from .a2a_progress import A2A_KEEPALIVE_S, A2aProgress
 from .als import HostTurn, current_accepted_output_modes, current_ctx, current_scope
 from .build_task import data_part, resolve_result_a2ui, text_part
 from .metrics import norm_final_state, observe_turn, record_billing_denied
@@ -135,7 +135,8 @@ class HostExecutor(AgentExecutor):
         if scope is not None:
             scope.turn = HostTurn(context_id=context_id, task_id=task_id)
 
-        progress = A2aProgress(updater, task_id)
+        # keepalive: долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
+        progress = A2aProgress(updater, task_id, keepalive_s=A2A_KEEPALIVE_S)
         try:
             result = await self._run_handler(agent_input, ctx, progress.emit)
         finally:
