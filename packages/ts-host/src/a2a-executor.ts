@@ -1,7 +1,9 @@
-import type {
-  AgentExecutor,
-  ExecutionEventBus,
-  RequestContext,
+import { TaskState } from '@a2a-js/sdk'
+import {
+  AgentEvent as SdkEvent,
+  type AgentExecutor,
+  type ExecutionEventBus,
+  type RequestContext,
 } from '@a2a-js/sdk/server'
 import { A2aProgress } from './a2a-progress'
 import { negotiateOutput } from './output-modes'
@@ -25,7 +27,16 @@ import { BillingExecutionDeniedError } from '@ai37/agent-sdk'
  * `agentTextModes` — текстовые форматы агента (agent-card `defaultOutputModes`);
  * `agentCatalogIds` — каталог(и) A2UI агента. Для content-negotiation вывода (РЕШЕНИЕ 10).
  */
+/** Идущий ход: отмена по `tasks/cancel` находит его по taskId. */
+interface RunningTurn {
+  contextId: string
+  abort: AbortController
+  progress: A2aProgress
+}
+
 export class HostExecutor implements AgentExecutor {
+  private readonly running = new Map<string, RunningTurn>()
+
   constructor(
     private readonly handler: AgentHandler,
     private readonly agentTextModes: string[] = [],
@@ -75,6 +86,8 @@ export class HostExecutor implements AgentExecutor {
     const emit = progress.emit
     // Долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
     progress.startKeepalive()
+    const abort = new AbortController()
+    this.running.set(rc.taskId, { contextId: rc.contextId, abort, progress })
 
     // Langfuse v4: turn-спан `{service}:a2a` (slug card.name) — в UI видно, какой агент.
     // Активен на время когниции (LangChain-спаны нестятся под него).
@@ -93,7 +106,7 @@ export class HostExecutor implements AgentExecutor {
       },
       async () => {
         try {
-          return await this.handler.run({ input, ctx, emit })
+          return await this.handler.run({ input, ctx, emit, signal: abort.signal })
         } catch (e) {
           // Классифицируем отказ биллинга ДО сворачивания — единый choke-point для всех агентов.
           if (e instanceof BillingExecutionDeniedError) recordBillingDenied(this.service, e.reason)
@@ -102,7 +115,18 @@ export class HostExecutor implements AgentExecutor {
         }
       },
       (r) => ({ status: r.status, message: r.message }),
-    ).finally(() => progress.stopKeepalive())
+    ).finally(() => {
+      progress.stopKeepalive()
+      this.running.delete(rc.taskId)
+    })
+
+    // Ход отменён: `cancelTask` уже опубликовал `canceled`, и задача терминальна. Итог handler'а
+    // (обычно failed от AbortError) публиковать нельзя — он перезаписал бы отмену.
+    if (abort.signal.aborted) {
+      observeTurn(this.service, 'a2a', 'canceled', (Date.now() - startedAt) / 1000)
+      bus.finished()
+      return
+    }
 
     // RED-метрики хода (a2a): rate + errors + duration + terminal-state.
     observeTurn(this.service, 'a2a', normFinalState(result.status), (Date.now() - startedAt) / 1000)
@@ -116,7 +140,26 @@ export class HostExecutor implements AgentExecutor {
     bus.finished()
   }
 
-  cancelTask = async (): Promise<void> => {}
+  /**
+   * `tasks/cancel`: остановить ход и закрыть задачу состоянием `canceled`. Сигнал получает handler
+   * (`AgentRequest.signal`); `@a2a-js/sdk` ждёт финальный статус на той же шине. Ход, который идёт
+   * в другой реплике, отсюда не виден — SDK тогда пишет `canceled` в стор сам.
+   */
+  cancelTask = async (taskId: string, bus: ExecutionEventBus): Promise<void> => {
+    const turn = this.running.get(taskId)
+    if (!turn) return
+    turn.progress.stopKeepalive()
+    turn.abort.abort(new DOMException('Ход отменён клиентом (tasks/cancel)', 'AbortError'))
+    bus.publish(
+      SdkEvent.statusUpdate({
+        taskId,
+        contextId: turn.contextId,
+        status: { state: TaskState.TASK_STATE_CANCELED, message: undefined, timestamp: new Date().toISOString() },
+        metadata: undefined,
+      }),
+    )
+    bus.finished()
+  }
 }
 
 /** `configuration.acceptedOutputModes` запроса; undefined, если клиент их не прислал. */

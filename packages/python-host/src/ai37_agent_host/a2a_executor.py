@@ -149,8 +149,17 @@ class HostExecutor(AgentExecutor):
         )
 
     async def cancel(self, context: RequestContext, event_queue: EventQueue) -> None:
-        # Host не знает про доменную отмену; агенты со специфической отменой переопределяют.
-        return None
+        """``tasks/cancel``: закрыть задачу состоянием ``canceled`` (паритет ``cancelTask`` в TS).
+
+        Сам ход a2a-sdk уже прервал: отменил задачу-продюсер, и в handler прилетел
+        ``CancelledError`` (это питоновский аналог ``AgentRequest.signal``). Без финального статуса
+        задача так и осталась бы ``working``.
+        """
+        task_id = context.task_id
+        context_id = context.context_id
+        if task_id is None or context_id is None:
+            return
+        await TaskUpdater(event_queue, task_id, context_id).cancel()
 
     async def _run_handler(
         self,

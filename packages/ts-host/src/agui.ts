@@ -266,6 +266,11 @@ export function aguiRouter(
       }
     }
 
+    // Клиент закрыл поток до конца хода (вкладка, обрыв BFF) — отменяем ход, а не доигрываем его впустую.
+    const abort = new AbortController()
+    res.on('close', () => {
+      if (!res.writableEnded) abort.abort(new DOMException('Клиент закрыл поток AG-UI', 'AbortError'))
+    })
     const heartbeat = setInterval(() => {
       if (!res.writableEnded) res.write(': ping\n\n')
     }, AGUI_HEARTBEAT_MS)
@@ -290,6 +295,7 @@ export function aguiRouter(
           handler.run({
             input,
             ctx,
+            signal: abort.signal,
             emit: (e) => {
               if (e.type === 'text') {
                 // НЕ закрываем reasoning здесь: агенты (напр. rag-factory за sub-agent-релеем) могут

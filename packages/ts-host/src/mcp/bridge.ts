@@ -49,7 +49,7 @@ export function bridgeHandlerToMcpTool(
     description: opts.description,
     ...(opts.annotations ? { annotations: opts.annotations } : {}),
     ...(opts.inputSchema ? { inputSchema: opts.inputSchema } : {}),
-    handler: async (args, ctx) => {
+    handler: async (args, ctx, signal) => {
       const query =
         typeof args.query === 'string' ? args.query : JSON.stringify(args)
       const id = randomUUID()
@@ -73,6 +73,7 @@ export function bridgeHandlerToMcpTool(
         },
         ctx,
         emit: () => {},
+        ...(signal ? { signal } : {}),
       })
       const text = opts.renderResult
         ? opts.renderResult(result)

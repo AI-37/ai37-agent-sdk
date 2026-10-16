@@ -46,9 +46,11 @@ export interface McpToolDef {
   /** Хинты поведения (`readOnlyHint` / `destructiveHint` / …). Заголовок — в `title`, не здесь. */
   annotations?: McpToolAnnotations
   inputSchema?: ZodRawShape
+  /** `signal` — отмена вызова MCP-клиентом (`notifications/cancelled`) или обрыв соединения. */
   handler: (
     args: Record<string, unknown>,
     ctx: AgentContext | undefined,
+    signal?: AbortSignal,
   ) => Promise<McpToolResult> | McpToolResult
 }
 

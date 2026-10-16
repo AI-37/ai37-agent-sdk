@@ -60,6 +60,11 @@ export interface RemoteA2aRequest {
   idleTimeoutMs?: number
   /** Абсолютный дедлайн вызова (и блокирующего, и стрима); ставят выше бюджета хода агента. */
   requestTimeoutMs?: number
+  /**
+   * Отмена вызова (ход оркестратора отменён). Relay обрывает поток и шлёт агенту `tasks/cancel`:
+   * обрыв HTTP сам по себе агента не останавливает. То же — при срабатывании таймаутов выше.
+   */
+  signal?: AbortSignal
 }
 
 export type RemoteA2aState = 'completed' | 'input-required' | 'failed' | 'message'
@@ -170,7 +175,13 @@ class RelayWatchdog {
   private readonly timers: ReturnType<typeof setTimeout>[] = []
   private idleTimer: ReturnType<typeof setTimeout> | undefined
 
+  private readonly onOuterAbort = (): void => this.abort(this.req.signal?.reason)
+
   constructor(private readonly req: RemoteA2aRequest) {
+    const outer = req.signal
+    if (outer?.aborted) this.abort(outer.reason)
+    // Сигнал хода живёт дольше вызова (за ход — несколько сабагентов): слушатель снимает dispose().
+    else outer?.addEventListener('abort', this.onOuterAbort, { once: true })
     const deadline = req.requestTimeoutMs
     if (deadline !== undefined) {
       this.timers.push(
@@ -184,9 +195,11 @@ class RelayWatchdog {
     return this.controller.signal
   }
 
-  /** Есть ли что сторожить: без таймаутов сигнал транспорту не передаём вовсе. */
+  /** Есть ли что сторожить: без таймаутов и отмены сигнал транспорту не передаём вовсе. */
   get active(): boolean {
-    return this.req.requestTimeoutMs !== undefined || this.req.idleTimeoutMs !== undefined
+    return (
+      this.req.requestTimeoutMs !== undefined || this.req.idleTimeoutMs !== undefined || this.req.signal !== undefined
+    )
   }
 
   /** Событие от агента: таймер простоя начинается заново. */
@@ -206,6 +219,7 @@ class RelayWatchdog {
   dispose(): void {
     this.stopIdle()
     for (const t of this.timers) clearTimeout(t)
+    this.req.signal?.removeEventListener('abort', this.onOuterAbort)
   }
 
   private abort(reason: unknown): void {
@@ -231,18 +245,33 @@ export async function executeRemoteA2a(
       raw = await abortable(client.sendMessage(buildParams(req, true), options), watchdog.signal)
     } catch (e) {
       // Устаревший resume-таск → повторяем как свежий диалог (без taskId). Иначе — пробрасываем.
-      if (req.resumeTaskId && isStaleTaskError(e)) {
+      if (req.resumeTaskId && isStaleTaskError(e) && !watchdog.signal.aborted) {
         staleResumeDropped = true
         raw = await abortable(client.sendMessage(buildParams(req, false), options), watchdog.signal)
       } else {
         throw e
       }
     }
+  } catch (e) {
+    // Блокирующий ответ ещё не пришёл, id новой задачи неизвестен — отменить можно только resume.
+    if (watchdog.signal.aborted && !staleResumeDropped) cancelRemoteTask(client, req.resumeTaskId)
+    throw e
   } finally {
     watchdog.dispose()
   }
 
   return toResult(raw, staleResumeDropped)
+}
+
+/**
+ * `tasks/cancel` агенту, не дожидаясь ответа: relay уже бросает ошибку наверх, а агент старого хоста
+ * (no-op `cancelTask`) или завершённая задача ответят ошибкой, которая никому не нужна.
+ */
+function cancelRemoteTask(client: Client, taskId: string | undefined): void {
+  if (!taskId) return
+  void Promise.resolve()
+    .then(() => client.cancelTask({ tenant: '', id: taskId, metadata: undefined }))
+    .catch(() => undefined)
 }
 
 /**
@@ -341,9 +370,11 @@ function forwardStatusMetadata(
  * node/reasoning/tool/text через onEvent.
  */
 async function drainStream(
+  client: Client,
   stream: AsyncGenerator<StreamResponse, void, undefined>,
   onEvent: (e: RemoteA2aProgressEvent) => void,
   watchdog: RelayWatchdog,
+  knownTaskId: string | undefined,
 ): Promise<Message | Task | undefined> {
   let task: Task | undefined
   let message: Message | undefined
@@ -352,8 +383,11 @@ async function drainStream(
     try {
       step = await abortable(stream.next(), watchdog.signal)
     } catch (e) {
-      // Закрыть генератор, чтобы транспорт отпустил соединение; ошибка его закрытия не важна.
-      if (watchdog.signal.aborted) void stream.return(undefined).catch(() => undefined)
+      if (watchdog.signal.aborted) {
+        // Закрыть генератор, чтобы транспорт отпустил соединение; ошибка его закрытия не важна.
+        void stream.return(undefined).catch(() => undefined)
+        cancelRemoteTask(client, task?.id || knownTaskId)
+      }
       throw e
     }
     if (step.done) break
@@ -407,12 +441,14 @@ export async function executeRemoteA2aStreaming(
   let raw: Message | Task | undefined
   try {
     try {
-      raw = await drainStream(client.sendMessageStream(buildParams(req, true), options), onEvent, watchdog)
+      const stream = client.sendMessageStream(buildParams(req, true), options)
+      raw = await drainStream(client, stream, onEvent, watchdog, req.resumeTaskId)
     } catch (e) {
-      if (req.resumeTaskId && isStaleTaskError(e)) {
+      if (req.resumeTaskId && isStaleTaskError(e) && !watchdog.signal.aborted) {
         staleResumeDropped = true
         watchdog.touch()
-        raw = await drainStream(client.sendMessageStream(buildParams(req, false), options), onEvent, watchdog)
+        const stream = client.sendMessageStream(buildParams(req, false), options)
+        raw = await drainStream(client, stream, onEvent, watchdog, undefined)
       } else {
         throw e
       }
