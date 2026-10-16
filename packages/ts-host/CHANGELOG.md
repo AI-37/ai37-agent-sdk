@@ -17,6 +17,22 @@
   установленной версии `@langchain/core`. Явно переданные `maxRetries` / `timeout` /
   `onFailedAttempt` побеждают.
 
+### Added
+- **Heartbeat AG-UI.** Пока ход идёт, `aguiRouter` раз в 15 с пишет в поток SSE-комментарий `: ping`
+  (`AGUI_HEARTBEAT_MS`). Клиенты AG-UI комментарии пропускают; живой поток больше не упирается в
+  таймауты простоя BFF и nginx, пока модель думает.
+- **Keepalive A2A.** Если ход 20 с ничего не опубликовал, хост сам отправляет `status-update` со
+  `state: working` без сообщения и metadata (`A2A_KEEPALIVE_MS`). Это обычное событие A2A, новых
+  типов и полей нет; первый keepalive публикует и `task`, как первый прогресс.
+- **Таймауты relay.** `RemoteA2aRequest.idleTimeoutMs` — обрыв стрима, если от агента дольше не
+  пришло ни одного события (keepalive тоже считается); `requestTimeoutMs` — абсолютный дедлайн вызова,
+  блокирующего и стрима. Сигнал уходит транспорту `@a2a-js/sdk` (`RequestOptions.signal`), ошибка —
+  `TimeoutError` с понятным текстом. Без этих полей поведение прежнее.
+
+### Fixed
+- Комментарий в `aguiRouter` утверждал, что `Ai37ChatCompletions` подмешивает инструкцию владельца в
+  вызовы LLM; на деле её дописывает `withPartnerInstructions` в когниции агента.
+
 ## [0.2.5]
 
 ### Fixed

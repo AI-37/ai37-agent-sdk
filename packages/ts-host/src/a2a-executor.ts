@@ -73,6 +73,8 @@ export class HostExecutor implements AgentExecutor {
     // The final Task retains the canonical complete message for send/persistence.
     const progress = new A2aProgress(rc.taskId, rc.contextId, bus)
     const emit = progress.emit
+    // Долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
+    progress.startKeepalive()
 
     // Langfuse v4: turn-спан `{service}:a2a` (slug card.name) — в UI видно, какой агент.
     // Активен на время когниции (LangChain-спаны нестятся под него).
@@ -100,7 +102,7 @@ export class HostExecutor implements AgentExecutor {
         }
       },
       (r) => ({ status: r.status, message: r.message }),
-    )
+    ).finally(() => progress.stopKeepalive())
 
     // RED-метрики хода (a2a): rate + errors + duration + terminal-state.
     observeTurn(this.service, 'a2a', normFinalState(result.status), (Date.now() - startedAt) / 1000)

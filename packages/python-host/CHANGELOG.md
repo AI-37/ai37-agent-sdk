@@ -14,6 +14,13 @@
   2 × 60 с), а повтор 429 снова вставал в очередь лимита. Клиент — сабкласс `AsyncOpenAI`, у
   которого `_should_retry` отвечает «нет» на 429 и в остальном зовёт исходный метод SDK.
 
+### Added
+- **Heartbeat AG-UI** (`AGUI_HEARTBEAT_S = 15`): после 15 с тишины в поток уходит `: ping`.
+- **Keepalive A2A** (`A2A_KEEPALIVE_S = 20`): после 20 с тишины хода — `status-update working` без
+  metadata. `A2aProgress` получил необязательный `keepalive_s`; `HostExecutor` его включает.
+- **Таймауты relay:** `RemoteA2aRequest.idle_timeout_ms` и `request_timeout_ms` — `TimeoutError` с
+  понятным текстом; поток при простое закрывается.
+
 ## [0.1.0a24] - 2026-10-09
 
 Паритет с `@ai37/agent-host` `0.2.5`: содержимое хода не уходит в Langfuse без явного разрешения.

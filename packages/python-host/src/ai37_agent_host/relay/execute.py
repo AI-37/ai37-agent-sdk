@@ -12,8 +12,10 @@ context_files/refs и W3C trace-context (:func:`inject_trace_context`); наве
 
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import uuid
-from collections.abc import Callable
+from collections.abc import AsyncIterator, Callable
 from dataclasses import dataclass, field
 from typing import Any
 
@@ -50,6 +52,10 @@ class RemoteA2aRequest:
     context_files: list[ContextFile] | None = None
     #: Доп. поля в ``message.metadata`` (напр. relay hop-guard) — escape hatch.
     extra_metadata: dict[str, Any] | None = None
+    #: Обрыв, если от агента дольше этого не пришло ни одного события (keepalive тоже считается).
+    idle_timeout_ms: int | None = None
+    #: Абсолютный дедлайн вызова; ставят выше бюджета хода агента.
+    request_timeout_ms: int | None = None
 
 
 @dataclass
@@ -208,11 +214,34 @@ def _apply_artifact(task: dict[str, Any], au: dict[str, Any]) -> None:
         artifacts.append(artifact)
 
 
-async def _drain(stream: Any, on_event: OnEvent | None) -> dict[str, Any] | None:
+async def _events(stream: Any, idle_timeout_ms: int | None) -> AsyncIterator[Any]:
+    """События потока; тишина дольше ``idle_timeout_ms`` — ``TimeoutError``, поток закрывается."""
+    if idle_timeout_ms is None:
+        async for sr in stream:
+            yield sr
+        return
+    iterator = stream.__aiter__()
+    while True:
+        try:
+            sr = await asyncio.wait_for(iterator.__anext__(), timeout=idle_timeout_ms / 1000)
+        except StopAsyncIteration:
+            return
+        except TimeoutError:
+            aclose = getattr(iterator, "aclose", None)
+            if aclose is not None:
+                with contextlib.suppress(Exception):
+                    await aclose()
+            raise TimeoutError(f"A2A-агент молчит дольше {idle_timeout_ms} мс") from None
+        yield sr
+
+
+async def _drain(
+    stream: Any, on_event: OnEvent | None, idle_timeout_ms: int | None = None
+) -> dict[str, Any] | None:
     """Накопить финальный Message|Task (dict) из ``StreamResponse``, форвардя node/reasoning."""
     task: dict[str, Any] | None = None
     message: dict[str, Any] | None = None
-    async for sr in stream:
+    async for sr in _events(stream, idle_timeout_ms):
         which = sr.WhichOneof("payload")
         if which == "message":
             message = MessageToDict(sr.message, preserving_proto_field_name=False)
@@ -253,19 +282,36 @@ async def _drain(stream: Any, on_event: OnEvent | None) -> dict[str, Any] | None
     return message or task
 
 
+async def _send(
+    client: Any, req: RemoteA2aRequest, on_event: OnEvent | None
+) -> tuple[dict[str, Any] | None, bool]:
+    idle = req.idle_timeout_ms
+    try:
+        raw = await _drain(client.send_message(_build_request(req, True)), on_event, idle)
+        return raw, False
+    except Exception as exc:  # noqa: BLE001 - решаем по типу ошибки ниже
+        if req.resume_task_id and is_stale_task_error(exc):
+            raw = await _drain(client.send_message(_build_request(req, False)), on_event, idle)
+            return raw, True
+        raise
+
+
 async def execute_remote_a2a(
     client: Any, req: RemoteA2aRequest, on_event: OnEvent | None = None
 ) -> RemoteA2aResult:
-    """Вызвать удалённого A2A-агента; при устаревшем resume — повтор как свежий диалог."""
-    stale = False
+    """Вызвать удалённого A2A-агента; при устаревшем resume — повтор как свежий диалог.
+
+    ``request_timeout_ms`` / ``idle_timeout_ms`` из запроса — ``TimeoutError`` с понятным текстом.
+    """
+    deadline = req.request_timeout_ms
+    timeout = asyncio.timeout(deadline / 1000 if deadline is not None else None)
     try:
-        raw = await _drain(client.send_message(_build_request(req, True)), on_event)
-    except Exception as exc:  # noqa: BLE001 - решаем по типу ошибки ниже
-        if req.resume_task_id and is_stale_task_error(exc):
-            stale = True
-            raw = await _drain(client.send_message(_build_request(req, False)), on_event)
-        else:
-            raise
+        async with timeout:
+            raw, stale = await _send(client, req, on_event)
+    except TimeoutError:
+        if timeout.expired():
+            raise TimeoutError(f"A2A-агент не ответил за {deadline} мс") from None
+        raise
     if raw is None:
         raise RuntimeError("execute_remote_a2a: поток не дал финального Message/Task")
     return RemoteA2aResult(

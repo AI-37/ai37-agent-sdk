@@ -53,6 +53,13 @@ export interface RemoteA2aRequest {
   confirmMode?: 'ask' | 'auto'
   /** Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. */
   extraMetadata?: Record<string, unknown>
+  /**
+   * Стрим: обрыв, если от агента дольше этого не пришло ни одного события. Агент на `agent-host`
+   * ≥ 0.2.6 шлёт keepalive раз в 20 с, так что живой ход таймер не задевает. Не задано — без таймера.
+   */
+  idleTimeoutMs?: number
+  /** Абсолютный дедлайн вызова (и блокирующего, и стрима); ставят выше бюджета хода агента. */
+  requestTimeoutMs?: number
 }
 
 export type RemoteA2aState = 'completed' | 'input-required' | 'failed' | 'message'
@@ -149,25 +156,114 @@ function toResult(raw: Message | Task, staleResumeDropped: boolean): RemoteA2aRe
   }
 }
 
+/** Ошибка таймаута relay: то же имя, что у `AbortSignal.timeout`, но с понятным текстом. */
+function timeoutError(message: string): DOMException {
+  return new DOMException(message, 'TimeoutError')
+}
+
+/**
+ * Сигнал одного вызова relay: абсолютный дедлайн и таймер простоя (`touch()` его переносит).
+ * Транспорт получает `signal` и обрывает HTTP; `dispose()` снимает таймеры.
+ */
+class RelayWatchdog {
+  private readonly controller = new AbortController()
+  private readonly timers: ReturnType<typeof setTimeout>[] = []
+  private idleTimer: ReturnType<typeof setTimeout> | undefined
+
+  constructor(private readonly req: RemoteA2aRequest) {
+    const deadline = req.requestTimeoutMs
+    if (deadline !== undefined) {
+      this.timers.push(
+        setTimeout(() => this.abort(timeoutError(`A2A-агент не ответил за ${deadline} мс`)), deadline),
+      )
+    }
+    this.touch()
+  }
+
+  get signal(): AbortSignal {
+    return this.controller.signal
+  }
+
+  /** Есть ли что сторожить: без таймаутов сигнал транспорту не передаём вовсе. */
+  get active(): boolean {
+    return this.req.requestTimeoutMs !== undefined || this.req.idleTimeoutMs !== undefined
+  }
+
+  /** Событие от агента: таймер простоя начинается заново. */
+  touch(): void {
+    const idle = this.req.idleTimeoutMs
+    if (idle === undefined || this.controller.signal.aborted) return
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = setTimeout(() => this.abort(timeoutError(`A2A-агент молчит дольше ${idle} мс`)), idle)
+  }
+
+  /** Блокирующему вызову таймер простоя не нужен: событий до ответа там нет. */
+  stopIdle(): void {
+    if (this.idleTimer) clearTimeout(this.idleTimer)
+    this.idleTimer = undefined
+  }
+
+  dispose(): void {
+    this.stopIdle()
+    for (const t of this.timers) clearTimeout(t)
+  }
+
+  private abort(reason: unknown): void {
+    if (!this.controller.signal.aborted) this.controller.abort(reason)
+  }
+}
+
+function requestOptions(watchdog: RelayWatchdog): { signal: AbortSignal } | undefined {
+  return watchdog.active ? { signal: watchdog.signal } : undefined
+}
+
 export async function executeRemoteA2a(
   client: Client,
   req: RemoteA2aRequest,
 ): Promise<RemoteA2aResult> {
+  const watchdog = new RelayWatchdog(req)
+  watchdog.stopIdle()
+  const options = requestOptions(watchdog)
   let staleResumeDropped = false
   let raw: Message | Task
   try {
-    raw = await client.sendMessage(buildParams(req, true))
-  } catch (e) {
-    // Устаревший resume-таск → повторяем как свежий диалог (без taskId). Иначе — пробрасываем.
-    if (req.resumeTaskId && isStaleTaskError(e)) {
-      staleResumeDropped = true
-      raw = await client.sendMessage(buildParams(req, false))
-    } else {
-      throw e
+    try {
+      raw = await abortable(client.sendMessage(buildParams(req, true), options), watchdog.signal)
+    } catch (e) {
+      // Устаревший resume-таск → повторяем как свежий диалог (без taskId). Иначе — пробрасываем.
+      if (req.resumeTaskId && isStaleTaskError(e)) {
+        staleResumeDropped = true
+        raw = await abortable(client.sendMessage(buildParams(req, false), options), watchdog.signal)
+      } else {
+        throw e
+      }
     }
+  } finally {
+    watchdog.dispose()
   }
 
   return toResult(raw, staleResumeDropped)
+}
+
+/**
+ * Ждёт `promise`, но бросает причину отмены, как только `signal` сработал. Транспорт тоже получает
+ * сигнал и обрывает HTTP; гонка нужна, чтобы relay не зависел от того, как быстро он это сделает.
+ */
+async function abortable<T>(promise: Promise<T>, signal: AbortSignal): Promise<T> {
+  if (signal.aborted) {
+    promise.catch(() => undefined)
+    throw signal.reason
+  }
+  let onAbort: (() => void) | undefined
+  const aborted = new Promise<never>((_, reject) => {
+    onAbort = () => reject(signal.reason)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
+  try {
+    return await Promise.race([promise, aborted])
+  } finally {
+    if (onAbort) signal.removeEventListener('abort', onAbort)
+  }
 }
 
 /** Структурный тул-колл сабагента (для `type:'tool'`). */
@@ -247,11 +343,23 @@ function forwardStatusMetadata(
 async function drainStream(
   stream: AsyncGenerator<StreamResponse, void, undefined>,
   onEvent: (e: RemoteA2aProgressEvent) => void,
+  watchdog: RelayWatchdog,
 ): Promise<Message | Task | undefined> {
   let task: Task | undefined
   let message: Message | undefined
-  for await (const ev of stream) {
-    const payload = ev.payload
+  for (;;) {
+    let step: IteratorResult<StreamResponse, void>
+    try {
+      step = await abortable(stream.next(), watchdog.signal)
+    } catch (e) {
+      // Закрыть генератор, чтобы транспорт отпустил соединение; ошибка его закрытия не важна.
+      if (watchdog.signal.aborted) void stream.return(undefined).catch(() => undefined)
+      throw e
+    }
+    if (step.done) break
+    // Любое событие, включая keepalive (`status-update working` без metadata), — признак жизни.
+    watchdog.touch()
+    const payload = step.value.payload
     if (payload?.$case === 'message') {
       message = payload.value
     } else if (payload?.$case === 'task') {
@@ -293,17 +401,24 @@ export async function executeRemoteA2aStreaming(
   req: RemoteA2aRequest,
   onEvent: (e: RemoteA2aProgressEvent) => void,
 ): Promise<RemoteA2aResult> {
+  const watchdog = new RelayWatchdog(req)
+  const options = requestOptions(watchdog)
   let staleResumeDropped = false
   let raw: Message | Task | undefined
   try {
-    raw = await drainStream(client.sendMessageStream(buildParams(req, true)), onEvent)
-  } catch (e) {
-    if (req.resumeTaskId && isStaleTaskError(e)) {
-      staleResumeDropped = true
-      raw = await drainStream(client.sendMessageStream(buildParams(req, false)), onEvent)
-    } else {
-      throw e
+    try {
+      raw = await drainStream(client.sendMessageStream(buildParams(req, true), options), onEvent, watchdog)
+    } catch (e) {
+      if (req.resumeTaskId && isStaleTaskError(e)) {
+        staleResumeDropped = true
+        watchdog.touch()
+        raw = await drainStream(client.sendMessageStream(buildParams(req, false), options), onEvent, watchdog)
+      } else {
+        throw e
+      }
     }
+  } finally {
+    watchdog.dispose()
   }
   if (!raw) {
     throw new Error('executeRemoteA2aStreaming: поток не дал финального Message/Task')
