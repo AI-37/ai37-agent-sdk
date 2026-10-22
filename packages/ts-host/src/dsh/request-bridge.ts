@@ -15,6 +15,11 @@ export interface HarnessToolCall {
   readonly signal: AbortSignal
 }
 
+export interface HarnessRequestBinding {
+  readonly bindingId: string
+  release(): Promise<void>
+}
+
 export interface RequestBridgeOptions<T extends HarnessRequestContext> {
   timeoutMs: number
   maxBodyBytes?: number
@@ -22,6 +27,7 @@ export interface RequestBridgeOptions<T extends HarnessRequestContext> {
 }
 
 interface Binding<T> {
+  bindingId: string
   context: T
   tools: ReadonlySet<string>
   abort: AbortController
@@ -52,7 +58,7 @@ export class ScopedRequestBridge<T extends HarnessRequestContext> {
   }
 
   /** Duplicate sessions fail closed; an old release cannot revoke a later binding. */
-  async bind(context: T, stopSignal?: AbortSignal): Promise<() => Promise<void>> {
+  async bind(context: T, stopSignal?: AbortSignal): Promise<HarnessRequestBinding> {
     if (this.closed) throw new Error('Request bridge is closed')
     stopSignal?.throwIfAborted()
     validateContext(context)
@@ -70,6 +76,7 @@ export class ScopedRequestBridge<T extends HarnessRequestContext> {
     )
     timer.unref()
     const binding: Binding<T> = {
+      bindingId: randomBytes(32).toString('hex'),
       context: Object.freeze({ ...context }),
       tools: new Set(context.tools),
       abort,
@@ -77,7 +84,7 @@ export class ScopedRequestBridge<T extends HarnessRequestContext> {
       timer,
     }
     this.bindings.set(context.sessionId, binding)
-    return release
+    return { bindingId: binding.bindingId, release }
   }
 
   /** Terminal and idempotent. All pending tool calls receive cancellation. */
@@ -109,7 +116,9 @@ export class ScopedRequestBridge<T extends HarnessRequestContext> {
     if (!body) return reply(res, 400, { error: 'Invalid request body' })
     const binding =
       typeof body.sessionId === 'string' ? this.bindings.get(body.sessionId) : undefined
-    if (!binding || !active(binding)) return reply(res, 403, { error: 'No active request context' })
+    if (!binding || body.bindingId !== binding.bindingId || !active(binding)) {
+      return reply(res, 403, { error: 'No active request context' })
+    }
     if (req.url === '/credential') return reply(res, 200, { key: binding.context.llmKey })
     await this.dispatch(binding, body, res)
   }

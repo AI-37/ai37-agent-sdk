@@ -4,6 +4,7 @@ export { childPlatformEnvironment } from './environment'
 export {
   ScopedRequestBridge,
   type HarnessRequestContext,
+  type HarnessRequestBinding,
   type HarnessToolCall,
   type RequestBridgeOptions,
 } from './request-bridge'

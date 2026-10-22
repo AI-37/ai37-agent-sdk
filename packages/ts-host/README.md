@@ -72,8 +72,11 @@ await runtime.close()
 
 `ScopedRequestBridge` выделяет из поиска закрытый loopback-канал parent/child:
 `start()` возвращает URL и случайный секрет, `bind(context, signal)` привязывает текущие credentials
-и allowlist tools к сессии до `release()`, отмены или deadline. `/credential` и `/tool` принимают только
-этот секрет; dispatcher получает серверный context, а не переданные моделью bearer/audit refs.
+и allowlist tools к сессии и возвращает `{bindingId, release}`. `/credential` и `/tool` принимают только
+секрет, `sessionId` и nonce текущего хода `bindingId`; после `release()`, отмены или deadline старый
+nonce не получает доступ к следующему ходу той же сессии. Потребитель передаёт nonce дочернему
+процессу transient-каналом и захватывает в контексте конкретного хода, без prompt/journal.
+Dispatcher получает серверный context, а не переданные моделью bearer/audit refs.
 Ошибки dispatcher не выходят наружу. Схемы аргументов, ACL и эффекты по-прежнему проверяет сервис.
 После отмены/истечения срока поздний результат не возвращается. Вызовы автоматически не повторяются.
 
