@@ -10,6 +10,8 @@ export default defineConfig([
       'skills/index': 'src/skills/index.ts',
       // Postgres-стор: kysely/pg — optional peers, грузятся только этим subpath.
       'task-store/index': 'src/task-store/index.ts',
+      // Pure lifecycle primitives: no DSH import, process startup or mandatory peers.
+      'dsh/index': 'src/dsh/index.ts',
     },
     format: ['esm', 'cjs'],
     dts: true,

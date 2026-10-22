@@ -105,6 +105,9 @@ jobs:
       - name: lint
         working-directory: packages/ts-host
         run: npm run lint
+      - name: format DSH adapter
+        working-directory: packages/ts-host
+        run: npm run format:dsh:check
       - name: test
         working-directory: packages/ts-host
         run: npm test
@@ -116,6 +119,9 @@ jobs:
       - name: build
         working-directory: packages/ts-host
         run: npm run build
+      - name: packed DSH and root imports
+        working-directory: packages/ts-host
+        run: npm run test:package
 
   # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
   python:
