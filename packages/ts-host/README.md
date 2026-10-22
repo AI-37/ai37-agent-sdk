@@ -70,7 +70,7 @@ await runtime.close()
 `childPlatformEnvironment(parentEnv)` копирует только пути ОС и локаль по allowlist; прикладные
 настройки добавляются явно. JWT, ключи модели, БД и `NODE_OPTIONS` из родителя не наследуются.
 
-ScopedRequestBridge` выделяет из поиска закрытый loopback-канал parent/child:
+`ScopedRequestBridge` выделяет из поиска закрытый loopback-канал parent/child:
 `start()` возвращает URL и случайный секрет, `bind(context, signal)` привязывает текущие credentials
 и allowlist tools к сессии до `release()`, отмены или deadline. `/credential` и `/tool` принимают только
 этот секрет; dispatcher получает серверный context, а не переданные моделью bearer/audit refs.
