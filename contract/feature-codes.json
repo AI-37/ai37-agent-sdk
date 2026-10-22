@@ -119,6 +119,11 @@
       "name": "PD-AI 152-FZ Documents Allowed"
     },
     {
+      "code": "pdai-audit-assist-allowed",
+      "constant": "PdaiAuditAssistAllowed",
+      "name": "PD-AI Audit Assistant Allowed"
+    },
+    {
       "code": "pdai-doc-187fz-allowed",
       "constant": "PdaiDoc187FzAllowed",
       "name": "PD-AI 187-FZ Documents Allowed"

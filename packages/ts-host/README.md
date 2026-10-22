@@ -70,8 +70,20 @@ await runtime.close()
 `childPlatformEnvironment(parentEnv)` копирует только пути ОС и локаль по allowlist; прикладные
 настройки добавляются явно. JWT, ключи модели, БД и `NODE_OPTIONS` из родителя не наследуются.
 
-В этом срезе нет bridge credentials/tools, сохранения сессий, профиля помощника и проверки модели.
-Он не выполняет G4a/G4b и не включает новый режим в приложениях. Проверка пакета после сборки:
+ScopedRequestBridge` выделяет из поиска закрытый loopback-канал parent/child:
+`start()` возвращает URL и случайный секрет, `bind(context, signal)` привязывает текущие credentials
+и allowlist tools к сессии до `release()`, отмены или deadline. `/credential` и `/tool` принимают только
+этот секрет; dispatcher получает серверный context, а не переданные моделью bearer/audit refs.
+Ошибки dispatcher не выходят наружу. Схемы аргументов, ACL и эффекты по-прежнему проверяет сервис.
+После отмены/истечения срока поздний результат не возвращается. Вызовы автоматически не повторяются.
+
+`scopedAsyncIterable(storage, scope, factory)` восстанавливает ALS-контекст на каждом
+`next`/`return`/`throw` — одного контекста создания генератора недостаточно при конкурентных сессиях.
+`resumeStoredSession`, `closeHarnessSession` и `cancelHarnessSession` выделяют native session lifecycle
+из поискового bootstrap без зависимости от vendor SDK; конкретный plugin остаётся у потребителя.
+
+Здесь нет сохранения сессий, профиля помощника и проверки модели. Эти API не выполняют G4a/G4b
+и не включают новый режим в приложениях. Проверка пакета после сборки:
 `npm run test:package` (изолированный распакованный `/dsh`, ESM/CJS и прежний корневой import).
 
 ## Трассировка: содержимое хода не пишется по умолчанию
