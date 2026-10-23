@@ -41,6 +41,39 @@ app.listen(8080);
 возвращает `AgentResult` (`status` + опц. `a2ui`/`message`/`followup`/`result`/`state`). Host не содержит
 доменной логики.
 
+## Необязательная обвязка DSH (`@ai37/agent-host/dsh`)
+
+Отдельный subpath содержит `SingleHarnessRuntime`, `PerSessionScheduler`,
+`BoundedConcurrencyLimiter` и `childPlatformEnvironment`, выделенные из upstream `search-agent`
+([план](https://github.com/AI-37/docs/pull/533), первый срез S5a). Он не импортирует DSH и не запускает
+процесс при импорте. Корневой export host не изменён; зависимости DSH сервис выбирает отдельно.
+
+```ts
+import { SingleHarnessRuntime } from '@ai37/agent-host/dsh'
+
+// createHarness должен вернуть запущенный экземпляр с асинхронным close().
+const runtime = new SingleHarnessRuntime(() => createHarness())
+const result = await runtime.use((harness) => harness.run(prompt))
+await runtime.close()
+```
+
+Фабрика вызывается лениво и один раз для конкурентных первых обращений; очистка частично запущенного
+экземпляра при её ошибке остаётся фабрике. Ошибка запуска допускает следующую попытку.
+`invalidateIfIdle(expected?)` заменяет только свободный текущий экземпляр;
+ожидающий новый ход начинает работу после его закрытия. Ошибка закрытия запрещает новый запуск,
+а `close()` повторяет очистку. `close()` терминален и ждёт принятые операции; отмену зависшего хода
+вызывает сервис отдельно, через signal своего harness. Сами операции автоматически не повторяются.
+
+`PerSessionScheduler.run(sessionId, operation)` упорядочивает ходы одной сессии;
+`BoundedConcurrencyLimiter(limit).run(operation)` ограничивает общий параллелизм с FIFO-очередью.
+Идентификатор сессии, права пользователя, подтверждения и идемпотентность изменений проверяет сервис.
+`childPlatformEnvironment(parentEnv)` копирует только пути ОС и локаль по allowlist; прикладные
+настройки добавляются явно. JWT, ключи модели, БД и `NODE_OPTIONS` из родителя не наследуются.
+
+В этом срезе нет bridge credentials/tools, сохранения сессий, профиля помощника и проверки модели.
+Он не выполняет G4a/G4b и не включает новый режим в приложениях. Проверка пакета после сборки:
+`npm run test:package` (изолированный распакованный `/dsh`, ESM/CJS и прежний корневой import).
+
 ## Трассировка: содержимое хода не пишется по умолчанию
 
 Host сам открывает turn-спан и включает Langfuse из env (`LANGFUSE_PUBLIC_KEY`/`SECRET_KEY`/`BASE_URL`;

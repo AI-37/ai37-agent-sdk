@@ -33,6 +33,11 @@
       "types": "./dist/task-store/index.d.ts",
       "import": "./dist/task-store/index.js",
       "require": "./dist/task-store/index.cjs"
+    },
+    "./dsh": {
+      "types": "./dist/dsh/index.d.ts",
+      "import": "./dist/dsh/index.js",
+      "require": "./dist/dsh/index.cjs"
     }
   },
   "typesVersions": {
@@ -45,6 +50,9 @@
       ],
       "task-store": [
         "./dist/task-store/index.d.ts"
+      ],
+      "dsh": [
+        "./dist/dsh/index.d.ts"
       ]
     }
   },
@@ -62,10 +70,13 @@
   "scripts": {
     "build": "npm run clean && tsup",
     "clean": "rm -rf dist",
-    "lint": "tsc --noEmit",
+    "lint": "tsc --noEmit && npm run lint:dsh",
+    "lint:dsh": "eslint src/dsh test/dsh-*.test.ts scripts/check-dsh-package.mjs eslint.config.mjs",
+    "format:dsh:check": "prettier --check src/dsh test/dsh-*.test.ts scripts/check-dsh-package.mjs eslint.config.mjs .prettierrc.json",
     "test": "vitest run",
     "test:watch": "vitest",
-    "verify": "npm run lint && npm run test && npm run build",
+    "test:package": "node scripts/check-dsh-package.mjs",
+    "verify": "npm run lint && npm run format:dsh:check && npm run test && npm run build && npm run test:package",
     "prepublishOnly": "npm run verify"
   },
   "dependencies": {
@@ -133,13 +144,17 @@
     "@types/pg": "^8.23.1",
     "@types/supertest": "^6.0.2",
     "@types/uuid": "^10.0.0",
+    "@vitest/coverage-v8": "4.1.8",
     "a2a-sdk-v03": "npm:@a2a-js/sdk@0.3.13",
     "deepagents": "^1.10.2",
+    "eslint": "^9.39.5",
     "kysely": "^0.28.17",
     "pg": "^8.23.1",
+    "prettier": "^3.9.10",
     "supertest": "^7.0.0",
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
+    "typescript-eslint": "^8.72.0",
     "vitest": "^4.0.8",
     "zod": "^4.4.3"
   }
