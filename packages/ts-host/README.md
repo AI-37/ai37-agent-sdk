@@ -43,6 +43,11 @@ app.listen(8080);
 
 ## Необязательная обвязка DSH (`@ai37/agent-host/dsh`)
 
+С версии `0.2.7` это поддерживаемый Node.js API host-слоя; совместимость обеспечивается
+версиями `@ai37/agent-host`. Корневой API SDK и его паритет TS/Python не расширяются этим
+subpath. Python host не получает Node.js lifecycle-адаптер. Публикация пакета не включает
+DSH в приложениях и не переводит существующие агенты на другой runtime.
+
 Отдельный subpath содержит `SingleHarnessRuntime`, `PerSessionScheduler`,
 `BoundedConcurrencyLimiter` и `childPlatformEnvironment`, выделенные из upstream `search-agent`
 ([план](https://github.com/AI-37/docs/pull/533), первый срез S5a). Он не импортирует DSH и не запускает
