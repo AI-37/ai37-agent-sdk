@@ -3,6 +3,14 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a26] - 2026-10-23
+
+### Added
+
+- Привилегия `pdai-audit-assist-allowed` (`BillingPrivilegeCode.PdaiAuditAssistAllowed`)
+  для помощника аудита в существующей функции `pdai-doc-152fz`; паритет с TS
+  `0.1.0-alpha.34`. Регистрация кода не выдаёт право организациям и не включает помощника.
+
 ## [0.1.0a25] - 2026-10-10
 
 ### Added
