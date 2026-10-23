@@ -28,6 +28,7 @@ class BillingPrivilegeCode(str, Enum):
     MinstroyCheckInn = "minstroy-check-inn"
     MinstroyPriceMonitoring = "minstroy-price-monitoring"
     PdaiDoc152FzAllowed = "pdai-doc-152fz-allowed"
+    PdaiAuditAssistAllowed = "pdai-audit-assist-allowed"
     PdaiDoc187FzAllowed = "pdai-doc-187fz-allowed"
     PdaiSiteCheckAllowed = "pdai-site-check-allowed"
     ThermalCalcAllowed = "thermal-calc-allowed"

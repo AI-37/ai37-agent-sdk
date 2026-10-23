@@ -26,6 +26,12 @@ for (const api of [esm, cjs]) {
   await runtime.close()
   assert.equal(starts, 1)
   assert.deepEqual(api.childPlatformEnvironment({ PATH: '/bin', LLM_KEY: 'private' }), { PATH: '/bin' })
+  const bridge = new api.ScopedRequestBridge({ timeoutMs: 1000, dispatch: async () => ({}) })
+  await bridge.close()
+  assert.equal(typeof api.scopedAsyncIterable, 'function')
+  assert.equal(typeof api.resumeStoredSession, 'function')
+  assert.equal(typeof api.closeHarnessSession, 'function')
+  assert.equal(typeof api.cancelHarnessSession, 'function')
 }
 `
 const rootProbe = `
