@@ -42,6 +42,55 @@ function testBus() {
 }
 
 describe('native A2A answer stream', () => {
+  it('relays tool start before completion and a matching result without reasoning', async () => {
+    const { bus, events, finished } = testBus()
+    let release!: () => void
+    const gate = new Promise<void>((resolve) => {
+      release = resolve
+    })
+    const execution = new HostExecutor({
+      async run({ emit }) {
+        emit({ type: 'tool', phase: 'start', id: 'pdf-1', name: 'Читаю PDF' })
+        await gate
+        emit({
+          type: 'tool',
+          phase: 'end',
+          id: 'pdf-1',
+          name: 'Читаю PDF',
+          result: 'Прочитан источник: Политика',
+        })
+        return { status: 'completed', message: 'Готово' }
+      },
+    }).execute(requestContext, bus)
+    await vi.waitFor(() =>
+      expect(
+        events.some((event) => event.kind === 'statusUpdate' && event.data.metadata?.['ai37/tool']),
+      ).toBe(true),
+    )
+    expect(finished).not.toHaveBeenCalled()
+    release()
+    await execution
+    const tools: unknown[] = []
+    const client = {
+      async *sendMessageStream() {
+        for (const event of events)
+          yield { payload: { $case: event.kind, value: event.data } } as StreamResponse
+      },
+    } as unknown as Client
+    await executeRemoteA2aStreaming(client, { query: 'question' }, (event) => {
+      expect(event.type).not.toBe('reasoning')
+      if (event.type === 'tool') tools.push(event.tool)
+    })
+    expect(tools).toEqual([
+      { id: 'pdf-1', name: 'Читаю PDF', status: 'running' },
+      {
+        id: 'pdf-1',
+        name: 'Читаю PDF',
+        status: 'completed',
+        result: 'Прочитан источник: Политика',
+      },
+    ])
+  })
   it('publishes actual deltas before completion and closes the artifact once', async () => {
     const { bus, events, finished } = testBus()
     let release!: () => void
@@ -120,8 +169,8 @@ describe('native A2A answer stream', () => {
       },
     }).execute(requestContext, bus)
     expect(artifactUpdates(events)).toEqual([])
-    // две вехи прогресса + финальный status-update
-    expect(events.filter((event) => event.kind === 'statusUpdate')).toHaveLength(3)
+    // Две вехи, начало инструмента и финальный status-update.
+    expect(events.filter((event) => event.kind === 'statusUpdate')).toHaveLength(4)
     expect(events.at(-1)).toMatchObject({
       kind: 'statusUpdate',
       data: { status: { state: TaskState.TASK_STATE_COMPLETED, message: { parts: [text('final')] } } },

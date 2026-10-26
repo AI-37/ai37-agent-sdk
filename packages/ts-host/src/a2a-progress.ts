@@ -38,9 +38,24 @@ export class A2aProgress {
       this.appendText(event.delta)
       return
     }
+    if (event.type === 'tool') {
+      this.startWorking()
+      this.publishWorking({
+        'ai37/tool': {
+          id: event.id ?? event.name,
+          name: event.name,
+          status: event.phase === 'start' ? 'running' : 'completed',
+          ...(event.args !== undefined && { args: event.args }),
+          ...(event.result !== undefined && { result: event.result }),
+        },
+      })
+      return
+    }
     if (event.type !== 'node' && event.type !== 'reasoning') return
     this.startWorking()
-    this.publishWorking(event.type === 'node' ? { 'ai37/node': event.node } : { 'ai37/reasoning': event.delta })
+    this.publishWorking(
+      event.type === 'node' ? { 'ai37/node': event.node } : { 'ai37/reasoning': event.delta },
+    )
   }
 
   /**
@@ -95,7 +110,11 @@ export class A2aProgress {
       SdkEvent.statusUpdate({
         taskId: this.taskId,
         contextId: this.contextId,
-        status: { state: TaskState.TASK_STATE_WORKING, message: undefined, timestamp: new Date().toISOString() },
+        status: {
+          state: TaskState.TASK_STATE_WORKING,
+          message: undefined,
+          timestamp: new Date().toISOString(),
+        },
         metadata,
       }),
     )
@@ -109,7 +128,11 @@ export class A2aProgress {
       SdkEvent.task({
         id: this.taskId,
         contextId: this.contextId,
-        status: { state: TaskState.TASK_STATE_WORKING, message: undefined, timestamp: new Date().toISOString() },
+        status: {
+          state: TaskState.TASK_STATE_WORKING,
+          message: undefined,
+          timestamp: new Date().toISOString(),
+        },
         artifacts: [],
         history: [],
         metadata: {},
