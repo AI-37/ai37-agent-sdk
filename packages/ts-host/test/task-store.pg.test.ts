@@ -1,7 +1,7 @@
 /**
  * Postgres-стор задач против настоящего Postgres (18 в CI, как managed PG в проде). Нужен `TEST_DATABASE_URL` с правом
  * CREATE DATABASE: каждый блок работает в своей временной базе и удаляет её. Без переменной
- * блок пропускается (локально: `docker run postgres:17-alpine`, см. README пакета).
+ * блок пропускается (локально: `docker run postgres:18-alpine`, см. README пакета).
  */
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import request from 'supertest'

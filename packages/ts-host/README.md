@@ -238,7 +238,7 @@ chat-backend: база под Prisma, таблица `a2a_tasks` описана 
 каждый блок создаёт и удаляет свою базу). Локально:
 
 ```bash
-docker run -d --name ts-host-pg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55471:5432 postgres:17-alpine
+docker run -d --name ts-host-pg -e POSTGRES_PASSWORD=test -p 127.0.0.1:55471:5432 postgres:18-alpine
 TEST_DATABASE_URL=postgres://postgres:test@127.0.0.1:55471/postgres npm test
 docker rm -f ts-host-pg
 ```
