@@ -23,57 +23,22 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ───────────────────────── @ai37/docx (TS) ─────────────────────────
-  ts-docx:
-    name: ts · @ai37/docx
+  # Одна джоба: раннер подбирает прогон один раз, и PR разблокируется сразу после последнего шага.
+  # Отдельные джобы на пакет и агрегатор вставали на единственном self-hosted раннере в очередь за
+  # чужими джобами и держали PR красным уже после зелёных проверок. Имя ci-green — единое для всех
+  # репозиториев AI-37 и обязательная проверка ruleset (docs/plans/doc-bot-pr-review.md).
+  # Пакеты проверяются по очереди и независимо: шаги пакета ждут только его установки
+  # (steps.<id>.outcome), так что упавший пакет не прячет результаты остальных, а джоба всё
+  # равно красная, если упал любой шаг.
+  ci-green:
     runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    defaults:
-      run:
-        working-directory: packages/ts-docx
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/ts-docx/package-lock.json
-      - run: npm ci
-      - run: npm run lint
-      - run: npm test
-      - run: npm run build
-
-  # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
-  ts:
-    name: ts · @ai37/agent-sdk
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    defaults:
-      run:
-        working-directory: packages/ts
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-          cache: npm
-          cache-dependency-path: packages/ts/package-lock.json
-      - run: npm ci
-      - run: npm run lint   # tsc --noEmit
-      - run: npm test       # vitest run
-      - run: npm run build  # tsup
-
-  # ───────────────────────── @ai37/agent-host (TS) ─────────────────────────
-  # Зависит от @ai37/agent-sdk (file:../ts) — сначала собираем ядро, чтобы был его dist.
-  ts-host:
-    name: ts · @ai37/agent-host
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    # @ai37/a2ui-catalog-schemas тянется из приватного Verdaccio (npm.app.sp-ai.ru) → `npm ci`
-    # нужен _auth. Даём его на уровне job (как в publish-ts-host.yml): NPM_CONFIG_USERCONFIG
-    # грузит корневой .npmrc (//npm.app.sp-ai.ru/:_auth=${AI37_NPM_TOKEN}), AI37_NPM_TOKEN — из secrets.
+    # @ai37/a2ui-catalog-schemas (зависимость @ai37/agent-host) тянется из приватного Verdaccio
+    # (npm.app.sp-ai.ru): корневой .npmrc берёт _auth из ${AI37_NPM_TOKEN}.
     env:
       AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
-      NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
-    # Живой Postgres 17 для test/task-store.pg.test.ts (@ai37/agent-host/task-store). Тесты создают
-    # себе временные базы, поэтому нужен суперпользователь сервиса.
+    # Живой Postgres 17 — общий для обоих хостов: test/task-store.pg.test.ts (@ai37/agent-host) создаёт
+    # себе временные базы (нужен суперпользователь сервиса), tests/test_postgres_task_store.py
+    # (ai37-agent-host) работает в базе a2a. Пакеты идут по очереди и друг другу не мешают.
     services:
       postgres:
         image: postgres:17-alpine
@@ -94,21 +59,71 @@ jobs:
           node-version: '22'
           cache: npm
           cache-dependency-path: |
+            packages/ts-docx/package-lock.json
             packages/ts/package-lock.json
             packages/ts-host/package-lock.json
-      - name: build @ai37/agent-sdk (зависимость)
+
+      # ───────────────────────── @ai37/docx (TS) ─────────────────────────
+      - name: ts · @ai37/docx · install
+        id: ts-docx
+        working-directory: packages/ts-docx
+        run: npm ci
+      - name: ts · @ai37/docx · lint
+        if: ${{ !cancelled() && steps.ts-docx.outcome == 'success' }}
+        working-directory: packages/ts-docx
+        run: npm run lint
+      - name: ts · @ai37/docx · test
+        if: ${{ !cancelled() && steps.ts-docx.outcome == 'success' }}
+        working-directory: packages/ts-docx
+        run: npm test
+      - name: ts · @ai37/docx · build
+        if: ${{ !cancelled() && steps.ts-docx.outcome == 'success' }}
+        working-directory: packages/ts-docx
+        run: npm run build
+
+      # ───────────────────────── @ai37/agent-sdk (TS, ядро) ─────────────────────────
+      - name: ts · @ai37/agent-sdk · install
+        id: ts
+        if: ${{ !cancelled() }}
         working-directory: packages/ts
-        run: npm ci && npm run build
-      - name: install @ai37/agent-host
+        run: npm ci
+      - name: ts · @ai37/agent-sdk · lint
+        if: ${{ !cancelled() && steps.ts.outcome == 'success' }}
+        working-directory: packages/ts
+        run: npm run lint   # tsc --noEmit
+      - name: ts · @ai37/agent-sdk · test
+        if: ${{ !cancelled() && steps.ts.outcome == 'success' }}
+        working-directory: packages/ts
+        run: npm test       # vitest run
+      # Его dist нужен @ai37/agent-host (file:../ts).
+      - name: ts · @ai37/agent-sdk · build
+        id: ts-build
+        if: ${{ !cancelled() && steps.ts.outcome == 'success' }}
+        working-directory: packages/ts
+        run: npm run build  # tsup
+
+      # ───────────────────────── @ai37/agent-host (TS) ─────────────────────────
+      # Зависит от @ai37/agent-sdk (file:../ts) — собранного шагом выше. NPM_CONFIG_USERCONFIG грузит
+      # корневой .npmrc (как в publish-ts-host.yml) для всех следующих шагов: остальным пакетам он не
+      # мешает — пинит только scope @ai37.
+      - name: ts · @ai37/agent-host · private npm registry
+        if: ${{ !cancelled() }}
+        run: echo "NPM_CONFIG_USERCONFIG=$GITHUB_WORKSPACE/.npmrc" >> "$GITHUB_ENV"
+      - name: ts · @ai37/agent-host · install
+        id: ts-host
+        if: ${{ !cancelled() && steps.ts-build.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm ci
-      - name: lint
+      - name: ts · @ai37/agent-host · lint
+        if: ${{ !cancelled() && steps.ts-host.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm run lint
-      - name: format DSH adapter
+      - name: ts · @ai37/agent-host · format DSH adapter
+        if: ${{ !cancelled() && steps.ts-host.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm run format:dsh:check
-      - name: test
+      - name: ts · @ai37/agent-host · test
+        if: ${{ !cancelled() && steps.ts-host.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm test
         env:
@@ -116,123 +131,113 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/a2a
           # Без базы Postgres-тесты молча пропустились бы; в CI это ошибка.
           REQUIRE_TEST_DATABASE: '1'
-      - name: build
+      - name: ts · @ai37/agent-host · build
+        id: ts-host-build
+        if: ${{ !cancelled() && steps.ts-host.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm run build
-      - name: packed DSH and root imports
+      - name: ts · @ai37/agent-host · packed DSH and root imports
+        if: ${{ !cancelled() && steps.ts-host-build.outcome == 'success' }}
         working-directory: packages/ts-host
         run: npm run test:package
 
-  # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
-  python:
-    name: py · ai37-agent-sdk
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    defaults:
-      run:
-        working-directory: packages/python
-    steps:
-      - uses: actions/checkout@v4
+      # ───────────────────────── Python ─────────────────────────
+      # ai37-agent-sdk и ai37-agent-host — на одном Python (packages/*/.python-version, как локально
+      # через pyenv); ai37-capture-contract — на своём, ставится ниже. `poetry env use python` берёт
+      # интерпретатор, который сейчас первый в PATH, — то есть последний поставленный setup-python.
       - uses: actions/setup-python@v5
+        id: py
+        if: ${{ !cancelled() }}
         with:
-          # единый источник версии — packages/python/.python-version (как локально через pyenv)
           python-version-file: packages/python/.python-version
       - name: install poetry
+        id: poetry
+        if: ${{ !cancelled() && steps.py.outcome == 'success' }}
         run: pipx install poetry
-      - name: install deps
-        run: poetry install --with dev --no-interaction
-      - run: poetry run ruff check .
-      - run: poetry run mypy src
-      - run: poetry run pytest
 
-  # ───────────────────────── ai37-capture-contract (Python) ─────────────────────────
-  capture-contract:
-    name: py · ai37-capture-contract
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    defaults:
-      run:
-        working-directory: packages/capture-contract
-    steps:
-      - uses: actions/checkout@v4
+      # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
+      - name: py · ai37-agent-sdk · install
+        id: python
+        if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
+        working-directory: packages/python
+        run: poetry env use python && poetry install --with dev --no-interaction
+      - name: py · ai37-agent-sdk · ruff
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
+        working-directory: packages/python
+        run: poetry run ruff check .
+      - name: py · ai37-agent-sdk · mypy
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
+        working-directory: packages/python
+        run: poetry run mypy src
+      - name: py · ai37-agent-sdk · pytest
+        if: ${{ !cancelled() && steps.python.outcome == 'success' }}
+        working-directory: packages/python
+        run: poetry run pytest
+
+      # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
+      # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
+      # опубликованный SDK с PyPI, сиблинг собирать не нужно.
+      - name: py · ai37-agent-host · install
+        id: python-host
+        if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
+        working-directory: packages/python-host
+        run: poetry env use python && poetry install --with dev --no-interaction
+      - name: py · ai37-agent-host · ruff
+        if: ${{ !cancelled() && steps.python-host.outcome == 'success' }}
+        working-directory: packages/python-host
+        run: poetry run ruff check .
+      - name: py · ai37-agent-host · mypy
+        if: ${{ !cancelled() && steps.python-host.outcome == 'success' }}
+        working-directory: packages/python-host
+        run: poetry run mypy src
+      - name: py · ai37-agent-host · pytest
+        if: ${{ !cancelled() && steps.python-host.outcome == 'success' }}
+        working-directory: packages/python-host
+        run: poetry run pytest
+        env:
+          # Живой Postgres для tests/test_postgres_task_store.py (без него эти тесты идут только на SQLite).
+          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/a2a
+
+      # ───────────────────────── ai37-capture-contract (Python) ─────────────────────────
       - uses: actions/setup-python@v5
+        id: py-capture
+        if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
         with:
           # единый источник версии — packages/capture-contract/.python-version
           python-version-file: packages/capture-contract/.python-version
-      - name: install poetry
-        run: pipx install poetry
-      - name: install deps
-        run: poetry install --with dev --no-interaction
-      - run: poetry run ruff check .
-      - run: poetry run ruff format --check .
-      - run: poetry run mypy src
-      - run: poetry run pytest
+      - name: py · ai37-capture-contract · install
+        id: capture-contract
+        if: ${{ !cancelled() && steps.py-capture.outcome == 'success' }}
+        working-directory: packages/capture-contract
+        run: poetry env use python && poetry install --with dev --no-interaction
+      - name: py · ai37-capture-contract · ruff
+        if: ${{ !cancelled() && steps.capture-contract.outcome == 'success' }}
+        working-directory: packages/capture-contract
+        run: poetry run ruff check .
+      - name: py · ai37-capture-contract · ruff format
+        if: ${{ !cancelled() && steps.capture-contract.outcome == 'success' }}
+        working-directory: packages/capture-contract
+        run: poetry run ruff format --check .
+      - name: py · ai37-capture-contract · mypy
+        if: ${{ !cancelled() && steps.capture-contract.outcome == 'success' }}
+        working-directory: packages/capture-contract
+        run: poetry run mypy src
+      - name: py · ai37-capture-contract · pytest
+        if: ${{ !cancelled() && steps.capture-contract.outcome == 'success' }}
+        working-directory: packages/capture-contract
+        run: poetry run pytest
 
-  # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
-  # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
-  # опубликованный SDK с PyPI, сиблинг собирать не нужно.
-  python-host:
-    name: py · ai37-agent-host
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    defaults:
-      run:
-        working-directory: packages/python-host
-    # Живой Postgres для tests/test_postgres_task_store.py (без него эти тесты идут только на SQLite).
-    services:
-      postgres:
-        image: postgres:16-alpine
-        env:
-          POSTGRES_PASSWORD: test
-          POSTGRES_DB: a2a
-        ports:
-          - 5432/tcp
-        options: >-
-          --health-cmd "pg_isready -U postgres"
-          --health-interval 5s
-          --health-timeout 5s
-          --health-retries 10
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          # единый источник версии — packages/python-host/.python-version (как локально через pyenv)
-          python-version-file: packages/python-host/.python-version
-      - name: install poetry
-        run: pipx install poetry
-      - name: install deps
-        run: poetry install --with dev --no-interaction
-      - run: poetry run ruff check .
-      - run: poetry run mypy src
-      - run: poetry run pytest
-        env:
-          # job-контекст (порт сервиса) доступен только на уровне шага, не в jobs.<id>.env.
-          TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/a2a
-
-  # ───────────────────────── codegen parity ─────────────────────────
-  # codes.ts / codes.py должны соответствовать contract/feature-codes.json.
-  codegen-parity:
-    name: codegen parity
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: '22'
-      - run: node scripts/codegen.mjs
-      - name: проверить отсутствие diff
+      # ───────────────────────── codegen parity ─────────────────────────
+      # codes.ts / codes.py должны соответствовать contract/feature-codes.json. Последним: генератор
+      # переписывает файлы в рабочем дереве, пакеты выше проверяются на закоммиченных.
+      - name: codegen parity · generate
+        id: codegen
+        if: ${{ !cancelled() }}
+        run: node scripts/codegen.mjs
+      - name: codegen parity · no diff
+        if: ${{ !cancelled() && steps.codegen.outcome == 'success' }}
         run: |
           git diff --exit-code -- \
             packages/ts/src/codes.ts \
             packages/python/src/ai37_agent_sdk/codes.py \
           || (echo "::error::codes.* рассинхронизированы с contract/ — запустите make codegen и закоммитьте" && exit 1)
-
-  # Aggregate "green" check with a UNIFORM name across all AI-37 repos, so one org/branch ruleset can
-  # require a single context (`ci-green`) regardless of each repo's job names, and the doc-bot review
-  # trigger keys off it. Fails if any real CI job above failed or was cancelled.
-  ci-green:
-    if: always()
-    needs: [ts-docx, ts, ts-host, python, python-host, capture-contract, codegen-parity]
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CI_RUNNER && fromJSON(vars.CI_RUNNER) || 'ubuntu-24.04' }}
-    steps:
-      - name: gate
-        if: contains(needs.*.result, 'failure') || contains(needs.*.result, 'cancelled')
-        run: |
-          echo "one or more required CI jobs did not succeed"; exit 1
