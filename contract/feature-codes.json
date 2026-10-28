@@ -52,6 +52,11 @@
       "name": "PD-AI Website Compliance Check"
     },
     {
+      "code": "polimetrika-data-agent",
+      "constant": "PolimetrikaDataAgent",
+      "name": "Polimetrika Data Agent"
+    },
+    {
       "code": "thermal-calc-agent",
       "constant": "ThermalCalcAgent",
       "name": "Thermal Calculation Agent"
@@ -132,6 +137,11 @@
       "code": "pdai-site-check-allowed",
       "constant": "PdaiSiteCheckAllowed",
       "name": "PD-AI Website Check Allowed"
+    },
+    {
+      "code": "polimetrika-data-agent-allowed",
+      "constant": "PolimetrikaDataAgentAllowed",
+      "name": "Polimetrika Data Agent Allowed"
     },
     {
       "code": "thermal-calc-allowed",

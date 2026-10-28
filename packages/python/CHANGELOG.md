@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a27] - 2026-10-28
+
+### Added
+
+- Фича `polimetrika-data-agent` (`BillingFeatureCode.PolimetrikaDataAgent`) и привилегия
+  `polimetrika-data-agent-allowed` (`BillingPrivilegeCode.PolimetrikaDataAgentAllowed`) для агента
+  данных кабинета Полиметрики; паритет с TS `0.1.0-alpha.35`. Регистрация кода не выдаёт право
+  организациям: его дают тарифы Полиметрики в каталоге Lago.
+- Тест паритета перечислений кодов с `contract/feature-codes.json`.
+
 ## [0.1.0a26] - 2026-10-23
 
 ### Added

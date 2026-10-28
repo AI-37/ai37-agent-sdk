@@ -3,6 +3,17 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.35] - 2026-10-28
+
+### Added
+
+- Фича `polimetrika-data-agent` (`BillingFeatureCode.PolimetrikaDataAgent`) и привилегия
+  `polimetrika-data-agent-allowed` (`BillingPrivilegeCode.PolimetrikaDataAgentAllowed`) для агента
+  данных кабинета Полиметрики (план docs `plans/polimetrika-cabinet-v1-data-agent.md`, срез B1a);
+  паритет с Python `0.1.0a27`. Регистрация кода не выдаёт право организациям: его дают тарифы
+  Полиметрики в каталоге Lago.
+- Тест паритета `BillingFeatureCode` / `BillingPrivilegeCode` с `contract/feature-codes.json`.
+
 ## [0.1.0-alpha.34] - 2026-10-23
 
 ### Added
