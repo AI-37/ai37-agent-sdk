@@ -11,6 +11,7 @@ export enum BillingFeatureCode {
   PdaiDoc152Fz = 'pdai-doc-152fz',
   PdaiDoc187Fz = 'pdai-doc-187fz',
   PdaiSiteCheck = 'pdai-site-check',
+  PolimetrikaDataAgent = 'polimetrika-data-agent',
   ThermalCalcAgent = 'thermal-calc-agent',
 }
 
@@ -30,5 +31,6 @@ export enum BillingPrivilegeCode {
   PdaiAuditAssistAllowed = 'pdai-audit-assist-allowed',
   PdaiDoc187FzAllowed = 'pdai-doc-187fz-allowed',
   PdaiSiteCheckAllowed = 'pdai-site-check-allowed',
+  PolimetrikaDataAgentAllowed = 'polimetrika-data-agent-allowed',
   ThermalCalcAllowed = 'thermal-calc-allowed',
 }
