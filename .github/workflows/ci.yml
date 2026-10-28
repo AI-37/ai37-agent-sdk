@@ -36,12 +36,12 @@ jobs:
     # (npm.app.sp-ai.ru): корневой .npmrc берёт _auth из ${AI37_NPM_TOKEN}.
     env:
       AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
-    # Живой Postgres 17 — общий для обоих хостов: test/task-store.pg.test.ts (@ai37/agent-host) создаёт
+    # Живой Postgres 18 (как managed PG в проде) — общий для обоих хостов: test/task-store.pg.test.ts (@ai37/agent-host) создаёт
     # себе временные базы (нужен суперпользователь сервиса), tests/test_postgres_task_store.py
     # (ai37-agent-host) работает в базе a2a. Пакеты идут по очереди и друг другу не мешают.
     services:
       postgres:
-        image: postgres:17-alpine
+        image: postgres:18-alpine
         env:
           POSTGRES_PASSWORD: test
           POSTGRES_DB: a2a
