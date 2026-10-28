@@ -142,9 +142,9 @@ jobs:
         run: npm run test:package
 
       # ───────────────────────── Python ─────────────────────────
-      # ai37-agent-sdk и ai37-agent-host — на одном Python (packages/*/.python-version, как локально
-      # через pyenv); ai37-capture-contract — на своём, ставится ниже. `poetry env use python` берёт
-      # интерпретатор, который сейчас первый в PATH, — то есть последний поставленный setup-python.
+      # Каждый пакет — на своём Python из packages/<пакет>/.python-version (как локально через pyenv):
+      # перед установкой пакета — свой setup-python. `poetry env use python` берёт интерпретатор,
+      # который сейчас первый в PATH, — то есть последний поставленный setup-python.
       - uses: actions/setup-python@v5
         id: py
         if: ${{ !cancelled() }}
@@ -177,9 +177,15 @@ jobs:
       # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
       # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
       # опубликованный SDK с PyPI, сиблинг собирать не нужно.
+      - uses: actions/setup-python@v5
+        id: py-host
+        if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
+        with:
+          # единый источник версии — packages/python-host/.python-version (как локально через pyenv)
+          python-version-file: packages/python-host/.python-version
       - name: py · ai37-agent-host · install
         id: python-host
-        if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
+        if: ${{ !cancelled() && steps.py-host.outcome == 'success' }}
         working-directory: packages/python-host
         run: poetry env use python && poetry install --with dev --no-interaction
       - name: py · ai37-agent-host · ruff
