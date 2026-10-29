@@ -20,6 +20,22 @@ JWT-guard, content-negotiation A2UI, file-aware store-backends и Langfuse-тр�
 В работе: `parse`, `build_task`, `a2a_executor`, `auth_guard`, `output_modes`, `a2ui`,
 `create_agent_host`, `store_backend` (+`read_raw`), `agui`, `mcp`, `relay`, `observability/langfuse`.
 
+## Трассировка Langfuse
+
+Ставится extra `observability` (langfuse v5 и OpenTelemetry), включается ключами
+`LANGFUSE_PUBLIC_KEY`/`LANGFUSE_SECRET_KEY` (+ `LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENVIRONMENT`):
+
+```bash
+pip install "ai37-agent-host[observability]"
+```
+
+Хост сам открывает turn-спан на каждый ход, и на A2A (`{service}:a2a`), и на AG-UI. Входящий
+`traceparent` продолжает трейс оркестратора. Когниция берёт колбэки через
+`current_langfuse_callbacks()` и передаёт их в `invoke`. Оборачивать ход в `with_turn_observability`
+самому не нужно: вложенный вызов откроет отдельный трейс. Батч досылается после хода в фоновом потоке, ход его не ждёт.
+Содержимое ходов в трейс не пишется, пока не задан `LANGFUSE_CAPTURE_CONTENT=true`. Без пакета или
+ключей трассировка выключена, ход идёт как обычно.
+
 ## Durable A2A TaskStore на Postgres
 
 По умолчанию `create_agent_host` держит задачи в `InMemoryTaskStore`: пауза `input-required`

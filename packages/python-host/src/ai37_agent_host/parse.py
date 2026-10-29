@@ -23,7 +23,7 @@ class ParsedMessage:
     text: str | None = None
     #: A2UI-действие (клик/submit) из message.metadata.a2uiAction (форвард оркестратора).
     action: A2uiAction | None = None
-    #: W3C trace-context (traceparent/tracestate) из message.metadata (injectTraceContext).
+    #: W3C trace-context (traceparent/tracestate/baggage) из message.metadata (injectTraceContext).
     trace_carrier: dict[str, str] | None = None
     #: supportedCatalogIds клиента (a2uiClientCapabilities.v0.9) из метаданных сообщения.
     supported_catalog_ids: list[str] = field(default_factory=list)
@@ -59,9 +59,11 @@ def _read_trace_carrier(md: dict[str, Any]) -> dict[str, str] | None:
     if not isinstance(traceparent, str) or not traceparent:
         return None
     carrier = {"traceparent": traceparent}
-    tracestate = md.get("tracestate")
-    if isinstance(tracestate, str):
-        carrier["tracestate"] = tracestate
+    # tracestate/baggage — как в ts-host readTraceCarrier: propagate.extract разберёт оба.
+    for key in ("tracestate", "baggage"):
+        value = md.get(key)
+        if isinstance(value, str):
+            carrier[key] = value
     return carrier
 
 
