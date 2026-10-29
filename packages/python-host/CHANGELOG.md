@@ -4,6 +4,42 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a26]
+
+Наблюдаемость A2A-хода. Нашлось 29.10 в prod Полиметрики, когда агент данных включил Langfuse
+(AI-37/polimetrika-data-agent#8): трейсов A2A-ходов не было вовсе, а обход пришлось писать в агенте.
+
+### Added
+- **Turn-спан на A2A-ходе.** `HostExecutor` оборачивает ход в `with_turn_observability`, как
+  AG-UI-роутер и как ts-host: спан `{service}:a2a`, `session_id=contextId`, `user_id=claims.sub`.
+  Входящий `traceparent` из `message.metadata` продолжает трейс оркестратора, без него берётся
+  `metadata.ai37.trace_id`. Раньше на A2A `current_langfuse_callbacks()` возвращал `[]` даже с
+  пакетом и ключами, и граф агента ничего не писал. Агентам, которые оборачивали ход сами
+  (`_traced` в polimetrika-data-agent), обёртку надо убрать в том же PR, где поднимают хост: иначе
+  вложенный вызов откроет второй turn-спан корнем отдельного трейса, и спаны графа уйдут туда.
+- **Extra `observability`**: `pip install "ai37-agent-host[observability]"` ставит
+  `langfuse>=5.0,<6`. Именно v5: в v3/v4 `langfuse.langchain` импортирует полный пакет `langchain`,
+  и у агентов только с `langchain-core` `CallbackHandler` молча не создавался.
+
+### Fixed
+- **Ход агента встаёт в трейс оркестратора.** a2a-sdk при установленном OpenTelemetry сам открывает
+  SERVER-спан на запрос, а Langfuse такие спаны не экспортирует. Turn-спан без явного родителя
+  вешался под него и получал отдельный trace с `parentObservationId`, которого нет ни в одном
+  трейсе (prod Полиметрики 29.10: оркестратор в `92d4…`, агент в `3b0e…`). Теперь родитель —
+  спан `remote-a2a:<agent>` из входящего `traceparent`; без `traceparent` и `metadata.ai37.trace_id`
+  ход становится корнем своего трейса, как и обещал докстринг модуля. Битый `traceparent`
+  родителем не считается. `parse_a2a_message` читает из `message.metadata` ещё и `baggage`, как
+  `readTraceCarrier` в ts-host.
+- **`flush` после хода больше не блокирует event loop.** `Langfuse.flush()` синхронный (OTel
+  `force_flush` и `join()` очередей), и при деградации Langfuse вставали все запросы процесса, включая
+  REST. Теперь он идёт в фоновом потоке-демоне, ход его не ждёт, одновременно идёт не больше одного
+  flush. Ошибка flush пишется в лог и ход не роняет. Остаток батча экспортирует `BatchSpanProcessor`
+  по расписанию и клиент при выходе процесса.
+- **В `propagate_attributes` уходят только заданные поля.** Ключи метаданных хода со значением
+  `None` (intent, channel, tenant…) давали в langfuse 5 WARNING «Propagated attribute … is None» до
+  пяти раз за ход. Заодно контекст `propagate_attributes` теперь закрывается с концом хода, а не
+  остаётся открытым.
+
 ## [0.1.0a25]
 
 Паритет с `@ai37/agent-host` `0.2.6`: LLM-клиент под шлюз LiteLLM с лимитами провайдера.
