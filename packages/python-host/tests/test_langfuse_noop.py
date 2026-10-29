@@ -1,5 +1,6 @@
 """Langfuse-трассировка при отсутствии пакетов/ключей — полный no-op (не роняет ход)."""
 
+import ai37_agent_host.observability.langfuse as lf
 from ai37_agent_host.observability import (
     BeginTurnArgs,
     inject_trace_context,
@@ -9,8 +10,11 @@ from ai37_agent_host.observability import (
 from ai37_agent_host.types import Ai37Metadata
 
 
-def test_disabled_without_packages():
-    # langfuse/opentelemetry не установлены в host-env → трассировка выключена.
+def test_disabled_without_keys(monkeypatch):
+    # Без ключей трассировка выключена, даже когда пакет langfuse стоит (в dev-окружении стоит).
+    monkeypatch.setattr(lf, "_client", lf._UNSET)
+    monkeypatch.delenv("LANGFUSE_PUBLIC_KEY", raising=False)
+    monkeypatch.delenv("LANGFUSE_SECRET_KEY", raising=False)
     assert is_langfuse_enabled() is False
     assert inject_trace_context() == {}
 

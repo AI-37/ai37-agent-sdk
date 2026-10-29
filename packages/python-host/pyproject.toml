@@ -34,10 +34,16 @@ redis = { version = ">=5.0", optional = true }
 # a2a-sdk[postgresql]); без него хост и остальные сторы работают как раньше.
 sqlalchemy = { version = ">=2.0", extras = ["asyncio"], optional = true }
 asyncpg = { version = ">=0.29", optional = true }
+# Langfuse-трассировка хода (observability/langfuse.py): soft-import, без пакета хост молча работает
+# без трейсов. Опциональный extra: `pip install ai37-agent-host[observability]`. Именно v5: в v3/v4
+# `langfuse.langchain` делает `import langchain` (полный пакет), а агентам хватает langchain-core —
+# без него CallbackHandler не создаётся и колбэки хода пусты (AI-37/polimetrika-data-agent#8).
+langfuse = { version = ">=5.0,<6", optional = true }
 
 [tool.poetry.extras]
 redis = ["redis"]
 postgres = ["sqlalchemy", "asyncpg"]
+observability = ["langfuse"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
@@ -50,10 +56,12 @@ fakeredis = ">=2.20"
 sqlalchemy = { version = ">=2.0", extras = ["asyncio"] }
 asyncpg = ">=0.29"
 aiosqlite = ">=0.20"
+# Тесты turn-спана на настоящем клиенте Langfuse v5 (propagate_attributes, наследование traceparent).
+langfuse = ">=5.0,<6"
 
-# Опциональные группы подключаются по мере реализации модулей:
-#   mcp (python mcp SDK), observability (langfuse + opentelemetry),
-#   agui (ag-ui protocol / самописный SSE), files (deepagents CompositeBackend).
+# Опциональные зависимости объявлены extras выше: redis, postgres, observability (langfuse v5 —
+# тянет opentelemetry-sdk и OTLP-экспортёр). Ещё не объявлены, подключаются по мере надобности:
+#   mcp (python mcp SDK), agui (ag-ui protocol / самописный SSE), files (deepagents CompositeBackend).
 
 # Приватный индекс ai37 (pypi.app.sp-ai.ru) — ai37-agent-sdk и прочие ai37-* тянутся отсюда.
 # supplemental: сначала публичный PyPI, ai37-источник как fallback. Держим ЗДЕСЬ (committed), а не

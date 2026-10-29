@@ -63,6 +63,27 @@ def test_parse_ai37_metadata_and_context_files():
     assert p.trace_carrier == {"traceparent": "00-trace"}
 
 
+def test_parse_trace_carrier_keeps_tracestate_and_baggage():
+    # Ключи как у injectTraceContext ts-host: плоско в message.metadata, рядом с конвертом ai37.
+    rc = _rc(
+        {
+            "role": "ROLE_USER",
+            "parts": [{"text": "x"}],
+            "metadata": {
+                "ai37": {"context_refs": ["monitoring:project:42"]},
+                "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+                "tracestate": "vendor=1",
+                "baggage": "k=v",
+            },
+        }
+    )
+    assert parse_a2a_message(rc).trace_carrier == {
+        "traceparent": "00-0af7651916cd43dd8448eb211c80319c-b7ad6b7169203331-01",
+        "tracestate": "vendor=1",
+        "baggage": "k=v",
+    }
+
+
 def test_parse_a2ui_action():
     rc = _rc(
         {

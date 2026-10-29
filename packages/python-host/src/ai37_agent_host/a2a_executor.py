@@ -31,6 +31,7 @@ from .a2a_progress import A2A_KEEPALIVE_S, A2aProgress
 from .als import HostTurn, current_accepted_output_modes, current_ctx, current_scope
 from .build_task import data_part, resolve_result_a2ui, text_part
 from .metrics import norm_final_state, observe_turn, record_billing_denied
+from .observability.langfuse import BeginTurnArgs, with_turn_observability
 from .output_modes import negotiate_output
 from .parse import parse_a2a_message
 from .types import AgentHandler, AgentInput, AgentRequest, AgentResult
@@ -138,7 +139,24 @@ class HostExecutor(AgentExecutor):
         # keepalive: долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
         progress = A2aProgress(updater, task_id, keepalive_s=A2A_KEEPALIVE_S)
         try:
-            result = await self._run_handler(agent_input, ctx, progress.emit)
+            # Langfuse turn-спан `{service}:a2a` (паритет ts-host), активный в OTel на время
+            # когниции: `current_langfuse_callbacks()` отдаёт CallbackHandler, LangChain-спаны
+            # нестятся под ход. Входящий traceparent → продолжаем трейс оркестратора, иначе
+            # trace_id из metadata.ai37. Без пакета langfuse или ключей — просто ход.
+            result = await with_turn_observability(
+                BeginTurnArgs(
+                    context_id=context_id,
+                    task_id=task_id,
+                    metadata=parsed.metadata,
+                    claims=agent_input.claims,
+                    agent_name=f"{self._service}:a2a",
+                    text=parsed.text,
+                    billing_org_id=agent_input.billing_org_id,
+                    parent_carrier=parsed.trace_carrier,
+                ),
+                lambda: self._run_handler(agent_input, ctx, progress.emit),
+                _turn_output,
+            )
         finally:
             await progress.finish()
 
@@ -232,6 +250,11 @@ class HostExecutor(AgentExecutor):
     @staticmethod
     def _agent_msg(updater: TaskUpdater, text: str) -> Any:
         return updater.new_agent_message(parts=[text_part(text)])
+
+
+def _turn_output(result: AgentResult) -> dict[str, Any]:
+    """Итог хода в turn-спан; текст ответа маскирует клиент Langfuse (как на AG-UI)."""
+    return {"status": result.status, "message": result.message}
 
 
 def _read_accepted_output_modes(context: RequestContext) -> list[str] | None:

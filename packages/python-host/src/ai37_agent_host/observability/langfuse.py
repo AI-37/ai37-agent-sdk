@@ -1,16 +1,18 @@
 """Langfuse-наблюдаемость host'а — порт ``ts-host/src/observability/langfuse.ts``.
 
-«Из коробки» для любого агента на python-host. Реализация на langfuse Python SDK v3 (OpenTelemetry).
+«Из коробки» для любого агента на python-host. Реализация на langfuse Python SDK v5 (OpenTelemetry),
+ставится extra ``ai37-agent-host[observability]``.
 Дизайн (см. ``als.py`` / ``a2a_executor.py`` / ``agui.py``):
   - конфиг ТОЛЬКО из env (LANGFUSE_PUBLIC_KEY/SECRET_KEY/BASE_URL); выключено → полный no-op;
-  - на каждый ход executor зовёт :func:`with_turn_observability` — открывается turn-спан хода
-    (session_id=contextId, user_id=claims.sub), активный в OTel-контексте на время ``run()``. И
-    langchain ``CallbackHandler`` (без ``root``) автоматически вкладывает LLM/graph-спаны под него;
+  - на каждый ход (A2A-executor и AG-UI-роутер) зовётся :func:`with_turn_observability` —
+    открывается turn-спан хода (session_id=contextId, user_id=claims.sub), активный в OTel-контексте
+    на время ``run()``. И langchain ``CallbackHandler`` (без ``root``) автоматически вкладывает
+    LLM/graph-спаны под него;
   - кросс-сервис: turn-спан наследует входящий W3C ``traceparent`` (если оркестратор прокинул его в
     ``message.metadata`` через :func:`inject_trace_context`), иначе — детерминированный trace_id из
     ``metadata.ai37.trace_id`` (фронт владеет id → может поставить score), иначе новый корень;
   - когниция агента прокидывает :func:`current_langfuse_callbacks` в ``invoke``;
-  - после хода — ``flush`` (важно для коротко живущих процессов).
+  - после хода — ``flush`` в фоновом потоке: ход его не ждёт (см. :func:`_flush_in_background`).
 
 langfuse/opentelemetry — soft-import: отсутствие пакетов/ключей просто отключает трассировку
 (никогда не роняет ход). В отличие от TS (два бандла → singleton на ``globalThis``), здесь обычный
@@ -23,6 +25,8 @@ import json
 import logging
 import os
 import re
+import threading
+from contextlib import ExitStack
 from dataclasses import dataclass
 from typing import Any
 
@@ -37,6 +41,10 @@ _HEX32 = re.compile(r"^[0-9a-f]{32}$", re.IGNORECASE)
 # undefined(=_UNSET) — ещё не инициализировали; None — инициализировали и трассировка выключена.
 _UNSET = object()
 _client: Any = _UNSET
+
+# Фоновый flush после хода: не больше одного потока за раз (см. _flush_in_background).
+_flush_lock = threading.Lock()
+_flush_thread: threading.Thread | None = None
 
 
 def _env_bool(value: str | None, default: bool) -> bool:
@@ -165,6 +173,36 @@ def _trace_context_from_id(raw_id: Any) -> dict[str, str] | None:
     return {"trace_id": raw_id.lower()} if _HEX32.match(raw_id) else None
 
 
+def _remote_parent_context(carrier: dict[str, str] | None) -> Any:
+    """OTel-контекст со спаном оркестратора из входящего ``traceparent``; None, если его нет.
+
+    Битый ``traceparent`` ``extract`` молча пропускает и оставляет активным текущий спан — такой
+    контекст родителем не считаем.
+    """
+    if not carrier:
+        return None
+    from opentelemetry import propagate, trace
+
+    ctx = propagate.extract(carrier)
+    return ctx if trace.get_current_span(ctx).get_span_context().is_remote else None
+
+
+def _root_context(trace_context: dict[str, str] | None) -> Any:
+    """Контекст без активного спана, чтобы ход без родителя стал корнем своего трейса.
+
+    Активным может оказаться чужой спан, которого нет в Langfuse: a2a-sdk при установленном
+    OpenTelemetry сам открывает SERVER-спан на запрос (``trace_class`` у request handler'а), а
+    фильтр экспорта Langfuse такие спаны отбрасывает. Под ним turn-спан получал
+    ``parentObservationId``, которого нет ни в одном трейсе (prod Полиметрики, 29.10). С
+    ``trace_context`` родителя задаёт сам Langfuse, здесь ничего не нужно.
+    """
+    if trace_context is not None:
+        return None
+    from opentelemetry import trace
+
+    return trace.set_span_in_context(trace.INVALID_SPAN)
+
+
 async def with_turn_observability(
     args: BeginTurnArgs,
     run: Any,
@@ -176,10 +214,12 @@ async def with_turn_observability(
         return await run()
 
     from opentelemetry import context as otel_context
-    from opentelemetry import propagate
 
-    parent_ctx = propagate.extract(args.parent_carrier) if args.parent_carrier else None
-    trace_context = None if parent_ctx else _trace_context_from_id(args.metadata.trace_id)
+    remote_parent = _remote_parent_context(args.parent_carrier)
+    trace_context = (
+        None if remote_parent is not None else _trace_context_from_id(args.metadata.trace_id)
+    )
+    parent_ctx = remote_parent if remote_parent is not None else _root_context(trace_context)
     tags = [t for t in (args.metadata.channel, args.metadata.app_id) if t]
 
     token = otel_context.attach(parent_ctx) if parent_ctx is not None else None
@@ -189,8 +229,9 @@ async def with_turn_observability(
             if trace_context
             else client.start_as_current_observation(name=args.agent_name)
         )
-        with span_cm as span:
-            _apply_trace_attributes(client, args, tags)
+        # ExitStack держит propagate_attributes на весь ход и закрывает его раньше turn-спана.
+        with span_cm as span, ExitStack() as turn_attributes:
+            _apply_trace_attributes(turn_attributes, args, tags)
             handler = _make_callback_handler()
             trace_id = _current_trace_id(client)
             scope = current_scope()
@@ -210,14 +251,45 @@ async def with_turn_observability(
     finally:
         if token is not None:
             otel_context.detach(token)
-        try:
-            client.flush()
-        except Exception:  # noqa: BLE001
-            pass
+        _flush_in_background(client)
 
 
-def _apply_trace_attributes(client: Any, args: BeginTurnArgs, tags: list[str]) -> None:
-    """session_id/user_id/metadata/tags → trace через propagate_attributes (если доступен)."""
+def _flush_in_background(client: Any) -> None:
+    """Дослать батч Langfuse после хода, не задерживая ход и event loop.
+
+    ``Langfuse.flush()`` синхронный: OTel ``force_flush`` (до 30 с) и ``join()`` очередей без
+    таймаута. Вызванный прямо в async-коде, он держал event loop, пока идёт экспорт, а при
+    деградации Langfuse вставали все запросы процесса (AI-37/polimetrika-data-agent#8).
+    ``asyncio.to_thread`` с таймаутом тоже не годится: ход всё равно ждал бы таймаут, а брошенные
+    потоки копились бы в executor'е по умолчанию, через который asyncio резолвит DNS.
+
+    Поэтому поток-демон без ожидания, и не больше одного за раз: идёт flush — новый не запускаем.
+    Батч от этого не теряется: ``BatchSpanProcessor`` экспортирует по своему расписанию, а при
+    выходе процесса клиент досылает остальное сам (atexit ``shutdown``). Ошибка flush ход не роняет.
+    """
+    global _flush_thread
+    with _flush_lock:
+        if _flush_thread is not None and _flush_thread.is_alive():
+            return
+        _flush_thread = threading.Thread(
+            target=_flush_quietly, args=(client,), name="ai37-langfuse-flush", daemon=True
+        )
+        _flush_thread.start()
+
+
+def _flush_quietly(client: Any) -> None:
+    try:
+        client.flush()
+    except Exception as exc:  # noqa: BLE001 - экспорт трейса не должен ронять сервис
+        logger.warning("[ai37-agent-host] Langfuse flush не удался: %s", exc)
+
+
+def _apply_trace_attributes(stack: ExitStack, args: BeginTurnArgs, tags: list[str]) -> None:
+    """session_id/user_id/metadata/tags → trace через propagate_attributes (если доступен).
+
+    Передаём только заданные значения: на ``None`` в metadata langfuse пишет WARNING «Propagated
+    attribute … is None» на каждое поле в каждом ходе (intent, channel, tenant…).
+    """
     metadata = trace_metadata(
         "turn",
         service=args.metadata.app_id or "ai37-agent-host",
@@ -242,16 +314,18 @@ def _apply_trace_attributes(client: Any, args: BeginTurnArgs, tags: list[str]) -
         contextId=args.context_id,
     )
     user_id = getattr(args.claims, "sub", None) if args.claims is not None else None
+    attributes: dict[str, Any] = {
+        "session_id": args.context_id or None,
+        "user_id": user_id or None,
+        "metadata": {key: value for key, value in metadata.items() if value is not None},
+        "tags": tags or None,
+    }
     try:
         from langfuse import propagate_attributes
 
-        cm = propagate_attributes(
-            session_id=args.context_id or None,
-            user_id=user_id,
-            metadata=metadata,
-            tags=tags or None,
+        stack.enter_context(
+            propagate_attributes(**{k: v for k, v in attributes.items() if v is not None})
         )
-        cm.__enter__()  # держим на весь ход — закроется с turn-спаном (см. TS span.update)
     except Exception:  # noqa: BLE001 - атрибуты не критичны для хода
         pass
 
