@@ -1,8 +1,10 @@
+import { ArtifactsStoreBackend } from '../store-backend/artifacts-store-backend'
 import {
   ChatAttachmentsStoreBackend,
   ProjectAttachmentsStoreBackend,
 } from '../store-backend/attachments-store-backend'
 import type { ReadResult, StoreBackend } from '../store-backend/types'
+import type { ArtifactScope } from './artifact-scope'
 import type { AttachmentFile, AttachmentTurnScope } from './turn-files'
 
 /**
@@ -11,12 +13,18 @@ import type { AttachmentFile, AttachmentTurnScope } from './turn-files'
  *
  * Читатель отдаёт только файлы из скоупа хода. Ссылку, которой в ходе нет, он не читает, даже если
  * chat-backend отдал бы файл: модель не должна дотягиваться до соседних тредов по угаданному id.
+ * Артефакты (`artifactScope`) читаются так же: только те, что были в загруженном списке.
  */
 
 export interface AttachmentReadersOptions {
   /** База REST chat-backend. */
   chatBackendUrl: string
   scope: AttachmentTurnScope
+  /**
+   * Артефакты треда и проекта из `artifactScope`. Их файлы добавляются к файлам хода: читатели,
+   * поиск и `readAttachmentContents` работают с ними наравне с вложениями.
+   */
+  artifacts?: ArtifactScope
   /**
    * user-JWT для chat-backend. По умолчанию `currentBearer` из request-scope хоста. Код, который
    * работает вне него (HTTP-мост DSH, фоновая задача), передаёт токен явно.
@@ -28,6 +36,10 @@ export interface AttachmentReadersOptions {
 export interface AttachmentGrepHit {
   ref: string
   name: string
+  /**
+   * Номер строки совпадения. Файлы проекта и артефакты ищет FTS chat-backend: он отдаёт сниппет
+   * без номера строки, и тогда здесь 1 — окно такого файла читается с начала.
+   */
   line: number
   text: string
 }
@@ -40,12 +52,13 @@ export interface WindowedRead {
 }
 
 export interface AttachmentReaders {
+  /** Скоуп хода; с `artifacts` в `files` добавлены и артефакты (`kind: 'artifact'`). */
   readonly scope: AttachmentTurnScope
   /** Файл хода по ref; undefined — такого файла в ходе нет. */
   file(ref: string): AttachmentFile | undefined
   /** Окно markdown: offset/limit — номера строк (контракт полки). Без них — файл целиком. */
   read(ref: string, window?: { offset?: number; limit?: number }): Promise<ReadResult>
-  /** Поиск по содержимому обеих полок; совпадения только по файлам хода. */
+  /** Поиск по содержимому полок хода; совпадения только по файлам хода. */
   grep(query: string): Promise<{ hits: AttachmentGrepHit[]; errors: string[] }>
   /** Файл окнами до бюджета символов: ограничивает и передачу, и то, что уйдёт в модель. */
   readWithinBudget(ref: string, budgetChars: number): Promise<WindowedRead>
@@ -56,19 +69,31 @@ const WINDOW_LINES = 200
 /** Страховка от бесконечного цикла, если полка перестанет сдвигать offset. */
 const MAX_WINDOWS = 1000
 
+/** Полка, из которой читается файл: вложения чата и проекта, артефакты треда и проекта. */
+type Shelf = 'chat' | 'project' | 'artifact' | 'project-artifact'
+
 export function createAttachmentReaders(opts: AttachmentReadersOptions): AttachmentReaders {
-  const { scope } = opts
+  const scope = withArtifacts(opts.scope, opts.artifacts)
   const byRef = new Map(scope.files.map((file) => [file.ref, file]))
   const common = { baseUrl: opts.chatBackendUrl, bearer: opts.bearer, fetchImpl: opts.fetchImpl }
-  const shelves: Record<AttachmentFile['scope'], StoreBackend> = {
+  const projectId = opts.artifacts?.projectId ?? scope.projectId
+  const shelves: Record<Shelf, StoreBackend> = {
     chat: new ChatAttachmentsStoreBackend({ ...common, contextId: () => scope.contextId }),
     project: new ProjectAttachmentsStoreBackend({ ...common, projectId: () => scope.projectId }),
+    artifact: new ArtifactsStoreBackend({
+      ...common,
+      scope: () => ({ contextId: opts.artifacts?.contextId ?? scope.contextId }),
+    }),
+    'project-artifact': new ArtifactsStoreBackend({
+      ...common,
+      scope: () => (projectId ? { projectId } : undefined),
+    }),
   }
 
   const read: AttachmentReaders['read'] = async (ref, window) => {
     const file = byRef.get(ref)
     if (!file) return { error: `Файла ${ref} нет среди приложенных к этому ходу` }
-    return shelves[file.scope].read(fileIdPath(file), window?.offset, window?.limit)
+    return shelves[shelfOf(file)].read(fileIdPath(file), window?.offset, window?.limit)
   }
 
   return {
@@ -79,6 +104,24 @@ export function createAttachmentReaders(opts: AttachmentReadersOptions): Attachm
     readWithinBudget: (ref, budgetChars) =>
       readWindowsWithinBudget((offset, limit) => read(ref, { offset, limit }), budgetChars),
   }
+}
+
+/** Файлы хода плюс артефакты; ref, уже приложенный к ходу, второй раз не добавляется. */
+function withArtifacts(
+  scope: AttachmentTurnScope,
+  artifacts: ArtifactScope | undefined,
+): AttachmentTurnScope {
+  if (!artifacts?.files.length) return scope
+  const refs = new Set(scope.files.map((file) => file.ref))
+  return {
+    ...scope,
+    files: [...scope.files, ...artifacts.files.filter((file) => !refs.has(file.ref))],
+  }
+}
+
+function shelfOf(file: AttachmentFile): Shelf {
+  if (file.kind !== 'artifact') return file.scope
+  return file.scope === 'chat' ? 'artifact' : 'project-artifact'
 }
 
 /**
@@ -101,19 +144,21 @@ function fileIdPath(file: AttachmentFile): string {
   return `/${segments[segments.length - 1] ?? ''}`
 }
 
-const REF_PREFIX: Record<AttachmentFile['scope'], string> = {
+const REF_PREFIX: Record<Shelf, string> = {
   chat: 'chat-attachment:',
   project: 'project-attachment:',
+  artifact: 'artifact:',
+  'project-artifact': 'project-artifact:',
 }
 
 async function grepShelves(
-  shelves: Record<AttachmentFile['scope'], StoreBackend>,
+  shelves: Record<Shelf, StoreBackend>,
   scope: AttachmentTurnScope,
   byRef: ReadonlyMap<string, AttachmentFile>,
   query: string,
 ): Promise<{ hits: AttachmentGrepHit[]; errors: string[] }> {
   // Полка ищет по всему треду или проекту; лишнее отсекаем по списку файлов хода.
-  const kinds = [...new Set(scope.files.map((file) => file.scope))]
+  const kinds = [...new Set(scope.files.map(shelfOf))]
   const results = await Promise.all(
     kinds.map(async (kind) => ({ kind, res: await shelves[kind].grep(query) })),
   )

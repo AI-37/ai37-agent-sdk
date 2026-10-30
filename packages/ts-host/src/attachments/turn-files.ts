@@ -15,15 +15,21 @@ const PROJECT_PREFIX = 'project:'
 
 /** Один файл хода: адрес для чтения плюс то, что о нём известно из манифеста. */
 export interface AttachmentFile {
-  /** `chat-attachment:<id>` | `project-attachment:<id>`. */
+  /**
+   * `chat-attachment:<id>` | `project-attachment:<id>`; у артефактов (`artifactScope`) —
+   * `artifact:<id>` | `project-artifact:<id>`.
+   */
   ref: string
   /** Путь виртуальной ФС (`/chat-attachments/<id>`), см. `contextFilePath`. */
   path: string
   /** Имя из манифеста; если манифест не пришёл — сам ref. */
   name: string
   summary?: string
+  /** Полка: чат или проект. У артефакта — полка, на которой он лежит. */
   scope: 'chat' | 'project'
   isLarge?: boolean
+  /** `artifact` — результат агента из `artifactScope`; без поля — вложение пользователя. */
+  kind?: 'artifact'
 }
 
 /** Всё, что нужно для чтения файлов хода: namespace треда, проект и список файлов. */

@@ -49,6 +49,15 @@ for (const api of [esm, cjs]) {
     'readStoreWithinBudget',
     'readAttachmentContents',
     'extractFromAttachments',
+    'artifactScope',
+    // База проекта: пул проекта DS, служебный токен и мост chat-backend.
+    'uploadToProjectPool',
+    'findProjectDocumentByTitle',
+    'serviceToken',
+    'indexToProject',
+    'ProjectPoolError',
+    'ServiceTokenError',
+    'ProjectKnowledgeError',
   ])
     assert.equal(typeof api[name], 'function', name)
 }
