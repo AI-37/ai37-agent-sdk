@@ -67,13 +67,14 @@ jobs:
           POETRY_HOME: ${{ runner.temp }}/poetry
           POETRY_VERSION: 2.3.2
         # Сеть раннера иногда залипает (30.10 curl висел 5 минут, джоба ушла в таймаут). Поэтому у curl
-        # таймауты и повторы, а установку целиком (сам установщик качает Poetry с PyPI) повторяем до
-        # трёх раз. Скрипт сохраняется в файл: упавший curl не превратится в «успешный» пустой скрипт.
+        # таймауты и повторы, а установку целиком повторяем до трёх раз. Установщик сам качает Poetry с
+        # PyPI, и запрос метаданных у него без таймаута, поэтому он ограничен `timeout 180`. Скрипт
+        # сохраняется в файл: упавший curl не превратится в «успешный» пустой скрипт.
         run: |
           for attempt in 1 2 3; do
             curl -fsSL --retry 3 --retry-all-errors --connect-timeout 20 --max-time 120 \
               -o "$RUNNER_TEMP/install-poetry.py" https://install.python-poetry.org \
-              && python3 "$RUNNER_TEMP/install-poetry.py" && break
+              && timeout 180 python3 "$RUNNER_TEMP/install-poetry.py" && break
             [ "$attempt" -eq 3 ] && exit 1
             echo "::warning::Poetry: попытка $attempt не удалась, повторяю"
             rm -rf "$POETRY_HOME"; sleep 15
