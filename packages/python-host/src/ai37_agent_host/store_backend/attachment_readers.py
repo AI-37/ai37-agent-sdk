@@ -3,7 +3,8 @@
 Чтение по ref без виртуальной ФС и без LLM-петли. Под капотом те же
 ``Chat/ProjectAttachmentsStoreBackend``, то есть REST chat-backend с user-JWT: права проверяет он.
 Читатели отдают только файлы из скоупа хода: модель не должна дотягиваться до соседних тредов по
-угаданному id. Файлы вне хода (найденные поиском по корпусу проекта) читает
+угаданному id. Артефакты (:func:`artifact_scope`) читаются так же: только те, что были в
+загруженном списке. Файлы вне хода (найденные поиском по корпусу проекта) читает
 :func:`read_store_within_budget` по готовому бэкенду и пути.
 """
 
@@ -11,11 +12,12 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable
-from dataclasses import dataclass, field
-from typing import Literal, Protocol
+from dataclasses import dataclass, field, replace
+from typing import TYPE_CHECKING, Literal, Protocol
 
 import httpx
 
+from .artifacts_store_backend import ArtifactsStoreBackend
 from .attachments_store_backend import (
     BearerFn,
     ChatAttachmentsStoreBackend,
@@ -23,6 +25,9 @@ from .attachments_store_backend import (
 )
 from .turn_files import AttachmentFile, AttachmentTurnScope
 from .types import GrepResult, ReadResult
+
+if TYPE_CHECKING:
+    from .artifact_scope import ArtifactScope
 
 #: Высота окна при чтении в бюджет. Меньше — больше запросов, больше — крупнее перебор.
 WINDOW_LINES = 200
@@ -48,6 +53,8 @@ class _Shelf(_Reader, Protocol):
 class AttachmentGrepHit:
     ref: str
     name: str
+    #: Номер строки. Файлы проекта и артефакты ищет FTS chat-backend: он отдаёт сниппет без номера
+    #: строки, и тогда здесь 1 — окно такого файла читается с начала.
     line: int
     text: str
 
@@ -66,7 +73,19 @@ class AttachmentGrepResult:
     errors: list[str] = field(default_factory=list)
 
 
-_REF_PREFIX = {"chat": "chat-attachment:", "project": "project-attachment:"}
+#: Полка, из которой читается файл: вложения чата и проекта, артефакты треда и проекта.
+_REF_PREFIX = {
+    "chat": "chat-attachment:",
+    "project": "project-attachment:",
+    "artifact": "artifact:",
+    "project-artifact": "project-artifact:",
+}
+
+
+def _shelf_of(file: AttachmentFile) -> str:
+    if file.kind != "artifact":
+        return file.scope
+    return "artifact" if file.scope == "chat" else "project-artifact"
 
 
 class AttachmentReaders:
@@ -92,13 +111,13 @@ class AttachmentReaders:
         file = self._by_ref.get(ref)
         if file is None:
             return ReadResult(error=f"Файла {ref} нет среди приложенных к этому ходу")
-        return await self._shelves[file.scope].read(_file_id_path(file), offset, limit)
+        return await self._shelves[_shelf_of(file)].read(_file_id_path(file), offset, limit)
 
     async def grep(self, query: str) -> AttachmentGrepResult:
-        """Поиск по содержимому обеих полок; совпадения только по файлам хода."""
+        """Поиск по содержимому полок хода; совпадения только по файлам хода."""
         result = AttachmentGrepResult()
         # Полка ищет по всему треду или проекту; лишнее отсекаем по списку файлов хода.
-        for kind in dict.fromkeys(file.scope for file in self.scope.files):
+        for kind in dict.fromkeys(_shelf_of(file) for file in self.scope.files):
             found = await self._shelves[kind].grep(query)
             if found.error:
                 result.errors.append(found.error)
@@ -130,9 +149,17 @@ def create_attachment_readers(
     scope: AttachmentTurnScope,
     bearer: BearerFn | None = None,
     http_client: httpx.AsyncClient | None = None,
+    artifacts: ArtifactScope | None = None,
 ) -> AttachmentReaders:
     """Читатели файлов хода. ``bearer`` по умолчанию — ``current_bearer`` из request-scope хоста;
-    код вне него (фоновая задача, отдельный HTTP-сервер) передаёт токен явно."""
+    код вне него (фоновая задача, отдельный HTTP-сервер) передаёт токен явно.
+
+    ``artifacts`` — артефакты треда и проекта из :func:`artifact_scope`: их файлы добавляются к
+    файлам хода, и читатели, поиск и :func:`read_attachment_contents` работают с ними наравне с
+    вложениями."""
+    scope = _with_artifacts(scope, artifacts)
+    project_id = (artifacts.project_id if artifacts else None) or scope.project_id
+    artifact_context = artifacts.context_id if artifacts else scope.context_id
     shelves: dict[str, _Shelf] = {
         "chat": ChatAttachmentsStoreBackend(
             base_url=chat_backend_url,
@@ -146,8 +173,31 @@ def create_attachment_readers(
             bearer=bearer,
             http_client=http_client,
         ),
+        "artifact": ArtifactsStoreBackend(
+            base_url=chat_backend_url,
+            scope=lambda: {"contextId": artifact_context},
+            bearer=bearer,
+            http_client=http_client,
+        ),
+        "project-artifact": ArtifactsStoreBackend(
+            base_url=chat_backend_url,
+            scope=lambda: {"projectId": project_id} if project_id else None,
+            bearer=bearer,
+            http_client=http_client,
+        ),
     }
     return AttachmentReaders(scope, shelves)
+
+
+def _with_artifacts(
+    scope: AttachmentTurnScope, artifacts: ArtifactScope | None
+) -> AttachmentTurnScope:
+    """Файлы хода плюс артефакты; ref, уже приложенный к ходу, второй раз не добавляется."""
+    if artifacts is None or not artifacts.files:
+        return scope
+    refs = {file.ref for file in scope.files}
+    extra = [file for file in artifacts.files if file.ref not in refs]
+    return replace(scope, files=[*scope.files, *extra])
 
 
 async def read_store_within_budget(backend: _Reader, path: str, budget_chars: int) -> WindowedRead:

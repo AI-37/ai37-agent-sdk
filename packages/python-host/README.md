@@ -20,6 +20,29 @@ JWT-guard, content-negotiation A2UI, file-aware store-backends и Langfuse-тр�
 В работе: `parse`, `build_task`, `a2a_executor`, `auth_guard`, `output_modes`, `a2ui`,
 `create_agent_host`, `store_backend` (+`read_raw`), `agui`, `mcp`, `relay`, `observability/langfuse`.
 
+## База проекта: пул проекта в document-service
+
+Фоновая задача (отчёт по расписанию) грузит файл в пул проекта DS от служебного клиента Authentik;
+токен кэшируется до истечения, организацию DS берёт из записи пула:
+
+```python
+from ai37_agent_host import ProjectPoolError, service_token, upload_to_project_pool
+
+bearer = await service_token(issuer=ISSUER, client_id=CLIENT_ID, client_secret=CLIENT_SECRET)
+try:
+    res = await upload_to_project_pool(
+        document_service_url=DS_URL, project_key=project_id, file=Path(report), file_name=name,
+        bearer=bearer,
+    )
+    series_id = res.series_id or res.duplicate_of.id  # повтор того же файла — не ошибка
+except ProjectPoolError as exc:
+    ...  # exc.code: pool_not_found, upload_busy (exc.retry_after_seconds), documents_not_in_plan, …
+```
+
+`file` — `bytes`, путь (`Path`), открытый бинарный файл или асинхронный поток (тогда `size=`).
+Рядом `find_project_document_by_title`, мост chat-backend `index_to_project` и артефакты хода
+(`artifact_scope` → `create_attachment_readers(..., artifacts=)`), как в `@ai37/agent-host` 0.4.0.
+
 ## Трассировка Langfuse
 
 Ставится extra `observability` (langfuse v5 и OpenTelemetry), включается ключами

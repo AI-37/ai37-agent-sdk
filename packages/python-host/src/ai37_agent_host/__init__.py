@@ -55,14 +55,30 @@ from .output_modes import (
     read_client_capabilities,
 )
 from .owner import HostCallContextBuilder, JwtUser, current_call_context, current_user
+from .project_knowledge import (
+    ProjectKnowledgeError,
+    ProjectKnowledgeRefResult,
+    ProjectKnowledgeResponse,
+    ProjectPoolDocument,
+    ProjectPoolDuplicate,
+    ProjectPoolError,
+    ProjectPoolUploadResult,
+    ServiceTokenError,
+    find_project_document_by_title,
+    index_to_project,
+    service_token,
+    upload_to_project_pool,
+)
 from .redis_task_store import RedisTaskStore
 from .store_backend import (
+    ArtifactScope,
     ArtifactsStoreBackend,
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
     ChatStoreBackend,
     ProjectAttachmentsStoreBackend,
     StoreBackend,
+    artifact_scope,
     attachment_failure_reason,
     attachment_scope,
     context_file_path,
@@ -139,6 +155,21 @@ __all__ = [
     "PublishedArtifact",
     "ArtifactPublishError",
     "ArtifactsStoreBackend",
+    "ArtifactScope",
+    "artifact_scope",
+    # база проекта: пул проекта DS, служебный токен, мост chat-backend
+    "upload_to_project_pool",
+    "find_project_document_by_title",
+    "service_token",
+    "index_to_project",
+    "ProjectPoolError",
+    "ProjectPoolUploadResult",
+    "ProjectPoolDuplicate",
+    "ProjectPoolDocument",
+    "ServiceTokenError",
+    "ProjectKnowledgeError",
+    "ProjectKnowledgeRefResult",
+    "ProjectKnowledgeResponse",
     # output-modes (host negotiation)
     "A2UI_CAPABILITIES_VERSION",
     "negotiate_text",

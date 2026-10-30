@@ -4,6 +4,36 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a29]
+
+Паритет с `@ai37/agent-host` 0.4.0: база проекта (план `docs/plans/project-knowledge-bridge.md`,
+срез 2, AI-37/docs#556). Первый потребитель на этом хосте — агент данных Полиметрики: фоновые
+отчёты уходят в пул проекта DS (срез 6).
+
+### Added
+- `upload_to_project_pool(document_service_url=, project_key=, file=, file_name=, bearer=,
+  project_name=, size=, content_type=, http_client=, timeout=)` → `ProjectPoolUploadResult`
+  (`series_id` или `duplicate_of: ProjectPoolDuplicate(id, title)` при `409 duplicate`). Тело без
+  multipart, с `X-File-Name`, `X-Project-Name` и `Content-Length`; `file` — `bytes`, путь, бинарный
+  файл или асинхронный поток (с `size=`), путь и файл читаются потоком. Отказы — `ProjectPoolError`
+  с кодом DS (`pool_not_found`, `ambiguous_project_pool`, `documents_not_in_plan`, …), у
+  `upload_busy` ещё `retry_after_seconds` из `Retry-After`.
+- `find_project_document_by_title(document_service_url=, project_key=, title=, bearer=)` →
+  `ProjectPoolDocument | None`: точное совпадение названия поверх подстрочного поиска DS.
+- `service_token(issuer=, client_id=, client_secret=, scope=)`: токен `client_credentials` из
+  `token_endpoint` discovery, в памяти до истечения с запасом; параллельные вызовы ждут один запрос.
+  Ошибки — `ServiceTokenError`.
+- `index_to_project(chat_backend_url=, project_id=, refs=, bearer=)` → `ProjectKnowledgeResponse`
+  с `ProjectKnowledgeRefResult` по каждому ref (`sent`, `already_indexed`, `not_indexable`, `busy`,
+  `rejected`). Отказ запроса целиком — `ProjectKnowledgeError`; bearer по умолчанию `current_bearer`.
+- `artifact_scope(chat_backend_url=, context_id=, project_id=, bearer=)` → `ArtifactScope` и
+  `create_attachment_readers(..., artifacts=)`: артефакты треда и проекта читаются, ищутся и попадают
+  в `read_attachment_contents` наравне с файлами хода, только из загруженного списка.
+- `ArtifactsStoreBackend.list_artifacts()` (в TS `list()`; имя `list` в классе Python закрыло бы
+  встроенный тип в аннотациях); `AttachmentFile.kind = "artifact"` у файлов из `artifact_scope`.
+
+Существующие сигнатуры не меняются: без `artifacts` читатели работают как в a28.
+
 ## [0.1.0a28]
 
 Полный паритет модуля вложений с `@ai37/agent-host` 0.3.1. В a27 был только сбор файлов хода в

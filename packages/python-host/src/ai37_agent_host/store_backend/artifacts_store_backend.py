@@ -172,6 +172,16 @@ class ArtifactsStoreBackend:
         artifact = data.get("artifact")
         return artifact if isinstance(artifact, dict) else {"error": "нет artifact в ответе"}
 
+    async def list_artifacts(self) -> dict[str, Any]:
+        """Артефакты корпуса с метаданными: ``{artifacts: [...]}`` или ``{error}`` (TS ``list``).
+        Из них собирается скоуп артефактов хода (:func:`artifact_scope`)."""
+        try:
+            return {"artifacts": await self._manifest()}
+        except _NoScope:
+            return {"error": _SCOPE_MISSING}
+        except Exception as exc:  # noqa: BLE001
+            return {"error": str(exc)}
+
     # ── helpers ────────────────────────────────────────────────────────────────
 
     async def _manifest(self) -> list[dict[str, Any]]:
