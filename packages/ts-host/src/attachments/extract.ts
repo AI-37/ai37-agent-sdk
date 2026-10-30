@@ -29,6 +29,11 @@ export interface ExtractFromAttachmentsOptions {
   contents: readonly AttachmentContent[]
   /** Потолок на сам вызов. По умолчанию 300 с. */
   timeoutMs?: number
+  /**
+   * Потолок ответа в токенах. Через `modelKwargs.max_tokens` его не задать: LangChain перезаписывает
+   * поле своим `maxTokens`.
+   */
+  maxTokens?: number
 }
 
 const NO_DATA = /^нет данных\.?$/i
@@ -47,6 +52,7 @@ export async function extractFromAttachments(
     temperature: 0,
     configuration: { baseURL: opts.baseUrl },
     ...(opts.modelKwargs ? { modelKwargs: opts.modelKwargs } : {}),
+    ...(opts.maxTokens !== undefined ? { maxTokens: opts.maxTokens } : {}),
   })
   const response = await model.invoke(
     [

@@ -76,7 +76,8 @@ export function createAttachmentReaders(opts: AttachmentReadersOptions): Attachm
     file: (ref) => byRef.get(ref),
     read,
     grep: (query) => grepShelves(shelves, scope, byRef, query),
-    readWithinBudget: (ref, budgetChars) => readWithinBudget(read, ref, budgetChars),
+    readWithinBudget: (ref, budgetChars) =>
+      readWindowsWithinBudget((offset, limit) => read(ref, { offset, limit }), budgetChars),
   }
 }
 
@@ -140,13 +141,25 @@ function stripSourceName(text: string): string {
 }
 
 /**
+ * То же чтение окнами в бюджет, но по готовому StoreBackend и пути, без скоупа хода. Для файлов,
+ * которые агент нашёл сам и к ходу они не приложены (поиск по корпусу проекта): права проверяет
+ * chat-backend, а читатели хода по-прежнему отдают только файлы хода.
+ */
+export function readStoreWithinBudget(
+  backend: Pick<StoreBackend, 'read'>,
+  path: string,
+  budgetChars: number,
+): Promise<WindowedRead> {
+  return readWindowsWithinBudget((offset, limit) => backend.read(path, offset, limit), budgetChars)
+}
+
+/**
  * Чтение окнами до бюджета символов. Окна строчные (так режет полка), бюджет символьный: пятьдесят
  * строк бывают и пятью сотнями символов, и полумегабайтной таблицей. Поэтому читаем окна
  * фиксированной высоты и останавливаемся, набрав бюджет; перебор последнего окна обрезаем.
  */
-async function readWithinBudget(
-  read: AttachmentReaders['read'],
-  ref: string,
+async function readWindowsWithinBudget(
+  readWindow: (offset: number, limit: number) => ReadResult | Promise<ReadResult>,
   budgetChars: number,
 ): Promise<WindowedRead> {
   if (budgetChars <= 0) return { content: '', truncated: true }
@@ -154,7 +167,7 @@ async function readWithinBudget(
   let taken = 0
   let offset = 0
   for (let window = 0; window < MAX_WINDOWS; window += 1) {
-    const result = await read(ref, { offset, limit: WINDOW_LINES })
+    const result = await readWindow(offset, WINDOW_LINES)
     if (result.error) return { content: '', truncated: false, error: result.error }
     const chunk = typeof result.content === 'string' ? result.content : ''
     if (!chunk) break

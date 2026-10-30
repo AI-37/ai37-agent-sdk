@@ -17,6 +17,7 @@ import {
   messageText,
   projectIdFromRefs,
   readAttachmentContents,
+  readStoreWithinBudget,
 } from '../src/attachments'
 import { Ai37ChatCompletions } from '../src/ai37-chat-completions'
 
@@ -280,6 +281,18 @@ describe('extractFromAttachments', () => {
     expect(await extractFromAttachments({ ...base, contents })).toBeNull()
   })
 
+  it('передаёт потолок ответа в модель', async () => {
+    invoke.mockResolvedValue({ content: 'ok' })
+    await extractFromAttachments({ ...base, contents, maxTokens: 4096 })
+    expect(vi.mocked(Ai37ChatCompletions).mock.calls[0][0]).toMatchObject({ maxTokens: 4096 })
+  })
+
+  it('без потолка не задаёт maxTokens', async () => {
+    invoke.mockResolvedValue({ content: 'ok' })
+    await extractFromAttachments({ ...base, contents })
+    expect(vi.mocked(Ai37ChatCompletions).mock.calls[0][0]).not.toHaveProperty('maxTokens')
+  })
+
   it('ошибку модели не глотает', async () => {
     invoke.mockRejectedValue(new Error('429'))
     await expect(extractFromAttachments({ ...base, contents })).rejects.toThrow('429')
@@ -300,5 +313,36 @@ describe('extractionRequest / messageText', () => {
     expect(messageText({ content: ['b', { text: 'c' }] })).toBe('bc')
     expect(messageText({ content: '', additional_kwargs: { reasoning_content: 'd' } })).toBe('d')
     expect(messageText(null)).toBe('')
+  })
+})
+
+describe('readStoreWithinBudget', () => {
+  it('читает окнами по пути бэкенда без скоупа хода и режет по бюджету', async () => {
+    const lines = Array.from({ length: 450 }, (_, i) => `p${i}`)
+    const calls: Array<[string, number | undefined, number | undefined]> = []
+    const backend = {
+      read: async (path: string, offset?: number, limit?: number) => {
+        calls.push([path, offset, limit])
+        return { content: lines.slice(offset ?? 0, (offset ?? 0) + (limit ?? 0)).join('\n') }
+      },
+    }
+    expect(await readStoreWithinBudget(backend, '/f9', 1_000_000)).toEqual({
+      content: lines.join('\n'),
+      truncated: false,
+    })
+    expect(calls.map((c) => c[1])).toEqual([0, 200, 400])
+    expect(calls.every((c) => c[0] === '/f9' && c[2] === 200)).toBe(true)
+    const cut = await readStoreWithinBudget(backend, '/f9', 10)
+    expect(cut).toMatchObject({ truncated: true })
+    expect(cut.content).toHaveLength(10)
+  })
+
+  it('возвращает ошибку бэкенда', async () => {
+    const backend = { read: () => ({ error: 'chat-backend → HTTP 403' }) }
+    expect(await readStoreWithinBudget(backend, '/x', 100)).toEqual({
+      content: '',
+      truncated: false,
+      error: 'chat-backend → HTTP 403',
+    })
   })
 })
