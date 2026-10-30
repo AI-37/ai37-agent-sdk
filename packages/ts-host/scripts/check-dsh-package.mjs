@@ -42,6 +42,15 @@ const cjs = createRequire(process.cwd() + '/package.json')('@ai37/agent-host')
 for (const api of [esm, cjs]) {
   assert.equal(typeof api.createAgentHost, 'function')
   assert.equal('SingleHarnessRuntime' in api, false)
+  // Модуль вложений — корневой экспорт: потребители импортируют его из '@ai37/agent-host'.
+  for (const name of [
+    'attachmentScope',
+    'createAttachmentReaders',
+    'readStoreWithinBudget',
+    'readAttachmentContents',
+    'extractFromAttachments',
+  ])
+    assert.equal(typeof api[name], 'function', name)
 }
 `
 
