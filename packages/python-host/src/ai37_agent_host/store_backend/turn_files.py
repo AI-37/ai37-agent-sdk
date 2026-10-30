@@ -23,14 +23,19 @@ _PROJECT_PREFIX = "project:"
 class AttachmentFile:
     """Один файл хода: адрес для чтения плюс то, что о нём известно из манифеста."""
 
+    #: ``chat-attachment:<id>`` | ``project-attachment:<id>``; у артефактов —
+    #: ``artifact:<id>`` | ``project-artifact:<id>``.
     ref: str
     #: Путь виртуальной ФС (``/chat-attachments/<id>``).
     path: str
     #: Имя из манифеста; если манифест не пришёл — сам ref.
     name: str
+    #: Полка: чат или проект. У артефакта — полка, на которой он лежит.
     scope: Literal["chat", "project"]
     summary: str | None = None
     is_large: bool = False
+    #: ``artifact`` — результат агента из :func:`artifact_scope`; None — вложение пользователя.
+    kind: Literal["artifact"] | None = None
 
 
 @dataclass(frozen=True)

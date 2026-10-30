@@ -1,5 +1,6 @@
 """File-aware store-backends host'а (порт ``ts-host/src/store-backend``)."""
 
+from .artifact_scope import ArtifactScope, artifact_scope
 from .artifacts_store_backend import ArtifactsStoreBackend
 from .attachment_contents import (
     AttachmentContent,
@@ -47,6 +48,8 @@ from .types import (
 )
 
 __all__ = [
+    "ArtifactScope",
+    "artifact_scope",
     "AttachmentContent",
     "AttachmentContentsResult",
     "AttachmentReadFailure",
