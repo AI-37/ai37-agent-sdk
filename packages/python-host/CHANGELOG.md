@@ -4,6 +4,26 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a28]
+
+Полный паритет модуля вложений с `@ai37/agent-host` 0.3.1. В a27 был только сбор файлов хода в
+расчёте на то, что python-агентам остальное не нужно, но агент данных Полиметрики живёт на этом
+хосте, и ему нужно то же, что TS-агентам.
+
+### Added
+- `create_attachment_readers(chat_backend_url=, scope=, bearer=, http_client=)` → `AttachmentReaders`:
+  `read(ref, offset, limit)`, `grep(query)` по обеим полкам, `read_within_budget(ref, chars)`. Читает
+  только файлы хода: ссылку не из скоупа отклоняет, не ходя в сеть. `bearer` по умолчанию
+  `current_bearer`; код вне request-scope хоста передаёт токен явно.
+- `read_store_within_budget(backend, path, budget_chars)`: то же чтение окнами по готовому бэкенду и
+  пути, для файлов вне хода (поиск по корпусу проекта).
+- `read_attachment_contents(readers, budget_chars=)`: тексты файлов хода в общий бюджет, пустые
+  пропускаются, отказы возвращаются с причиной (`attachment_failure_reason`).
+- `extract_from_attachments(system_prompt=, query=, contents=, model=, max_tokens=, extra_body=, …)`:
+  один вызов через `create_openai_client` (LiteLLM, 180 с на попытку, без повтора 429). «нет данных»
+  и пустой ответ дают `None`, ошибки вызова пробрасываются. Формат user-сообщения
+  (`extraction_request`) совпадает с TS-хостом; `message_text` с запасным `reasoning_content`.
+
 ## [0.1.0a27]
 
 Паритет с `@ai37/agent-host` 0.3.0 по сборке файлов хода (срез 0a плана
