@@ -21,6 +21,15 @@ import type {
 // ре-экспортируем отсюда ради обратной совместимости прежних импортов.
 export { hasRequiredAccess } from './access'
 
+// Маршруты state в billing: по аккаунту биллинга (агенты, из JWT) и по организации (сервисы, у
+// которых есть только org_id, например DS для пула проекта). Продукт в обоих — из токена.
+type RuntimeStateRoute = 'by-billing-org' | 'by-org'
+
+const RUNTIME_STATE_ID_LABEL: Record<RuntimeStateRoute, string> = {
+  'by-billing-org': 'billingOrgId',
+  'by-org': 'orgId',
+}
+
 export function createBillingClient(
   options: BillingClientOptions,
 ): BillingClient {
@@ -34,18 +43,26 @@ export function createBillingClient(
   const timeoutMs = options.timeoutMs ?? 5000
   const runtimeStateCacheTtlMs = options.runtimeStateCacheTtlMs ?? 5000
   const fetchImpl = resolveFetch(options.fetch)
+  // Один кэш на оба способа адресации: ключ `<маршрут>:<id>`, поэтому state по billingOrgId и по
+  // orgId не подменяют друг друга, даже если строки id совпали.
   const runtimeStateCache = new LRUCache<string, BillingRuntimeState>({
     max: 10_000,
     ttl: Math.max(runtimeStateCacheTtlMs, 1),
-    fetchMethod: async (billingOrgId) =>
-      fetchRuntimeStateByBillingOrgId(billingOrgId),
+    fetchMethod: async (cacheKey) => {
+      const separator = cacheKey.indexOf(':')
+      return fetchRuntimeState(
+        cacheKey.slice(0, separator) as RuntimeStateRoute,
+        cacheKey.slice(separator + 1),
+      )
+    },
   })
 
-  async function fetchRuntimeStateByBillingOrgId(
-    billingOrgId: string,
+  async function fetchRuntimeState(
+    route: RuntimeStateRoute,
+    id: string,
   ): Promise<BillingRuntimeState> {
     const response = await fetchImpl(
-      `${baseUrl}/api/v1/billing/customers/by-billing-org/${encodeURIComponent(billingOrgId)}/state`,
+      `${baseUrl}/api/v1/billing/customers/${route}/${encodeURIComponent(id)}/state`,
       {
         method: 'GET',
         headers: {
@@ -57,28 +74,42 @@ export function createBillingClient(
 
     await ensureOk(
       response,
-      `Billing state request failed for billingOrgId=${billingOrgId}`,
+      `Billing state request failed for ${RUNTIME_STATE_ID_LABEL[route]}=${id}`,
     )
 
     return (await response.json()) as BillingRuntimeState
   }
 
-  async function getRuntimeStateByBillingOrgId(
-    billingOrgId: string,
+  async function getCachedRuntimeState(
+    route: RuntimeStateRoute,
+    id: string,
   ): Promise<BillingRuntimeState> {
-    const state = await runtimeStateCache.fetch(billingOrgId)
+    const cacheKey = `${route}:${id}`
+    const state = await runtimeStateCache.fetch(cacheKey)
 
     if (!state) {
       throw new Error(
-        `Billing state response was empty for billingOrgId=${billingOrgId}`,
+        `Billing state response was empty for ${RUNTIME_STATE_ID_LABEL[route]}=${id}`,
       )
     }
 
     if (runtimeStateCacheTtlMs === 0) {
-      runtimeStateCache.delete(billingOrgId)
+      runtimeStateCache.delete(cacheKey)
     }
 
     return state
+  }
+
+  async function getRuntimeStateByBillingOrgId(
+    billingOrgId: string,
+  ): Promise<BillingRuntimeState> {
+    return getCachedRuntimeState('by-billing-org', billingOrgId)
+  }
+
+  async function getRuntimeStateByOrgId(
+    orgId: string,
+  ): Promise<BillingRuntimeState> {
+    return getCachedRuntimeState('by-org', orgId)
   }
 
   async function assertExecutionAllowed(
@@ -114,6 +145,7 @@ export function createBillingClient(
 
   return {
     getRuntimeStateByBillingOrgId,
+    getRuntimeStateByOrgId,
     assertExecutionAllowed,
     sendUsageEvent,
   }

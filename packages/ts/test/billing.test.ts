@@ -14,6 +14,7 @@ import {
   normalizeBillingBaseUrl,
 } from '../src'
 import type { BillingRuntimeState } from '../src'
+import { InMemoryBillingClient } from '../src/testing'
 
 describe('normalizeBillingBaseUrl', () => {
   it('removes duplicate trailing slash and api suffix', () => {
@@ -230,6 +231,123 @@ describe('createBillingAppsClient', () => {
     await expect(client.getRuntimeStateByBillingOrgId('missing')).rejects.toMatchObject({
       name: 'BillingRequestError',
       status: 404,
+    })
+  })
+
+  describe('getRuntimeStateByOrgId', () => {
+    function stateResponse(overrides?: Partial<BillingRuntimeState>): Response {
+      return new Response(JSON.stringify(buildRuntimeState(overrides)), {
+        status: 200,
+      })
+    }
+
+    function buildClient(fetchMock: ReturnType<typeof vi.fn>, ttlMs = 10_000) {
+      return createBillingAppsClient({
+        baseUrl: 'https://billing.example.com/api/v1/',
+        authToken: 'ds-apps-token',
+        usageIngestToken: 'ds-apps-token',
+        fetch: fetchMock as typeof fetch,
+        runtimeStateCacheTtlMs: ttlMs,
+      })
+    }
+
+    it('fetches state from the by-org route with the auth token', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(stateResponse())
+      const client = buildClient(fetchMock)
+
+      const state = await client.getRuntimeStateByOrgId('org-1')
+
+      expect(state.billingOrgId).toBe('org-1')
+      expect(fetchMock).toHaveBeenCalledWith(
+        'https://billing.example.com/api/v1/billing/customers/by-org/org-1/state',
+        {
+          method: 'GET',
+          headers: { Authorization: 'Bearer ds-apps-token' },
+          signal: expect.any(AbortSignal),
+        },
+      )
+    })
+
+    it('encodes orgId in the path', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(stateResponse())
+      const client = buildClient(fetchMock)
+
+      await client.getRuntimeStateByOrgId('org/1?x=#y')
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://billing.example.com/api/v1/billing/customers/by-org/org%2F1%3Fx%3D%23y/state',
+      )
+    })
+
+    it('reuses cached state within ttl', async () => {
+      const fetchMock = vi.fn().mockResolvedValue(stateResponse())
+      const client = buildClient(fetchMock)
+
+      const first = await client.getRuntimeStateByOrgId('org-1')
+      const second = await client.getRuntimeStateByOrgId('org-1')
+
+      expect(second).toEqual(first)
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('does not cache when ttl is 0', async () => {
+      const fetchMock = vi.fn().mockImplementation(async () => stateResponse())
+      const client = buildClient(fetchMock, 0)
+
+      await client.getRuntimeStateByOrgId('org-1')
+      await client.getRuntimeStateByOrgId('org-1')
+
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps by-org and by-billing-org cache entries apart for the same id', async () => {
+      const fetchMock = vi.fn().mockImplementation(async (url: string) => {
+        const route = url.includes('/by-org/') ? 'by-org' : 'by-billing-org'
+        return stateResponse({ currentPlanCode: `${route}-plan` })
+      })
+      const client = buildClient(fetchMock)
+
+      const byBillingOrg = await client.getRuntimeStateByBillingOrgId('same-id')
+      const byOrg = await client.getRuntimeStateByOrgId('same-id')
+      const byBillingOrgAgain = await client.getRuntimeStateByBillingOrgId('same-id')
+
+      expect(byBillingOrg.currentPlanCode).toBe('by-billing-org-plan')
+      expect(byOrg.currentPlanCode).toBe('by-org-plan')
+      expect(byBillingOrgAgain.currentPlanCode).toBe('by-billing-org-plan')
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('throws typed error naming orgId and does not cache the failure', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(JSON.stringify({ detail: 'org not found: org-1' }), {
+            status: 404,
+          }),
+        )
+        .mockResolvedValueOnce(stateResponse())
+      const client = buildClient(fetchMock)
+
+      const failure = client.getRuntimeStateByOrgId('org-1')
+      await expect(failure).rejects.toBeInstanceOf(BillingRequestError)
+      await expect(failure).rejects.toMatchObject({
+        status: 404,
+        message: expect.stringContaining(
+          'Billing state request failed for orgId=org-1: HTTP 404',
+        ),
+      })
+      await expect(client.getRuntimeStateByOrgId('org-1')).resolves.toMatchObject({
+        entitlementStatus: 'active',
+      })
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('InMemoryBillingClient serves the fixture state by orgId', async () => {
+      const fake = new InMemoryBillingClient({ runtimeState: buildRuntimeState() })
+
+      await expect(fake.getRuntimeStateByOrgId('any-org')).resolves.toEqual(
+        buildRuntimeState(),
+      )
     })
   })
 

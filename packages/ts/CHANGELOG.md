@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.36] - 2026-10-30
+
+### Added
+
+- `BillingClient.getRuntimeStateByOrgId(orgId)`: state продукта по организации через новый маршрут
+  billing `GET /api/v1/billing/customers/by-org/{orgId}/state`. Нужен сервисам, у которых есть
+  только `org_id` (DS берёт его из записи пула проекта, план docs
+  `plans/project-knowledge-bridge.md`, срез 1a). Продукт billing берёт из токена, аккаунт биллинга
+  находит сам. Кэш общий с `getRuntimeStateByBillingOrgId`, но ключи разведены по маршруту; ошибки
+  того же вида (`BillingRequestError`, в тексте `orgId=<id>`). `InMemoryBillingClient` отдаёт
+  фикстуру и по `orgId`. Работает с billing, где маршрут `by-org` уже выкачен.
+
 ## [0.1.0-alpha.35] - 2026-10-28
 
 ### Added
