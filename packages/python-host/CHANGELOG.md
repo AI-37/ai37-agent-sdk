@@ -4,6 +4,17 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a27]
+
+Паритет с `@ai37/agent-host` 0.3.0 по сборке файлов хода (срез 0a плана
+`docs/plans/search-agent-chat-attachments.md`).
+
+### Added
+- `attachment_scope(context_id, context_refs, context_files)`, `has_file_refs`,
+  `project_id_from_refs` и dataclass'ы `AttachmentFile` / `AttachmentTurnScope` в
+  `ai37_agent_host.store_backend`. Читатели (`Chat/ProjectAttachmentsStoreBackend`) у python-хоста
+  уже есть, извлечение одним вызовом ему пока никто не заказывал.
+
 ## [0.1.0a26]
 
 Наблюдаемость A2A-хода. Нашлось 29.10 в prod Полиметрики, когда агент данных включил Langfuse

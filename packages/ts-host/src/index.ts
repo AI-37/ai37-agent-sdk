@@ -131,6 +131,9 @@ export {
   renderContextFilesManifest,
   contextFilePath,
 } from './store-backend/file-context'
+// Файлы хода без виртуальной ФС: скоуп из context_refs/context_files, чтение по ref (в том числе
+// окнами в бюджет символов), поиск по полкам и извлечение одним LLM-вызовом.
+export * from './attachments'
 export type {
   StoreBackend,
   FileInfo,

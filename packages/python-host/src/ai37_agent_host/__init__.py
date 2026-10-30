@@ -63,7 +63,10 @@ from .store_backend import (
     ChatStoreBackend,
     ProjectAttachmentsStoreBackend,
     StoreBackend,
+    attachment_scope,
     context_file_path,
+    has_file_refs,
+    project_id_from_refs,
     render_context_files_manifest,
 )
 from .types import (
@@ -173,6 +176,9 @@ __all__ = [
     "ChatAttachmentsStoreBackend",
     "ProjectAttachmentsStoreBackend",
     "ChatStoreBackend",
+    "attachment_scope",
+    "has_file_refs",
+    "project_id_from_refs",
     "context_file_path",
     "render_context_files_manifest",
 ]

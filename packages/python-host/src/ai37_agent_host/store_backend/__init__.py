@@ -8,6 +8,13 @@ from .attachments_store_backend import (
 )
 from .chat_store_backend import ChatStoreBackend
 from .file_context import context_file_path, render_context_files_manifest
+from .turn_files import (
+    AttachmentFile,
+    AttachmentTurnScope,
+    attachment_scope,
+    has_file_refs,
+    project_id_from_refs,
+)
 from .types import (
     EditResult,
     FileInfo,
@@ -22,6 +29,11 @@ from .types import (
 )
 
 __all__ = [
+    "AttachmentFile",
+    "AttachmentTurnScope",
+    "attachment_scope",
+    "has_file_refs",
+    "project_id_from_refs",
     "context_file_path",
     "render_context_files_manifest",
     "StoreBackend",
