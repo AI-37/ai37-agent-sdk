@@ -3,6 +3,19 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.3.1] - 2026-10-30
+
+Доработки модуля вложений по первому потребителю, которому 0.3.0 не хватило (pdai-doc-gen-agent,
+срез 0b плана `docs/plans/search-agent-chat-attachments.md`).
+
+### Added
+- `extractFromAttachments({ maxTokens })`: потолок ответа модели. Через `modelKwargs.max_tokens` его
+  не задать: LangChain перезаписывает поле своим `maxTokens`.
+- `readStoreWithinBudget(backend, path, budgetChars)`: чтение окнами в бюджет символов по готовому
+  StoreBackend и пути, без скоупа хода. Для файлов, которые агент нашёл сам (поиск по корпусу
+  проекта) и которые к ходу не приложены. Читатели хода (`createAttachmentReaders`) по-прежнему
+  отдают только файлы хода; `readWithinBudget` у них работает поверх той же функции.
+
 ## [0.3.0] - 2026-10-30
 
 Файлы хода без виртуальной ФС (план `docs/plans/search-agent-chat-attachments.md`, срез 0a).

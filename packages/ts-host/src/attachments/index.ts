@@ -1,6 +1,6 @@
 export { attachmentScope, hasFileRefs, projectIdFromRefs } from './turn-files'
 export type { AttachmentFile, AttachmentTurnInput, AttachmentTurnScope } from './turn-files'
-export { attachmentFailureReason, createAttachmentReaders } from './readers'
+export { attachmentFailureReason, createAttachmentReaders, readStoreWithinBudget } from './readers'
 export type {
   AttachmentGrepHit,
   AttachmentReaders,
