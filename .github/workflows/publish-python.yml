@@ -55,8 +55,19 @@ jobs:
         with:
           # единый источник версии рантайма — packages/python/.python-version (как локально через pyenv)
           python-version-file: packages/python/.python-version
+      # Poetry — официальным установщиком (install.python-poetry.org), версия = та, что сгенерировала
+      # poetry.lock. POETRY_HOME в runner.temp: каталог чистится после каждой джобы, поэтому на
+      # self-hosted раннере ничего не копится в ~/.local и не ломается, когда из toolcache удаляют
+      # Python, на котором был поставлен инструмент (так сломался прежний `pipx install poetry`).
+      # Ставится после setup-python, на его Python.
       - name: install poetry
-        run: pipx install poetry
+        shell: bash  # bash -eo pipefail: упавший curl не превратится в «успешный» пустой скрипт
+        env:
+          POETRY_HOME: ${{ runner.temp }}/poetry
+          POETRY_VERSION: 2.3.2
+        run: |
+          curl -fsSL https://install.python-poetry.org | python3 -
+          echo "$POETRY_HOME/bin" >> "$GITHUB_PATH"
       - name: install deps
         run: poetry install --with dev --no-interaction
       - name: verify (ruff + mypy + pytest)
@@ -64,8 +75,10 @@ jobs:
           poetry run ruff check .
           poetry run mypy src
           poetry run pytest
+      # twine — pip-ом в Python из setup-python, а не через pipx: pipx self-hosted раннера живёт на
+      # Python хоста и ломается вместе с ним (как прежний `pipx install poetry`).
       - name: install twine
-        run: pipx install twine
+        run: python -m pip install twine
       - name: build
         run: poetry build --no-interaction
       - name: publish (dry-run)
