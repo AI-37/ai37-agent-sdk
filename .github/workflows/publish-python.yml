@@ -11,7 +11,8 @@ name: publish · ai37-agent-sdk (PyPI)
 # Требуемый секрет репозитория:
 #   AI37_PYPI_TOKEN — пароль pypi-юзера ci-publish; прокидывается как TWINE_PASSWORD.
 #
-# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
+# Раннер — по канону AI-37 (блок в `on:` ниже): auto → переменная CD_RUNNER → ubuntu-24.04;
+# ручной запуск может явно выбрать ubuntu-latest или self-hosted ai37-local-1.
 
 on:
   # Раннер (канон AI-37): ручной запуск с runner=ubuntu-latest или ai37-self-hosted выбирает
