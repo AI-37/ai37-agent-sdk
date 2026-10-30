@@ -3,6 +3,26 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.3.0] - 2026-10-30
+
+Файлы хода без виртуальной ФС (план `docs/plans/search-agent-chat-attachments.md`, срез 0a).
+Раньше эту логику держал у себя каждый агент: `file-enricher.ts` лежал пятью копиями (шаблон,
+search-agent, elevator, thermal, doc-gen), и копии разошлись до 464 строк.
+
+### Added
+- `attachmentScope({ contextId, contextRefs, contextFiles })`: список файлов хода из `context_refs`
+  и манифеста `context_files`, без дублей, с `projectId` из `project:<id>`. Рядом `hasFileRefs`,
+  `projectIdFromRefs`.
+- `createAttachmentReaders({ chatBackendUrl, scope, bearer? })`: `read` окнами по ref, `grep` по обеим
+  полкам, `readWithinBudget` (окна по 200 строк до бюджета символов). Читает только файлы хода: ссылку
+  не из скоупа отклоняет, не ходя в сеть. `bearer` можно передать явно для кода вне request-scope
+  хоста (мост DSH); по умолчанию `currentBearer`.
+- `readAttachmentContents(readers, { budgetChars })`: тексты всех файлов хода в общий бюджет, пустые
+  пропускаются, отказы возвращаются с причиной (`access_denied` / `unavailable` / `reader_failed`).
+- `extractFromAttachments(...)`: извлечение одним LLM-вызовом через `Ai37ChatCompletions` с
+  Langfuse-обработчиком хода; «нет данных» и пустой ответ дают `null`, ошибки вызова не глотаются.
+  Рядом `extractionRequest` и `messageText` (с запасным `reasoning_content`).
+
 ## [0.2.7] - 2026-10-23
 
 ### Added
