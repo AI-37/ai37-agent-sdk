@@ -16,16 +16,17 @@ name: publish · @ai37/agent-host (npm)
 # Требуемый секрет репозитория:
 #   AI37_NPM_TOKEN — base64("ci-publish:<пароль>") для _auth издателя (право publish на scope @ai37).
 #
-# Раннер выбирается инпутом: ubuntu-latest (дефолт) или self-hosted ai37-local-1.
+# Раннер — по канону AI-37 (блок в `on:` ниже): auto → переменная CD_RUNNER → ubuntu-24.04;
+# ручной запуск может явно выбрать ubuntu-latest или self-hosted ai37-local-1.
 
 on:
   # Раннер (канон AI-37): ручной запуск с runner=ubuntu-latest или ai37-self-hosted выбирает
   # явно; auto и автозапуск берут переменную организации CD_RUNNER — раннер деплоя и публикации (CD),
-  # JSON-массив меток, напр. ["self-hosted","ai37-local-1"]; без неё — ubuntu-latest.
+  # JSON-массив меток, напр. ["self-hosted","ai37-local-1"]; без неё — ubuntu-24.04.
   workflow_dispatch:
     inputs:
       runner:
-        description: "Runner: auto = переменная CD_RUNNER, иначе ubuntu-latest"
+        description: "Runner: auto = переменная CD_RUNNER, иначе ubuntu-24.04"
         type: choice
         required: true
         default: auto
@@ -49,7 +50,7 @@ concurrency:
 jobs:
   publish:
     name: npm publish · @ai37/agent-host
-    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CD_RUNNER && fromJSON(vars.CD_RUNNER) || 'ubuntu-latest' }}
+    runs-on: ${{ inputs.runner == 'ai37-self-hosted' && fromJSON('["self-hosted", "ai37-local-1"]') || inputs.runner == 'ubuntu-latest' && 'ubuntu-latest' || vars.CD_RUNNER && fromJSON(vars.CD_RUNNER) || 'ubuntu-24.04' }}
     timeout-minutes: 20
     # agent-host тянет @ai37/a2ui-catalog-schemas и @ai37/agent-sdk из Verdaccio, поэтому
     # приватный .npmrc нужен ВСЕМ шагам (в т.ч. npm ci), а не только publish → задаём env на
