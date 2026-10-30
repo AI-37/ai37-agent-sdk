@@ -113,6 +113,8 @@ export { ArtifactsStoreBackend } from './store-backend/artifacts-store-backend'
 export type {
   ArtifactsStoreBackendOptions,
   ArtifactFileBody,
+  ArtifactFileDto,
+  ArtifactMetaDto,
 } from './store-backend/artifacts-store-backend'
 export {
   publishArtifact,
@@ -127,6 +129,9 @@ export type {
   PublishedArtifactFile,
   ArtifactPublishErrorCode,
 } from './artifacts/publish-artifact'
+// База проекта: загрузка в пул проекта document-service (JWT пользователя или служебный токен
+// client_credentials), поиск документа пула по названию и мост chat-backend «добавить в базу проекта».
+export * from './project-knowledge'
 export {
   renderContextFilesManifest,
   contextFilePath,

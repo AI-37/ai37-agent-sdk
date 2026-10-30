@@ -301,6 +301,34 @@ const artifact = await publishArtifact({
 `/project-artifacts/` в `CompositeBackend`) по явному ref или поиском по проекту. В
 `context_files` артефакты не попадают (ADR 13).
 
+Корпус артефактов хода (тред и проект) загружает `artifactScope`, а читатели вложений принимают его
+наравне с файлами хода и так же не отдают ничего вне загруженного списка:
+
+```ts
+const artifacts = await artifactScope({ chatBackendUrl, contextId, projectId })
+const readers = createAttachmentReaders({ chatBackendUrl, scope, artifacts })
+await readers.read('project-artifact:<id>', { offset: 0, limit: 200 })
+```
+
+## База проекта: пул проекта в document-service
+
+Долговременная база проекта — пул проекта DS (`/api/project-pools/{projectKey}/documents`, ключ —
+id проекта chat-backend). Загрузчик один на всех:
+
+```ts
+// фоновая задача: служебный клиент Authentik, токен кэшируется до истечения
+const bearer = await serviceToken({ issuer, clientId, clientSecret })
+const res = await uploadToProjectPool({ documentServiceUrl, projectKey, file, fileName, bearer })
+// { seriesId } или { duplicateOf: { id, title } } — тот же файл уже в пуле
+```
+
+- Отказы — `ProjectPoolError` с кодом DS (`pool_not_found`, `documents_not_in_plan`, …); при
+  `upload_busy` в ошибке `retryAfterSeconds`.
+- `findProjectDocumentByTitle` находит документ пула по названию целиком (имя файла без расширения).
+- `indexToProject({ chatBackendUrl, projectId, refs })` — мост chat-backend «добавить в базу
+  проекта» с JWT пользователя; результат по каждому ref (`sent`, `already_indexed`, `not_indexable`,
+  `busy`, `rejected`).
+
 ## Установка
 
 ```bash

@@ -13,14 +13,14 @@ import type {
 } from './types'
 
 /** DTO `/api/artifacts` chat-backend (см. artifacts.types на стороне chat-backend). */
-interface ArtifactFileDto {
+export interface ArtifactFileDto {
   id: string
   fileName: string
   mime: string
   bytes: number
   sha256: string
 }
-interface ArtifactMetaDto {
+export interface ArtifactMetaDto {
   id: string
   kind: string
   name: string
@@ -95,7 +95,7 @@ export class ArtifactsStoreBackend implements StoreBackend {
 
   async ls(path: string): Promise<LsResult> {
     if (parse(path) !== '') return { error: `Не директория: ${path}` }
-    const list = await this.manifest()
+    const list = await this.list()
     return 'error' in list ? list : { files: list.artifacts.map(fileInfo) }
   }
 
@@ -103,7 +103,7 @@ export class ArtifactsStoreBackend implements StoreBackend {
     const id = parse(path)
     if (id === null) return { error: `Неизвестный путь: ${path}` }
     if (id === '') {
-      const list = await this.manifest()
+      const list = await this.list()
       if ('error' in list) return list
       return { content: renderManifest(list.artifacts), mimeType: 'text/markdown' }
     }
@@ -120,7 +120,7 @@ export class ArtifactsStoreBackend implements StoreBackend {
 
   // path игнорируем: корпус берётся из резолвера хода, не из пути.
   async glob(pattern: string, _path?: string): Promise<GlobResult> {
-    const list = await this.manifest()
+    const list = await this.list()
     if ('error' in list) return list
     const needle = pattern.replace(/[*?]/g, '').trim().toLowerCase()
     return {
@@ -190,9 +190,8 @@ export class ArtifactsStoreBackend implements StoreBackend {
     }
   }
 
-  // ── helpers ──────────────────────────────────────────────────────────────────
-
-  private async manifest(): Promise<{ artifacts: ArtifactMetaDto[] } | { error: string }> {
+  /** Артефакты корпуса с метаданными (имя, kind, файлы): из них собирается скоуп артефактов хода. */
+  async list(): Promise<{ artifacts: ArtifactMetaDto[] } | { error: string }> {
     const scope = this.scope()
     if (!scope) return { error: SCOPE_MISSING }
     try {
@@ -201,6 +200,8 @@ export class ArtifactsStoreBackend implements StoreBackend {
       return { error: errMsg(e) }
     }
   }
+
+  // ── helpers ──────────────────────────────────────────────────────────────────
 
   private async json<T>(path: string, query?: Record<string, string>): Promise<T> {
     const res = await this.request(path, query, 'application/json')

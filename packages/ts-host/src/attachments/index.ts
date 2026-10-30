@@ -16,3 +16,5 @@ export type {
 } from './contents'
 export { extractFromAttachments, extractionRequest, messageText } from './extract'
 export type { ExtractFromAttachmentsOptions } from './extract'
+export { artifactScope } from './artifact-scope'
+export type { ArtifactScope, ArtifactScopeOptions } from './artifact-scope'

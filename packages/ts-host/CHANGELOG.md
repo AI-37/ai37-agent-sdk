@@ -3,6 +3,46 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.4.0] - 2026-10-30
+
+База проекта: мост рабочих полок в document-service (план `docs/plans/project-knowledge-bridge.md`,
+срез 2, AI-37/docs#556). Один загрузчик в пул проекта DS на всех: на нём строят мост chat-backend
+(срез 3), поиск (срез 4) и фоновые отчёты агента данных Полиметрики (срез 6).
+
+### Added
+- `uploadToProjectPool({ documentServiceUrl, projectKey, file, fileName, projectName?, bearer })`:
+  файл в пул проекта DS (`POST /api/project-pools/{projectKey}/documents`) телом без multipart, с
+  `X-File-Name`, `X-Project-Name` и `Content-Length`. `file` — `Uint8Array`/`Buffer`, `Blob` или
+  `{ stream, size }` (поток уходит полудуплексом). Результат `{ seriesId }`; повтор того же
+  содержимого (`409 duplicate`) — `{ duplicateOf: { id, title } }`. Отказы — `ProjectPoolError` с кодом
+  DS из тела (`pool_not_found`, `ambiguous_project_pool`, `documents_not_in_plan`, …), у
+  `upload_busy` ещё `retryAfterSeconds` из `Retry-After`.
+- `findProjectDocumentByTitle({ documentServiceUrl, projectKey, title, bearer })`: документ пула с
+  точно таким названием или `null`, через `GET /api/project-pools/{key}/documents?search=` (DS ищет
+  подстрокой, SDK сверяет название целиком и листает страницы).
+- `serviceToken({ issuer, clientId, clientSecret, scope? })`: токен `client_credentials` для фоновых
+  задач. `token_endpoint` из discovery issuer'а; токен в памяти до истечения с запасом (минута, у
+  короткоживущих половина срока), параллельные вызовы ждут один запрос. Ошибки — `ServiceTokenError`.
+- `indexToProject({ chatBackendUrl, projectId, refs, bearer? })`: мост chat-backend
+  `POST /api/project-knowledge`. По каждому ref `sent` (с `seriesId`), `already_indexed`,
+  `not_indexable` (с `reason`), `busy` (с `retryAfterSeconds`) или `rejected` с кодом (`access_grant`,
+  `project_private`, `role_forbidden`, …). Типы запроса и ответа (`ProjectKnowledgeRequest`,
+  `ProjectKnowledgeResponse`, `ProjectKnowledgeRefResult`) — контракт для маршрута среза 3. Отказ
+  запроса целиком — `ProjectKnowledgeError` в стиле `ArtifactPublishError`; bearer по умолчанию
+  `currentBearer`.
+- `artifactScope({ chatBackendUrl, contextId, projectId?, bearer? })`: артефакты треда
+  (`artifact:<id>`) и проекта (`project-artifact:<id>`) через `ArtifactsStoreBackend`. Список, который
+  не загрузился, попадает в `errors`, остальное работает.
+- `createAttachmentReaders({ ..., artifacts })`: артефакты читаются, ищутся и попадают в
+  `readAttachmentContents` наравне с файлами хода, с той же охраной: ref не из загруженного списка не
+  читается и в сеть не уходит. `grep` по артефактам — FTS chat-backend, `line` у таких совпадений 1,
+  окно читается с начала.
+- `ArtifactsStoreBackend.list()`: манифест корпуса с метаданными; типы `ArtifactMetaDto`,
+  `ArtifactFileDto` экспортируются из корня.
+- `AttachmentFile.kind?: 'artifact'` у файлов из `artifactScope`; у вложений поля нет.
+
+Существующие сигнатуры не меняются: без `artifacts` читатели работают как в 0.3.1.
+
 ## [0.3.1] - 2026-10-30
 
 Доработки модуля вложений по первому потребителю, которому 0.3.0 не хватило (pdai-doc-gen-agent,
