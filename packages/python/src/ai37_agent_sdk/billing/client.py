@@ -20,12 +20,17 @@ from .types import (
 # импорт выше держит его доступным и как billing.client.has_required_access (совместимость).
 __all__ = ["HttpBillingClient", "create_billing_client", "has_required_access"]
 
+# Маршруты state в billing: по аккаунту биллинга (агенты, из JWT) и по организации (сервисы, у
+# которых есть только org_id). В тексте ошибки — то же имя id, что и в TS-клиенте.
+_RUNTIME_STATE_ID_LABEL = {"by-billing-org": "billingOrgId", "by-org": "orgId"}
+
 
 class HttpBillingClient:
     """Клиент billing-сервиса.
 
-    Эндпоинты: GET .../api/v1/billing/customers/by-billing-org/{id}/state, POST .../api/v1/events.
-    runtime state кэшируется по billing_org_id (TTL).
+    Эндпоинты: GET .../api/v1/billing/customers/by-billing-org/{id}/state,
+    GET .../api/v1/billing/customers/by-org/{org_id}/state, POST .../api/v1/events.
+    runtime state кэшируется по маршруту и id (TTL).
     """
 
     def __init__(
@@ -55,24 +60,38 @@ class HttpBillingClient:
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"}
 
-    def _fetch_state(self, billing_org_id: str) -> BillingRuntimeState:
-        encoded = quote(billing_org_id, safe="")
-        url = f"{self._base}/api/v1/billing/customers/by-billing-org/{encoded}/state"
+    def _fetch_state(self, route: str, id_: str) -> BillingRuntimeState:
+        encoded = quote(id_, safe="")
+        url = f"{self._base}/api/v1/billing/customers/{route}/{encoded}/state"
         response = self._client.get(url, headers=self._auth_headers())
-        ensure_ok(response, f"Billing state request failed for billingOrgId={billing_org_id}")
+        label = _RUNTIME_STATE_ID_LABEL[route]
+        ensure_ok(response, f"Billing state request failed for {label}={id_}")
         return BillingRuntimeState.from_api(response.json())
+
+    def _cached_state(self, route: str, id_: str) -> BillingRuntimeState:
+        # Ключ кэша — пара (маршрут, id): state по billing_org_id и по org_id не подменяют друг
+        # друга, даже если строки id совпали.
+        key = f"{route}:{id_}"
+        if self._ttl > 0:
+            hit = self._cache.get(key)
+            if hit is not None and (time.monotonic() - hit[0]) < self._ttl:
+                return hit[1]
+        state = self._fetch_state(route, id_)
+        if self._ttl > 0:
+            self._cache[key] = (time.monotonic(), state)
+        return state
 
     def get_runtime_state_by_billing_org_id(
         self, billing_org_id: str
     ) -> BillingRuntimeState:
-        if self._ttl > 0:
-            hit = self._cache.get(billing_org_id)
-            if hit is not None and (time.monotonic() - hit[0]) < self._ttl:
-                return hit[1]
-        state = self._fetch_state(billing_org_id)
-        if self._ttl > 0:
-            self._cache[billing_org_id] = (time.monotonic(), state)
-        return state
+        return self._cached_state("by-billing-org", billing_org_id)
+
+    def get_runtime_state_by_org_id(self, org_id: str) -> BillingRuntimeState:
+        """State продукта по организации: для сервисов, у которых есть только org_id.
+
+        Продукт billing берёт из токена, аккаунт биллинга по организации находит сам.
+        """
+        return self._cached_state("by-org", org_id)
 
     def assert_execution_allowed(
         self,

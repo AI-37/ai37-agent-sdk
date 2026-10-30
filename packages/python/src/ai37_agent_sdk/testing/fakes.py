@@ -37,6 +37,9 @@ class InMemoryBillingClient:
     ) -> BillingRuntimeState:
         return self._state
 
+    def get_runtime_state_by_org_id(self, org_id: str) -> BillingRuntimeState:  # noqa: ARG002
+        return self._state
+
     def assert_execution_allowed(
         self,
         billing_org_id: str,  # noqa: ARG002

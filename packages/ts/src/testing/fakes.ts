@@ -42,6 +42,10 @@ export class InMemoryBillingClient implements BillingClient {
     return this.state
   }
 
+  async getRuntimeStateByOrgId(_orgId: string): Promise<BillingRuntimeState> {
+    return this.state
+  }
+
   async assertExecutionAllowed(
     _billingOrgId: string,
     requirement?: BillingExecutionRequirement,

@@ -15,6 +15,7 @@ from ai37_agent_sdk import (
 )
 from ai37_agent_sdk.billing import BillingExecutionDeniedError
 from ai37_agent_sdk.billing.types import BillingRuntimeState, BillingUsageEventInput
+from ai37_agent_sdk.testing import InMemoryBillingClient
 
 ACTIVE = {
     "orgId": "u1",
@@ -129,6 +130,108 @@ def test_request_error():
     with pytest.raises(BillingRequestError) as exc:
         client.get_runtime_state_by_billing_org_id("org1")
     assert exc.value.status == 500
+
+
+# --- state по организации (by-org): DS знает только org_id пула проекта ---
+
+
+def _cached_client(handler, ttl_ms: int = 10_000):
+    return create_billing_client(
+        base_url="http://billing.test/api/v1/",
+        auth_token="ds-apps",
+        usage_ingest_token="ds-apps",
+        http_client=httpx.Client(transport=httpx.MockTransport(handler)),
+        runtime_state_cache_ttl_ms=ttl_ms,
+    )
+
+
+def test_state_by_org_id_uses_by_org_route():
+    def handler(req: httpx.Request) -> httpx.Response:
+        assert req.headers["authorization"] == "Bearer ds-apps"
+        assert str(req.url) == "http://billing.test/api/v1/billing/customers/by-org/org-1/state"
+        return httpx.Response(200, json=ACTIVE)
+
+    state = _cached_client(handler).get_runtime_state_by_org_id("org-1")
+    assert state.billing_org_id == "org1"
+    assert state.entitlement_status == "active"
+
+
+def test_state_by_org_id_encodes_id():
+    seen: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.url.raw_path.decode())
+        return httpx.Response(200, json=ACTIVE)
+
+    _cached_client(handler).get_runtime_state_by_org_id("org/1?x=#y")
+    assert seen == ["/api/v1/billing/customers/by-org/org%2F1%3Fx%3D%23y/state"]
+
+
+def test_state_by_org_id_is_cached_within_ttl():
+    calls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req.url.path)
+        return httpx.Response(200, json=ACTIVE)
+
+    client = _cached_client(handler)
+    first = client.get_runtime_state_by_org_id("org-1")
+    second = client.get_runtime_state_by_org_id("org-1")
+    assert second == first
+    assert len(calls) == 1
+
+
+def test_state_by_org_id_not_cached_when_ttl_is_zero():
+    calls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req.url.path)
+        return httpx.Response(200, json=ACTIVE)
+
+    client = _cached_client(handler, ttl_ms=0)
+    client.get_runtime_state_by_org_id("org-1")
+    client.get_runtime_state_by_org_id("org-1")
+    assert len(calls) == 2
+
+
+def test_state_cache_keeps_by_org_and_by_billing_org_apart():
+    calls: list[str] = []
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        calls.append(req.url.path)
+        route = "by-org" if "/by-org/" in req.url.path else "by-billing-org"
+        return httpx.Response(200, json={**ACTIVE, "currentPlanCode": f"{route}-plan"})
+
+    client = _cached_client(handler)
+    by_billing_org = client.get_runtime_state_by_billing_org_id("same-id")
+    by_org = client.get_runtime_state_by_org_id("same-id")
+    by_billing_org_again = client.get_runtime_state_by_billing_org_id("same-id")
+
+    assert by_billing_org.current_plan_code == "by-billing-org-plan"
+    assert by_org.current_plan_code == "by-org-plan"
+    assert by_billing_org_again.current_plan_code == "by-billing-org-plan"
+    assert len(calls) == 2
+
+
+def test_state_by_org_id_error_names_org_and_is_not_cached():
+    responses = [
+        httpx.Response(404, json={"detail": "org not found: org-1"}),
+        httpx.Response(200, json=ACTIVE),
+    ]
+
+    client = _cached_client(lambda req: responses.pop(0))
+    with pytest.raises(BillingRequestError) as exc:
+        client.get_runtime_state_by_org_id("org-1")
+    assert exc.value.status == 404
+    assert "Billing state request failed for orgId=org-1: HTTP 404" in str(exc.value)
+
+    assert client.get_runtime_state_by_org_id("org-1").entitlement_status == "active"
+
+
+def test_in_memory_fake_serves_state_by_org_id():
+    state = BillingRuntimeState.from_api(ACTIVE)
+    fake = InMemoryBillingClient(runtime_state=state)
+    assert fake.get_runtime_state_by_org_id("any-org") is state
 
 
 # --- информативность отказа (explain_denial / BillingExecutionDeniedError / friendly) ---

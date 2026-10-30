@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a28] - 2026-10-30
+
+### Added
+
+- `BillingClient.get_runtime_state_by_org_id(org_id)`: state продукта по организации через маршрут
+  billing `GET /api/v1/billing/customers/by-org/{org_id}/state`; паритет с TS `0.1.0-alpha.36`.
+  Кэш общий с `get_runtime_state_by_billing_org_id`, ключи разведены по маршруту; ошибки того же
+  вида (`BillingRequestError`, в тексте `orgId=<id>`). Метод есть в Protocol `BillingClient` и в
+  `InMemoryBillingClient`.
+
 ## [0.1.0a27] - 2026-10-28
 
 ### Added

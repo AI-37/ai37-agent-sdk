@@ -91,6 +91,11 @@ export interface BillingClient {
   getRuntimeStateByBillingOrgId(
     billingOrgId: string,
   ): Promise<BillingRuntimeState>
+  /**
+   * State продукта по организации (`GET .../customers/by-org/{orgId}/state`): для сервисов, у
+   * которых есть только org_id. Продукт billing берёт из токена, аккаунт биллинга находит сам.
+   */
+  getRuntimeStateByOrgId(orgId: string): Promise<BillingRuntimeState>
   assertExecutionAllowed(
     billingOrgId: string,
     requirement?: BillingExecutionRequirement,

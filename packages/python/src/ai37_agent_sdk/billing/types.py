@@ -101,6 +101,8 @@ class BillingClient(Protocol):
         self, billing_org_id: str
     ) -> BillingRuntimeState: ...
 
+    def get_runtime_state_by_org_id(self, org_id: str) -> BillingRuntimeState: ...
+
     def assert_execution_allowed(
         self,
         billing_org_id: str,
