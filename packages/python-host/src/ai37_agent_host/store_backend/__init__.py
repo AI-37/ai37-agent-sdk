@@ -1,6 +1,24 @@
 """File-aware store-backends host'а (порт ``ts-host/src/store-backend``)."""
 
 from .artifacts_store_backend import ArtifactsStoreBackend
+from .attachment_contents import (
+    AttachmentContent,
+    AttachmentContentsResult,
+    AttachmentReadFailure,
+    extract_from_attachments,
+    extraction_request,
+    message_text,
+    read_attachment_contents,
+)
+from .attachment_readers import (
+    AttachmentGrepHit,
+    AttachmentGrepResult,
+    AttachmentReaders,
+    WindowedRead,
+    attachment_failure_reason,
+    create_attachment_readers,
+    read_store_within_budget,
+)
 from .attachments_store_backend import (
     AttachmentsStoreBackendBase,
     ChatAttachmentsStoreBackend,
@@ -29,6 +47,20 @@ from .types import (
 )
 
 __all__ = [
+    "AttachmentContent",
+    "AttachmentContentsResult",
+    "AttachmentReadFailure",
+    "AttachmentGrepHit",
+    "AttachmentGrepResult",
+    "AttachmentReaders",
+    "WindowedRead",
+    "attachment_failure_reason",
+    "create_attachment_readers",
+    "read_store_within_budget",
+    "read_attachment_contents",
+    "extract_from_attachments",
+    "extraction_request",
+    "message_text",
     "AttachmentFile",
     "AttachmentTurnScope",
     "attachment_scope",
