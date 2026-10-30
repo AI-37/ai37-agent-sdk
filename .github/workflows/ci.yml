@@ -150,10 +150,22 @@ jobs:
         if: ${{ !cancelled() }}
         with:
           python-version-file: packages/python/.python-version
+      # Poetry — официальным установщиком (install.python-poetry.org), версия = та, что сгенерировала
+      # poetry.lock (у всех трёх пакетов 2.3.2). POETRY_HOME в runner.temp: каталог чистится после
+      # каждой джобы, поэтому на self-hosted раннере ничего не копится в ~/.local и не ломается, когда
+      # из toolcache удаляют Python, на котором был поставлен инструмент (так сломался прежний
+      # `pipx install poetry`). Ставится после первого setup-python, на его Python; окружение каждого
+      # пакета poetry создаёт на Python из его setup-python (`poetry env use python`).
       - name: install poetry
         id: poetry
         if: ${{ !cancelled() && steps.py.outcome == 'success' }}
-        run: pipx install poetry
+        shell: bash  # bash -eo pipefail: упавший curl не превратится в «успешный» пустой скрипт
+        env:
+          POETRY_HOME: ${{ runner.temp }}/poetry
+          POETRY_VERSION: 2.3.2
+        run: |
+          curl -fsSL https://install.python-poetry.org | python3 -
+          echo "$POETRY_HOME/bin" >> "$GITHUB_PATH"
 
       # ───────────────────────── ai37-agent-sdk (Python) ─────────────────────────
       - name: py · ai37-agent-sdk · install
