@@ -49,8 +49,8 @@ jobs:
       run:
         working-directory: packages/capture-contract
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           # единый источник версии рантайма — packages/capture-contract/.python-version
           python-version-file: packages/capture-contract/.python-version
