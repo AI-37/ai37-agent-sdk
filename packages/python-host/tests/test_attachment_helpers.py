@@ -121,7 +121,8 @@ async def test_read_store_within_budget_reads_by_path_without_turn_scope():
 
     res = await read_store_within_budget(Backend(), "/f9", 1_000_000)
     assert res.content == "\n".join(lines) and not res.truncated
-    assert calls == [("/f9", 0, 200), ("/f9", 200, 200)]
+    # На строку больше окна: по ней видно, что файл продолжается.
+    assert calls == [("/f9", 0, 201), ("/f9", 200, 201)]
 
 
 def test_failure_reason():
@@ -223,3 +224,108 @@ def test_request_format_matches_ts_host_and_reasoning_fallback():
     assert message_text(_response("a")) == "a"
     assert message_text(_response("", "d")) == "d"
     assert message_text(SimpleNamespace(choices=[])) == ""
+
+
+# ── чтение окнами в бюджет по контракту полки chat-backend ────────────────────────────────────
+
+
+def _window_lines(markdown: str, offset: int | None, limit: int | None) -> str:
+    """Копия chat-backend ``windowLines`` (src/attachments/attachments.types.ts): строки через \\n,
+    без номеров и без признака конца; пустая строка на краю окна даёт \\n на краю."""
+    if not offset and limit is None:
+        return markdown
+    lines = markdown.split("\n")
+    start = max(0, offset or 0)
+    end = len(lines) if limit is None else start + max(0, limit)
+    return "\n".join(lines[start:end])
+
+
+class _Shelf:
+    """Полка-фейк: окна режет как chat-backend и записывает запросы."""
+
+    def __init__(self, markdown: str | None = None, endless: bool = False) -> None:
+        self.markdown = markdown or ""
+        self.endless = endless
+        self.calls: list[tuple[int | None, int | None]] = []
+
+    async def read(self, file_path, offset=None, limit=None):
+        self.calls.append((offset, limit))
+        if self.endless:
+            return SimpleNamespace(content="\n".join(["x"] * limit), error=None)
+        return SimpleNamespace(content=_window_lines(self.markdown, offset, limit), error=None)
+
+
+def _paragraphs(count: int) -> str:
+    """Markdown из docx: абзацы через пустую строку, так что каждая вторая строка пустая."""
+    return "\n".join(f"Абзац {i}: текст абзаца." if i % 2 == 0 else "" for i in range(count))
+
+
+async def test_window_file_of_3001_lines_with_blank_every_other_line_is_read_whole():
+    markdown = _paragraphs(3001)
+    shelf = _Shelf(markdown)
+    assert markdown.split("\n")[199] == ""
+    res = await read_store_within_budget(shelf, "/f", 1_000_000)
+    assert (res.content, res.truncated) == (markdown, False)
+    assert len(shelf.calls) == 16
+
+
+async def test_window_same_file_through_turn_readers_and_rest():
+    markdown = _paragraphs(3001)
+
+    def handler(req: httpx.Request) -> httpx.Response:
+        offset = int(req.url.params["offset"])
+        limit = int(req.url.params["limit"])
+        return httpx.Response(200, json={"content": _window_lines(markdown, offset, limit)})
+
+    res = await _readers(handler).read_within_budget("chat-attachment:c1", 1_000_000)
+    assert (res.content, res.truncated) == (markdown, False)
+
+
+async def test_window_blank_lines_at_window_joints_survive():
+    lines = [f"l{i}" for i in range(450)]
+    lines[199] = ""  # последняя строка первого окна
+    lines[200] = ""  # первая строка второго
+    lines[400] = ""  # первая строка третьего
+    markdown = "\n".join(lines)
+    res = await read_store_within_budget(_Shelf(markdown), "/f", 1_000_000)
+    assert (res.content, res.truncated) == (markdown, False)
+
+
+async def test_window_file_of_exactly_n_windows_and_trailing_newline():
+    markdown = "\n".join(f"l{i}" for i in range(400))
+    exact = _Shelf(markdown)
+    res = await read_store_within_budget(exact, "/f", 1_000_000)
+    assert (res.content, res.truncated) == (markdown, False)
+    assert exact.calls == [(0, 201), (200, 201)]
+    # 400 строк и \n в конце — это 401-я, пустая строка: она в третьем окне.
+    res = await read_store_within_budget(_Shelf(markdown + "\n"), "/f", 1_000_000)
+    assert (res.content, res.truncated) == (markdown + "\n", False)
+
+
+async def test_window_empty_file():
+    shelf = _Shelf("")
+    res = await read_store_within_budget(shelf, "/f", 100)
+    assert (res.content, res.truncated) == ("", False)
+    assert len(shelf.calls) == 1
+
+
+async def test_window_budget_below_file_cuts_exactly_at_budget():
+    markdown = _paragraphs(3001)
+    first_window = len("\n".join(markdown.split("\n")[:200]))
+    for budget in (1, first_window, first_window + 1, 5_000):
+        res = await read_store_within_budget(_Shelf(markdown), "/f", budget)
+        assert (res.content, res.truncated) == (markdown[:budget], True)
+
+
+async def test_window_budget_equal_to_file_is_not_truncated():
+    markdown = _paragraphs(3001)
+    res = await read_store_within_budget(_Shelf(markdown), "/f", len(markdown))
+    assert (res.content, res.truncated) == (markdown, False)
+
+
+async def test_window_hitting_max_windows_is_truncated():
+    shelf = _Shelf(endless=True)
+    res = await read_store_within_budget(shelf, "/f", 10**9)
+    assert res.truncated
+    assert len(shelf.calls) == 1000
+    assert len(res.content.split("\n")) == 200_000

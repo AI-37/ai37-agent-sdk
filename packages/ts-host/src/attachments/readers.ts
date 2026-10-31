@@ -46,7 +46,7 @@ export interface AttachmentGrepHit {
 
 export interface WindowedRead {
   content: string
-  /** Файл прочитан не целиком: бюджет кончился раньше текста. */
+  /** Файл прочитан не целиком: бюджет кончился раньше текста или упёрлись в предел окон. */
   truncated: boolean
   error?: string
 }
@@ -66,7 +66,10 @@ export interface AttachmentReaders {
 
 /** Высота окна при чтении в бюджет. Меньше — больше запросов, больше — крупнее перебор. */
 const WINDOW_LINES = 200
-/** Страховка от бесконечного цикла, если полка перестанет сдвигать offset. */
+/**
+ * Страховка от бесконечного цикла, если полка всегда отвечает «есть ещё». Упор в неё — `truncated`:
+ * файл прочитан не целиком.
+ */
 const MAX_WINDOWS = 1000
 
 /** Полка, из которой читается файл: вложения чата и проекта, артефакты треда и проекта. */
@@ -202,6 +205,12 @@ export function readStoreWithinBudget(
  * Чтение окнами до бюджета символов. Окна строчные (так режет полка), бюджет символьный: пятьдесят
  * строк бывают и пятью сотнями символов, и полумегабайтной таблицей. Поэтому читаем окна
  * фиксированной высоты и останавливаемся, набрав бюджет; перебор последнего окна обрезаем.
+ *
+ * Полка (chat-backend `windowLines`) отдаёт `lines.slice(offset, offset + limit).join('\n')`: без
+ * номеров строк и без признака конца файла. Пустая строка в конце окна даёт хвостовой `\n`, в начале
+ * — ведущий, поэтому ни длина окна, ни его края о конце файла ничего не говорят. Признак конца берём
+ * сами: просим на строку больше окна. Пришла лишняя строка — файл продолжается, её отбрасываем и
+ * дочитываем следующим окном; не пришла — это последнее окно, и лишнего запроса за пустым хвостом нет.
  */
 async function readWindowsWithinBudget(
   readWindow: (offset: number, limit: number) => ReadResult | Promise<ReadResult>,
@@ -210,34 +219,27 @@ async function readWindowsWithinBudget(
   if (budgetChars <= 0) return { content: '', truncated: true }
   const parts: string[] = []
   let taken = 0
-  let offset = 0
   for (let window = 0; window < MAX_WINDOWS; window += 1) {
-    const result = await readWindow(offset, WINDOW_LINES)
+    const result = await readWindow(window * WINDOW_LINES, WINDOW_LINES + 1)
     if (result.error) return { content: '', truncated: false, error: result.error }
-    const chunk = typeof result.content === 'string' ? result.content : ''
-    if (!chunk) break
-    const addition = joinWindow(parts, chunk)
-    if (taken + addition.length >= budgetChars) {
+    const { text, more } = windowText(typeof result.content === 'string' ? result.content : '')
+    // Окна — куски одного split('\n'), поэтому склейка всегда через \n, даже вокруг пустых строк.
+    const addition = window === 0 ? text : `\n${text}`
+    if (taken + addition.length > budgetChars) {
       parts.push(addition.slice(0, budgetChars - taken))
       return { content: parts.join(''), truncated: true }
     }
     parts.push(addition)
     taken += addition.length
-    const lines = countLines(chunk)
-    if (lines < WINDOW_LINES) break
-    offset += lines
+    if (!more) return { content: parts.join(''), truncated: false }
   }
-  return { content: parts.join(''), truncated: false }
+  // Упёрлись в страховку, а файл ещё не кончился: прочитан не целиком.
+  return { content: parts.join(''), truncated: true }
 }
 
-/** Полка склеивает строки окна через \n без хвостового перевода: встык граничные строки срослись бы. */
-function joinWindow(parts: readonly string[], chunk: string): string {
-  const last = parts[parts.length - 1]
-  const needsSeparator = last !== undefined && !last.endsWith('\n') && !chunk.startsWith('\n')
-  return needsSeparator ? `\n${chunk}` : chunk
-}
-
-function countLines(chunk: string): number {
-  const trimmed = chunk.endsWith('\n') ? chunk.slice(0, -1) : chunk
-  return trimmed.length === 0 ? 0 : trimmed.split('\n').length
+/** Окно, запрошенное со строкой-разведчиком: текст без неё и признак, что файл продолжается. */
+function windowText(chunk: string): { text: string; more: boolean } {
+  const lines = chunk.split('\n')
+  if (lines.length <= WINDOW_LINES) return { text: chunk, more: false }
+  return { text: lines.slice(0, WINDOW_LINES).join('\n'), more: true }
 }

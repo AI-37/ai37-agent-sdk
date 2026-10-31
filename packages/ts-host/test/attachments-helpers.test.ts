@@ -331,7 +331,8 @@ describe('readStoreWithinBudget', () => {
       truncated: false,
     })
     expect(calls.map((c) => c[1])).toEqual([0, 200, 400])
-    expect(calls.every((c) => c[0] === '/f9' && c[2] === 200)).toBe(true)
+    // На строку больше окна: по ней видно, что файл продолжается.
+    expect(calls.every((c) => c[0] === '/f9' && c[2] === 201)).toBe(true)
     const cut = await readStoreWithinBudget(backend, '/f9', 10)
     expect(cut).toMatchObject({ truncated: true })
     expect(cut.content).toHaveLength(10)
@@ -344,5 +345,130 @@ describe('readStoreWithinBudget', () => {
       truncated: false,
       error: 'chat-backend → HTTP 403',
     })
+  })
+})
+
+/**
+ * Полка, которая режет окна ровно как chat-backend `windowLines` (src/attachments/attachments.types.ts):
+ * строки через \n, без номеров и без признака конца; пустая строка на краю окна даёт \n на краю.
+ */
+function chatBackendShelf(markdown: string | ((offset: number, limit: number) => string)) {
+  const calls: Array<[number | undefined, number | undefined]> = []
+  const windowLines = (offset?: number, limit?: number): string => {
+    if (typeof markdown === 'function') return markdown(offset ?? 0, limit ?? 0)
+    if (!offset && limit === undefined) return markdown
+    const lines = markdown.split('\n')
+    const start = Math.max(0, offset ?? 0)
+    const end = limit === undefined ? lines.length : start + Math.max(0, limit)
+    return lines.slice(start, end).join('\n')
+  }
+  const backend = {
+    read: async (_path: string, offset?: number, limit?: number) => {
+      calls.push([offset, limit])
+      return { content: windowLines(offset, limit) }
+    },
+  }
+  return { backend, calls, windowLines }
+}
+
+/** Markdown из docx: абзацы через пустую строку, так что каждая вторая строка пустая. */
+function paragraphs(count: number): string {
+  return Array.from({ length: count }, (_, i) =>
+    i % 2 === 0 ? `Абзац ${i}: текст абзаца.` : '',
+  ).join('\n')
+}
+
+describe('чтение окнами в бюджет по контракту полки chat-backend', () => {
+  it('файл из 3001 строки с пустой строкой через одну читается целиком', async () => {
+    const markdown = paragraphs(3001)
+    const { backend, calls } = chatBackendShelf(markdown)
+    expect(markdown.split('\n')[199]).toBe('')
+    expect(await readStoreWithinBudget(backend, '/f', 1_000_000)).toEqual({
+      content: markdown,
+      truncated: false,
+    })
+    expect(calls).toHaveLength(16)
+  })
+
+  it('то же через читателей хода и REST chat-backend', async () => {
+    const markdown = paragraphs(3001)
+    const { windowLines } = chatBackendShelf(markdown)
+    const { impl } = fakeFetch((url) => {
+      const query = url.searchParams
+      return { content: windowLines(Number(query.get('offset')), Number(query.get('limit'))) }
+    })
+    const readers = createAttachmentReaders({
+      chatBackendUrl: 'http://cb',
+      scope: attachmentScope({ contextId: 'ctx1', contextRefs: ['chat-attachment:c1'] }),
+      fetchImpl: impl,
+    })
+    const full = await readers.readWithinBudget('chat-attachment:c1', 1_000_000)
+    expect(full).toEqual({ content: markdown, truncated: false })
+  })
+
+  it('пустые строки на стыке окон не теряются', async () => {
+    const lines = Array.from({ length: 450 }, (_, i) => `l${i}`)
+    lines[199] = '' // последняя строка первого окна
+    lines[200] = '' // первая строка второго
+    lines[400] = '' // первая строка третьего
+    const markdown = lines.join('\n')
+    const { backend } = chatBackendShelf(markdown)
+    expect(await readStoreWithinBudget(backend, '/f', 1_000_000)).toEqual({
+      content: markdown,
+      truncated: false,
+    })
+  })
+
+  it('файл ровно в N окон читается за N запросов, хвостовой перевод строки сохраняется', async () => {
+    const markdown = Array.from({ length: 400 }, (_, i) => `l${i}`).join('\n')
+    const exact = chatBackendShelf(markdown)
+    expect(await readStoreWithinBudget(exact.backend, '/f', 1_000_000)).toEqual({
+      content: markdown,
+      truncated: false,
+    })
+    expect(exact.calls).toEqual([
+      [0, 201],
+      [200, 201],
+    ])
+    // 400 строк и \n в конце — это 401-я, пустая строка: она в третьем окне.
+    const withNewline = chatBackendShelf(`${markdown}\n`)
+    expect(await readStoreWithinBudget(withNewline.backend, '/f', 1_000_000)).toEqual({
+      content: `${markdown}\n`,
+      truncated: false,
+    })
+  })
+
+  it('пустой файл — пустой текст без обрезки', async () => {
+    const { backend, calls } = chatBackendShelf('')
+    expect(await readStoreWithinBudget(backend, '/f', 100)).toEqual({
+      content: '',
+      truncated: false,
+    })
+    expect(calls).toHaveLength(1)
+  })
+
+  it('бюджет меньше файла: обрезано ровно по бюджету', async () => {
+    const markdown = paragraphs(3001)
+    const firstWindow = markdown.split('\n').slice(0, 200).join('\n')
+    for (const budget of [1, firstWindow.length, firstWindow.length + 1, 5_000]) {
+      const { backend } = chatBackendShelf(markdown)
+      expect(await readStoreWithinBudget(backend, '/f', budget)).toEqual({
+        content: markdown.slice(0, budget),
+        truncated: true,
+      })
+    }
+    const { backend } = chatBackendShelf(markdown)
+    expect(await readStoreWithinBudget(backend, '/f', markdown.length)).toEqual({
+      content: markdown,
+      truncated: false,
+    })
+  })
+
+  it('упор в предел окон — truncated: true', async () => {
+    const endless = chatBackendShelf((_offset, limit) => Array(limit).fill('x').join('\n'))
+    const res = await readStoreWithinBudget(endless.backend, '/f', Number.POSITIVE_INFINITY)
+    expect(res.truncated).toBe(true)
+    expect(endless.calls).toHaveLength(1000)
+    expect(res.content.split('\n')).toHaveLength(200_000)
   })
 })
