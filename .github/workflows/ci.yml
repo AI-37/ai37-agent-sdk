@@ -58,7 +58,9 @@ jobs:
         with:
           node-version: '22'
           package-manager-cache: ${{ runner.environment != 'self-hosted' }}
-          cache: npm
+          # Кэш npm в GitHub Actions — только на hosted. На self-hosted ~/.npm и так переживает прогоны,
+          # а выгрузка кэша в post-step шла ~85 с на прогон и однажды висела до таймаута джобы.
+          cache: ${{ runner.environment != 'self-hosted' && 'npm' || '' }}
           cache-dependency-path: |
             packages/ts-docx/package-lock.json
             packages/ts/package-lock.json
