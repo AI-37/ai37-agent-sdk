@@ -31,7 +31,8 @@ if TYPE_CHECKING:
 
 #: Высота окна при чтении в бюджет. Меньше — больше запросов, больше — крупнее перебор.
 WINDOW_LINES = 200
-#: Страховка от бесконечного цикла, если полка перестанет сдвигать offset.
+#: Страховка от бесконечного цикла, если полка всегда отвечает «есть ещё». Упор в неё —
+#: ``truncated``: файл прочитан не целиком.
 MAX_WINDOWS = 1000
 
 FailureReason = Literal["access_denied", "unavailable", "reader_failed"]
@@ -62,7 +63,7 @@ class AttachmentGrepHit:
 @dataclass(frozen=True)
 class WindowedRead:
     content: str
-    #: Файл прочитан не целиком: бюджет кончился раньше текста.
+    #: Файл прочитан не целиком: бюджет кончился раньше текста или упёрлись в предел окон.
     truncated: bool
     error: str | None = None
 
@@ -226,30 +227,33 @@ async def _read_windows_within_budget(
 ) -> WindowedRead:
     """Окна строчные (так режет полка), бюджет символьный: пятьдесят строк бывают и пятью сотнями
     символов, и полумегабайтной таблицей. Читаем окна фиксированной высоты и останавливаемся,
-    набрав бюджет; перебор последнего окна обрезаем."""
+    набрав бюджет; перебор последнего окна обрезаем.
+
+    Полка (chat-backend ``windowLines``) отдаёт ``"\\n".join(lines[offset:offset + limit])``: без
+    номеров строк и без признака конца файла. Пустая строка в конце окна даёт хвостовой ``\\n``, в
+    начале — ведущий, поэтому ни длина окна, ни его края о конце файла ничего не говорят. Признак
+    конца берём сами: просим на строку больше окна. Пришла лишняя строка — файл продолжается, её
+    отбрасываем и дочитываем следующим окном; не пришла — это последнее окно."""
     if budget_chars <= 0:
         return WindowedRead(content="", truncated=True)
     parts: list[str] = []
     taken = 0
-    offset = 0
-    for _ in range(MAX_WINDOWS):
-        result = await read_window(offset, WINDOW_LINES)
+    for window in range(MAX_WINDOWS):
+        result = await read_window(window * WINDOW_LINES, WINDOW_LINES + 1)
         if result.error:
             return WindowedRead(content="", truncated=False, error=result.error)
-        chunk = result.content if isinstance(result.content, str) else ""
-        if not chunk:
-            break
-        addition = _join_window(parts, chunk)
-        if taken + len(addition) >= budget_chars:
+        text, more = _window_text(result.content if isinstance(result.content, str) else "")
+        # Окна — куски одного split("\n"), поэтому склейка всегда через \n, даже у пустых строк.
+        addition = text if window == 0 else f"\n{text}"
+        if taken + len(addition) > budget_chars:
             parts.append(addition[: budget_chars - taken])
             return WindowedRead(content="".join(parts), truncated=True)
         parts.append(addition)
         taken += len(addition)
-        lines = _count_lines(chunk)
-        if lines < WINDOW_LINES:
-            break
-        offset += lines
-    return WindowedRead(content="".join(parts), truncated=False)
+        if not more:
+            return WindowedRead(content="".join(parts), truncated=False)
+    # Упёрлись в страховку, а файл ещё не кончился: прочитан не целиком.
+    return WindowedRead(content="".join(parts), truncated=True)
 
 
 def _file_id_path(file: AttachmentFile) -> str:
@@ -263,12 +267,9 @@ def _strip_source_name(text: str) -> str:
     return re.sub(r"^\[[^\]]*\]\s*", "", text)
 
 
-def _join_window(parts: list[str], chunk: str) -> str:
-    """Полка склеивает строки окна через \\n без хвостового перевода: встык строки срослись бы."""
-    needs_separator = bool(parts) and not parts[-1].endswith("\n") and not chunk.startswith("\n")
-    return f"\n{chunk}" if needs_separator else chunk
-
-
-def _count_lines(chunk: str) -> int:
-    trimmed = chunk[:-1] if chunk.endswith("\n") else chunk
-    return 0 if not trimmed else len(trimmed.split("\n"))
+def _window_text(chunk: str) -> tuple[str, bool]:
+    """Окно, запрошенное со строкой-разведчиком: текст без неё и признак, что файл продолжается."""
+    lines = chunk.split("\n")
+    if len(lines) <= WINDOW_LINES:
+        return chunk, False
+    return "\n".join(lines[:WINDOW_LINES]), True
