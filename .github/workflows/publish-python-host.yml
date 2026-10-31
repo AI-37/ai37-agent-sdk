@@ -53,8 +53,8 @@ jobs:
       run:
         working-directory: packages/python-host
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
+      - uses: actions/checkout@v5
+      - uses: actions/setup-python@v6
         with:
           # единый источник версии рантайма — packages/python-host/.python-version (как локально через pyenv)
           python-version-file: packages/python-host/.python-version

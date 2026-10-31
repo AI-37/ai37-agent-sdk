@@ -53,10 +53,11 @@ jobs:
           --health-timeout 5s
           --health-retries 10
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          package-manager-cache: ${{ runner.environment != 'self-hosted' }}
           cache: npm
           cache-dependency-path: |
             packages/ts-docx/package-lock.json
@@ -145,7 +146,7 @@ jobs:
       # Каждый пакет — на своём Python из packages/<пакет>/.python-version (как локально через pyenv):
       # перед установкой пакета — свой setup-python. `poetry env use python` берёт интерпретатор,
       # который сейчас первый в PATH, — то есть последний поставленный setup-python.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         id: py
         if: ${{ !cancelled() }}
         with:
@@ -201,7 +202,7 @@ jobs:
       # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
       # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
       # опубликованный SDK с PyPI, сиблинг собирать не нужно.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         id: py-host
         if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
         with:
@@ -229,7 +230,7 @@ jobs:
           TEST_DATABASE_URL: postgres://postgres:test@127.0.0.1:${{ job.services.postgres.ports['5432'] }}/a2a
 
       # ───────────────────────── ai37-capture-contract (Python) ─────────────────────────
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v6
         id: py-capture
         if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
         with:

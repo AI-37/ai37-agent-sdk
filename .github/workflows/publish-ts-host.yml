@@ -59,10 +59,11 @@ jobs:
       AI37_NPM_TOKEN: ${{ secrets.AI37_NPM_TOKEN }}
       NPM_CONFIG_USERCONFIG: ${{ github.workspace }}/.npmrc
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
         with:
           node-version: '22'
+          package-manager-cache: ${{ runner.environment != 'self-hosted' }}
           # registry-url не задаём: используем закоммиченный .npmrc в корне репо (Verdaccio + _auth)
           cache: npm
           cache-dependency-path: |
