@@ -172,6 +172,8 @@ export type {
   IntentEnvelope,
   Ai37Metadata,
   ContextFile,
+  ContextFileRecognition,
+  ContextFileRecognitionState,
   A2uiComponent,
   A2uiAction,
   A2uiDataPatch,

@@ -13,7 +13,13 @@ from typing import Any
 from google.protobuf.json_format import MessageToDict
 
 from .output_modes import read_client_capabilities
-from .types import A2uiAction, Ai37Metadata, ContextFile, IntentEnvelope
+from .types import (
+    A2uiAction,
+    Ai37Metadata,
+    ContextFile,
+    ContextFileRecognition,
+    IntentEnvelope,
+)
 
 
 @dataclass
@@ -130,4 +136,32 @@ def _to_context_file(raw: dict[str, Any]) -> ContextFile:
         is_large=raw.get("isLarge"),
         mime=raw.get("mime"),
         has_raw=raw.get("hasRaw"),
+        recognition=_to_recognition(raw.get("recognition")),
     )
+
+
+_RECOGNITION_STATES = frozenset({"ready", "empty", "error", "stopped", "rejected"})
+
+
+def _to_recognition(raw: Any) -> ContextFileRecognition | None:
+    """Поле ``recognition`` записи манифеста; незнакомое состояние — как будто поля нет."""
+    if not isinstance(raw, dict) or raw.get("state") not in _RECOGNITION_STATES:
+        return None
+    return ContextFileRecognition(
+        state=raw["state"],
+        series_id=_str_or_none(raw.get("seriesId")),
+        page_count=_count_or_none(raw.get("pageCount")),
+        code=_str_or_none(raw.get("code")),
+        reason=_str_or_none(raw.get("reason")),
+    )
+
+
+def _count_or_none(value: Any) -> int | None:
+    # metadata A2A идёт через protobuf Struct: целое число приходит как float (40 → 40.0).
+    if isinstance(value, bool) or not isinstance(value, int | float):
+        return None
+    return int(value) if value >= 0 and float(value).is_integer() else None
+
+
+def _str_or_none(value: Any) -> str | None:
+    return value if isinstance(value, str) and value else None

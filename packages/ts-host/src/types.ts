@@ -46,6 +46,30 @@ export interface ContextFile {
    * (openpyxl, картинки), НЕ для LLM.
    */
   hasRaw?: boolean
+  /**
+   * Чем кончилось распознавание файла в пуле проекта document-service. Заполняет chat-backend в
+   * режиме `ATTACHMENT_INGEST_MODE=raw`: он сам грузит файлы хода в DS и передаёт ход агенту,
+   * когда все дошли до конечного состояния. Есть поле — файл прошёл эту стадию в текущем ходе;
+   * нет — обычная запись манифеста (продюсер постарше или режим markdown).
+   */
+  recognition?: ContextFileRecognition
+}
+
+/**
+ * Конечное состояние файла после стадии распознавания: состояния документа DS
+ * (`ProjectPoolDocumentState` без промежуточных) плюс `rejected` — DS или мост файл не приняли.
+ */
+export type ContextFileRecognitionState = 'ready' | 'empty' | 'error' | 'stopped' | 'rejected'
+
+export interface ContextFileRecognition {
+  state: ContextFileRecognitionState
+  /** id серии документа в пуле проекта DS; нет у `rejected`. */
+  seriesId?: string
+  pageCount?: number
+  /** Машинный код отказа (`rejected`): код DS или моста, как есть. */
+  code?: string
+  /** Причина для пользователя по-русски, готовая к показу. */
+  reason?: string
 }
 
 /** Конверт metadata.ai37 (04-a2a-conventions.md). */

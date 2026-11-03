@@ -4,6 +4,18 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a32]
+
+Паритет с `@ai37/agent-host` 0.5.0 (план `docs/plans/polimetrika-recognition-gate.md`, AI-37/docs#590).
+
+### Added
+- `ContextFile.recognition` (`ContextFileRecognition`): чем кончилось распознавание файла в пуле
+  проекта DS. Заполняет chat-backend в режиме `ATTACHMENT_INGEST_MODE=raw`, когда сам загрузил файлы
+  хода и дождался распознавания: `state` (`ready` / `empty` / `error` / `stopped` / `rejected`),
+  `series_id`, `page_count`, `code` и `reason` отказа. Промежуточное или незнакомое состояние
+  читается как отсутствие поля. `pageCount` из protobuf `Struct` приходит float'ом, разбор приводит
+  его к int.
+
 ## [0.1.0a31]
 
 ### Fixed

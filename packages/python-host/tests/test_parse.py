@@ -63,6 +63,72 @@ def test_parse_ai37_metadata_and_context_files():
     assert p.trace_carrier == {"traceparent": "00-trace"}
 
 
+def _files(*entries: dict) -> list:
+    rc = _rc(
+        {
+            "role": "ROLE_USER",
+            "parts": [{"text": "x"}],
+            "metadata": {"ai37": {"context_files": list(entries)}},
+        }
+    )
+    return parse_a2a_message(rc).metadata.context_files
+
+
+def test_parse_context_file_recognition():
+    ready, rejected = _files(
+        {
+            "ref": "project-attachment:1",
+            "name": "Схема ОВ.pdf",
+            "scope": "project",
+            "recognition": {"state": "ready", "seriesId": "s-1", "pageCount": 40},
+        },
+        {
+            "ref": "chat-attachment:2",
+            "name": "Фото.png",
+            "scope": "chat",
+            "recognition": {
+                "state": "rejected",
+                "code": "unsupported_format",
+                "reason": "формат не поддерживается",
+            },
+        },
+    )
+    assert ready.recognition is not None
+    assert ready.recognition.state == "ready"
+    assert ready.recognition.series_id == "s-1"
+    assert ready.recognition.page_count == 40
+    assert ready.recognition.code is None
+    assert rejected.recognition is not None
+    assert rejected.recognition.state == "rejected"
+    assert rejected.recognition.series_id is None
+    assert rejected.recognition.code == "unsupported_format"
+    assert rejected.recognition.reason == "формат не поддерживается"
+
+
+def test_parse_context_file_without_or_with_unknown_recognition():
+    plain, unknown, broken = _files(
+        {"ref": "chat-attachment:1", "name": "a.pdf", "scope": "chat"},
+        {
+            "ref": "chat-attachment:2",
+            "name": "b.pdf",
+            "scope": "chat",
+            "recognition": {"state": "processing", "seriesId": "s-2"},
+        },
+        {
+            "ref": "chat-attachment:3",
+            "name": "c.pdf",
+            "scope": "chat",
+            "recognition": {"state": "ready", "seriesId": 7, "pageCount": "40"},
+        },
+    )
+    assert plain.recognition is None
+    # Промежуточное состояние агенту не приходит: незнакомое трактуем как отсутствие поля.
+    assert unknown.recognition is None
+    assert broken.recognition is not None
+    assert broken.recognition.series_id is None
+    assert broken.recognition.page_count is None
+
+
 def test_parse_trace_carrier_keeps_tracestate_and_baggage():
     # Ключи как у injectTraceContext ts-host: плоско в message.metadata, рядом с конвертом ai37.
     rc = _rc(

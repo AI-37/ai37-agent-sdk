@@ -5,6 +5,8 @@ import { requestScope } from '../src/als'
 import {
   findProjectDocumentByTitle,
   indexToProject,
+  listProjectPoolDocuments,
+  MAX_SERIES_IDS,
   ProjectKnowledgeError,
   ProjectPoolError,
   serviceToken,
@@ -259,6 +261,78 @@ describe('findProjectDocumentByTitle', () => {
     await expect(
       findProjectDocumentByTitle({ ...base, title: 'Отчёт', fetchImpl: impl }),
     ).rejects.toMatchObject({ code: 'documents_not_in_plan', status: 403 })
+  })
+})
+
+describe('listProjectPoolDocuments', () => {
+  const doc = (id: string, readyPages: number) => ({
+    id,
+    title: `Документ ${id}`,
+    state: readyPages === 40 ? 'ready' : 'processing',
+    stage: 'ocr',
+    createdAt: '2026-11-03T00:00:00.000Z',
+    pageCount: 40,
+    readyPages,
+    author: null,
+  })
+  const base = { documentServiceUrl: 'http://ds/', projectKey: 'p-1', bearer: 'jwt-user' }
+
+  it('запрашивает реестр пула только по своим сериям и отдаёт строки как есть', async () => {
+    const { impl, calls } = scriptedFetch({
+      status: 200,
+      body: { documents: [doc('s-1', 12), doc('s-2', 40)], nextCursor: null },
+    })
+    const docs = await listProjectPoolDocuments({
+      ...base,
+      seriesIds: ['s-1', ' s-2 ', 's-1', ''],
+      fetchImpl: impl,
+    })
+    expect(docs.map((d) => [d.id, d.state, d.readyPages])).toEqual([
+      ['s-1', 'processing', 12],
+      ['s-2', 'ready', 40],
+    ])
+    const url = new URL(calls[0].url)
+    expect(url.pathname).toBe('/api/project-pools/p-1/documents')
+    expect(url.searchParams.get('seriesIds')).toBe('s-1,s-2')
+    expect(url.searchParams.has('cursor')).toBe(false)
+    expect(headersOf(calls[0]).Authorization).toBe('Bearer jwt-user')
+  })
+
+  it('строки других серий отбрасывает (DS без поддержки seriesIds)', async () => {
+    const { impl } = scriptedFetch({
+      status: 200,
+      body: { documents: [doc('other', 40), doc('s-1', 12)], nextCursor: 'cur-2' },
+    })
+    const docs = await listProjectPoolDocuments({ ...base, seriesIds: ['s-1'], fetchImpl: impl })
+    expect(docs.map((d) => d.id)).toEqual(['s-1'])
+  })
+
+  it('пустой список — без запроса', async () => {
+    const { impl, spy } = scriptedFetch({ status: 200, body: { documents: [] } })
+    expect(await listProjectPoolDocuments({ ...base, seriesIds: [' '], fetchImpl: impl })).toEqual(
+      [],
+    )
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('больше MAX_SERIES_IDS — invalid_query без запроса', async () => {
+    const { impl, spy } = scriptedFetch({ status: 200, body: { documents: [] } })
+    const seriesIds = Array.from({ length: MAX_SERIES_IDS + 1 }, (_, i) => `s-${i}`)
+    await expect(
+      listProjectPoolDocuments({ ...base, seriesIds, fetchImpl: impl }),
+    ).rejects.toMatchObject({ code: 'invalid_query' })
+    expect(spy).not.toHaveBeenCalled()
+  })
+
+  it('отказ DS — его код и статус; ответ без documents — upstream_error', async () => {
+    const denied = scriptedFetch({ status: 403, body: { code: 'forbidden_role' } })
+    await expect(
+      listProjectPoolDocuments({ ...base, seriesIds: ['s-1'], fetchImpl: denied.impl }),
+    ).rejects.toMatchObject({ code: 'forbidden_role', status: 403 })
+    const broken = scriptedFetch({ status: 200, body: { nextCursor: null } })
+    await expect(
+      listProjectPoolDocuments({ ...base, seriesIds: ['s-1'], fetchImpl: broken.impl }),
+    ).rejects.toBeInstanceOf(ProjectPoolError)
   })
 })
 

@@ -35,6 +35,25 @@ class IntentEnvelope:
     params: dict[str, Any] | None = None
 
 
+#: Конечное состояние файла после стадии распознавания: состояния документа DS без
+#: промежуточных плюс ``rejected`` (DS или мост файл не приняли).
+ContextFileRecognitionState = Literal["ready", "empty", "error", "stopped", "rejected"]
+
+
+@dataclass
+class ContextFileRecognition:
+    """Итог стадии распознавания для файла манифеста (``context_files[].recognition``)."""
+
+    state: ContextFileRecognitionState
+    #: id серии документа в пуле проекта DS; нет у ``rejected``.
+    series_id: str | None = None
+    page_count: int | None = None
+    #: Машинный код отказа (``rejected``): код DS или моста, как есть.
+    code: str | None = None
+    #: Причина для пользователя по-русски, готовая к показу.
+    reason: str | None = None
+
+
 @dataclass
 class ContextFile:
     """Манифест-хинт одного приложенного файла (в ``metadata.ai37.context_files``).
@@ -59,6 +78,9 @@ class ContextFile:
     #: Сохранены ли сырые байты оригинала (chat-тир под cap) — для детерминированного парсинга
     #: агентом, не для LLM. ``None`` — продюсер поля не прислал.
     has_raw: bool | None = None
+    #: Чем кончилось распознавание файла в пуле проекта DS (chat-backend, режим ``raw``). Есть
+    #: поле — файл прошёл стадию распознавания в этом ходе; нет — обычная запись манифеста.
+    recognition: ContextFileRecognition | None = None
 
 
 @dataclass

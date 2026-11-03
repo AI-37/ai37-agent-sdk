@@ -197,6 +197,46 @@ export async function findProjectDocumentByTitle(
   return null
 }
 
+export interface ListProjectPoolDocumentsOptions {
+  documentServiceUrl: string
+  projectKey: string
+  /** id серий документов пула. DS принимает до 50 за запрос. */
+  seriesIds: readonly string[]
+  bearer: string
+  fetchImpl?: typeof fetch
+  /** Таймаут запроса, мс (по умолчанию 30 000). */
+  timeoutMs?: number
+}
+
+/** Сколько серий DS принимает в одном `seriesIds`. */
+export const MAX_SERIES_IDS = 50
+
+/**
+ * Состояние конкретных документов пула: строки реестра только для этих серий, без курсора. Нужен
+ * тому, кто ждёт распознавания своих загрузок (стадия хода chat-backend). Серии чужого пула или
+ * удалённые в ответ не попадают: отсутствие строки значит «документа в этом пуле нет».
+ */
+export async function listProjectPoolDocuments(
+  opts: ListProjectPoolDocumentsOptions,
+): Promise<ProjectPoolDocument[]> {
+  const ids = [...new Set(opts.seriesIds.map((id) => id.trim()).filter(Boolean))]
+  if (ids.length === 0) return []
+  if (ids.length > MAX_SERIES_IDS) throw new ProjectPoolError('invalid_query')
+  const url = new URL(poolUrl(opts))
+  url.searchParams.set('seriesIds', ids.join(','))
+  const init = {
+    headers: { Authorization: `Bearer ${opts.bearer}`, Accept: 'application/json' },
+  }
+  const res = await call(opts, url.toString(), init, opts.timeoutMs ?? 30_000)
+  const payload = await readJson(res)
+  if (!res.ok) throw poolError(res, payload)
+  const documents = (payload as { documents?: unknown } | undefined)?.documents
+  if (!Array.isArray(documents)) throw new ProjectPoolError('upstream_error', res.status)
+  // DS без поддержки `seriesIds` отдаст обычную первую страницу: чужие строки отбрасываем.
+  const wanted = new Set(ids)
+  return (documents as ProjectPoolDocument[]).filter((doc) => wanted.has(doc.id))
+}
+
 // ── helpers ────────────────────────────────────────────────────────────────────
 
 function poolUrl(opts: { documentServiceUrl: string; projectKey: string }): string {
