@@ -35,3 +35,8 @@ def test_codes_and_constants_are_unique(kind: str):
 def test_polimetrika_data_agent_codes():
     assert BillingFeatureCode.PolimetrikaDataAgent == "polimetrika-data-agent"
     assert BillingPrivilegeCode.PolimetrikaDataAgentAllowed == "polimetrika-data-agent-allowed"
+
+
+def test_pdai_agent_codes():
+    assert BillingFeatureCode.PdaiAgent == "pdai-agent"
+    assert BillingPrivilegeCode.PdaiAgentAllowed == "pdai-agent-allowed"

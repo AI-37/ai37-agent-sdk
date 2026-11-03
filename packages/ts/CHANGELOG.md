@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.37] - 2026-11-03
+
+### Added
+
+- Фича `pdai-agent` (`BillingFeatureCode.PdaiAgent`) и привилегия `pdai-agent-allowed`
+  (`BillingPrivilegeCode.PdaiAgentAllowed`) для сервиса домена PD-AI `pdai-agent` (план docs
+  `plans/pdai-agent-skeleton.md`, срез D1, ADR PD-20); паритет с Python `0.1.0a29`. Регистрация кода
+  не выдаёт право организациям: его дают тарифы `pdai_*` в каталоге Lago контура `pd-ai-prod`.
+
 ## [0.1.0-alpha.36] - 2026-10-30
 
 ### Added
