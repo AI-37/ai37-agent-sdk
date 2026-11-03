@@ -232,7 +232,9 @@ export async function listProjectPoolDocuments(
   if (!res.ok) throw poolError(res, payload)
   const documents = (payload as { documents?: unknown } | undefined)?.documents
   if (!Array.isArray(documents)) throw new ProjectPoolError('upstream_error', res.status)
-  return documents as ProjectPoolDocument[]
+  // DS без поддержки `seriesIds` отдаст обычную первую страницу: чужие строки отбрасываем.
+  const wanted = new Set(ids)
+  return (documents as ProjectPoolDocument[]).filter((doc) => wanted.has(doc.id))
 }
 
 // ── helpers ────────────────────────────────────────────────────────────────────

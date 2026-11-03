@@ -298,6 +298,15 @@ describe('listProjectPoolDocuments', () => {
     expect(headersOf(calls[0]).Authorization).toBe('Bearer jwt-user')
   })
 
+  it('строки других серий отбрасывает (DS без поддержки seriesIds)', async () => {
+    const { impl } = scriptedFetch({
+      status: 200,
+      body: { documents: [doc('other', 40), doc('s-1', 12)], nextCursor: 'cur-2' },
+    })
+    const docs = await listProjectPoolDocuments({ ...base, seriesIds: ['s-1'], fetchImpl: impl })
+    expect(docs.map((d) => d.id)).toEqual(['s-1'])
+  })
+
   it('пустой список — без запроса', async () => {
     const { impl, spy } = scriptedFetch({ status: 200, body: { documents: [] } })
     expect(await listProjectPoolDocuments({ ...base, seriesIds: [' '], fetchImpl: impl })).toEqual(
