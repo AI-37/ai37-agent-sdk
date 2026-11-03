@@ -28,7 +28,15 @@ from ai37_agent_sdk import BillingExecutionDeniedError
 from google.protobuf.json_format import MessageToDict
 
 from .a2a_progress import A2A_KEEPALIVE_S, A2aProgress
-from .als import HostTurn, current_accepted_output_modes, current_ctx, current_scope
+from .als import (
+    CALL_CONTEXT_SCOPE_KEY,
+    HostScope,
+    HostTurn,
+    current_accepted_output_modes,
+    current_ctx,
+    current_scope,
+    scope_context,
+)
 from .build_task import data_part, resolve_result_a2ui, text_part
 from .metrics import norm_final_state, observe_turn, record_billing_denied
 from .observability.langfuse import BeginTurnArgs, with_turn_observability
@@ -57,6 +65,17 @@ class HostExecutor(AgentExecutor):
         self._service = service
 
     async def execute(self, context: RequestContext, event_queue: EventQueue) -> None:
+        # Ход исполняется в producer'е задачи, а его contextvars — от запроса, который задачу
+        # СОЗДАЛ. На втором и следующих ходах там чужой (часто просроченный) JWT: в прод 02.11 он
+        # ушёл в billing /state → 401. Поднимаем scope ЭТОГО запроса на время хода.
+        scope = _request_scope_of(context)
+        if scope is None:
+            await self._execute(context, event_queue)
+            return
+        with scope_context(scope):
+            await self._execute(context, event_queue)
+
+    async def _execute(self, context: RequestContext, event_queue: EventQueue) -> None:
         started_at = time.monotonic()
         ctx = current_ctx()
         parsed = parse_a2a_message(context)
@@ -303,3 +322,15 @@ def _read_prior_state(context: RequestContext) -> dict[str, Any] | None:
     if isinstance(metadata, dict) and isinstance(metadata.get("state"), dict):
         return metadata["state"]
     return None
+
+
+def _request_scope_of(context: RequestContext) -> HostScope | None:
+    """Scope запроса этого хода из ``ServerCallContext.state``.
+
+    Нет его (контекст собран не ``HostCallContextBuilder``, напр. в тестах прямого вызова) —
+    ``None``, и ход читает ContextVar как раньше.
+    """
+    call_context = getattr(context, "call_context", None)
+    state = getattr(call_context, "state", None)
+    scope = state.get(CALL_CONTEXT_SCOPE_KEY) if isinstance(state, dict) else None
+    return scope if isinstance(scope, HostScope) else None

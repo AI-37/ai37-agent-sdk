@@ -63,6 +63,13 @@ _request_scope: contextvars.ContextVar[HostScope | None] = contextvars.ContextVa
     "ai37_agent_host_scope", default=None
 )
 
+#: Ключ scope запроса в ``ServerCallContext.state``. ContextVar в A2A-ход доезжает не всегда:
+#: незавершённую задачу a2a-sdk ведёт один долгоживущий producer, созданный ``asyncio.create_task``
+#: на ПЕРВОМ запросе, — он навсегда унаследовал contextvars того запроса, а следующие ходы получает
+#: через очередь. Поэтому scope едет вместе с запросом: кладёт ``HostCallContextBuilder`` (он
+#: работает внутри HTTP-запроса, за guard'ом), восстанавливает ``HostExecutor.execute``.
+CALL_CONTEXT_SCOPE_KEY = "ai37/host-scope"
+
 
 def set_scope(scope: HostScope) -> contextvars.Token[HostScope | None]:
     """Установить scope текущего request'а (guard). Вернёт token для :func:`reset_scope`."""

@@ -10,7 +10,7 @@ from ai37_agent_sdk import AgentContextSettings, AuthSettings, BillingSettings
 from fastapi.testclient import TestClient
 from starlette.requests import Request
 
-from ai37_agent_host.als import HostScope, scope_context
+from ai37_agent_host.als import CALL_CONTEXT_SCOPE_KEY, HostScope, scope_context
 from ai37_agent_host.auth_guard import AuthGuardMiddleware
 from ai37_agent_host.create_agent_host import create_agent_host
 from ai37_agent_host.owner import (
@@ -64,6 +64,15 @@ def test_builder_uses_jwt_user_inside_turn() -> None:
 def test_builder_outside_turn_falls_back_to_upstream() -> None:
     context = HostCallContextBuilder().build(_request())
     assert not context.user.is_authenticated
+    assert CALL_CONTEXT_SCOPE_KEY not in context.state
+
+
+def test_builder_carries_request_scope() -> None:
+    # Scope запроса едет в state: producer задачи живёт с contextvars ПЕРВОГО запроса, и ход
+    # восстанавливает свой scope отсюда (см. test_turn_scope.py).
+    with _scope({"sub": "alice", "org_id": "org-1"}) as scope:
+        context = HostCallContextBuilder().build(_request())
+    assert context.state[CALL_CONTEXT_SCOPE_KEY] is scope
 
 
 # ── сквозной путь A2A: задача видна только своему владельцу ───────────────────
