@@ -3,6 +3,21 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.5.0] - 2026-11-03
+
+Стадия распознавания в chat-backend (план `docs/plans/polimetrika-recognition-gate.md`,
+AI-37/docs#590, срез 2).
+
+### Added
+- `listProjectPoolDocuments({ documentServiceUrl, projectKey, seriesIds, bearer })`: строки реестра
+  пула DS только для этих серий (`GET /api/project-pools/{key}/documents?seriesIds=…`), с `state`,
+  `pageCount` и `readyPages`. Им chat-backend опрашивает свои загрузки, пока DS распознаёт. Серий не
+  больше `MAX_SERIES_IDS` (50), иначе `invalid_query` без запроса; пустой список — пустой ответ без
+  запроса. Серии чужого пула в ответ не попадают.
+- `ContextFile.recognition` (`ContextFileRecognition`, `ContextFileRecognitionState`): итог
+  распознавания файла для агента, `state` / `seriesId` / `pageCount` / `code` / `reason`. Поле
+  необязательное: агенты, которые его не знают, видят обычный манифест.
+
 ## [0.4.1] - 2026-10-31
 
 ### Fixed

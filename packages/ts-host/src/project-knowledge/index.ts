@@ -1,6 +1,13 @@
-export { findProjectDocumentByTitle, ProjectPoolError, uploadToProjectPool } from './project-pool'
+export {
+  findProjectDocumentByTitle,
+  listProjectPoolDocuments,
+  MAX_SERIES_IDS,
+  ProjectPoolError,
+  uploadToProjectPool,
+} from './project-pool'
 export type {
   FindProjectDocumentByTitleOptions,
+  ListProjectPoolDocumentsOptions,
   ProjectPoolDocument,
   ProjectPoolDocumentState,
   ProjectPoolDuplicate,
