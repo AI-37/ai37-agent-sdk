@@ -37,4 +37,9 @@ describe('billing codes (contract/feature-codes.json)', () => {
     expect(BillingFeatureCode.PolimetrikaDataAgent).toBe('polimetrika-data-agent')
     expect(BillingPrivilegeCode.PolimetrikaDataAgentAllowed).toBe('polimetrika-data-agent-allowed')
   })
+
+  it('exposes the PD-AI domain service feature and its privilege', () => {
+    expect(BillingFeatureCode.PdaiAgent).toBe('pdai-agent')
+    expect(BillingPrivilegeCode.PdaiAgentAllowed).toBe('pdai-agent-allowed')
+  })
 })

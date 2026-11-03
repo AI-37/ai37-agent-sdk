@@ -12,6 +12,7 @@ class BillingFeatureCode(str, Enum):
     PdaiDoc152Fz = "pdai-doc-152fz"
     PdaiDoc187Fz = "pdai-doc-187fz"
     PdaiSiteCheck = "pdai-site-check"
+    PdaiAgent = "pdai-agent"
     PolimetrikaDataAgent = "polimetrika-data-agent"
     ThermalCalcAgent = "thermal-calc-agent"
 
@@ -32,5 +33,6 @@ class BillingPrivilegeCode(str, Enum):
     PdaiAuditAssistAllowed = "pdai-audit-assist-allowed"
     PdaiDoc187FzAllowed = "pdai-doc-187fz-allowed"
     PdaiSiteCheckAllowed = "pdai-site-check-allowed"
+    PdaiAgentAllowed = "pdai-agent-allowed"
     PolimetrikaDataAgentAllowed = "polimetrika-data-agent-allowed"
     ThermalCalcAllowed = "thermal-calc-allowed"

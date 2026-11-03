@@ -52,6 +52,11 @@
       "name": "PD-AI Website Compliance Check"
     },
     {
+      "code": "pdai-agent",
+      "constant": "PdaiAgent",
+      "name": "PD-AI Domain Service"
+    },
+    {
       "code": "polimetrika-data-agent",
       "constant": "PolimetrikaDataAgent",
       "name": "Polimetrika Data Agent"
@@ -137,6 +142,11 @@
       "code": "pdai-site-check-allowed",
       "constant": "PdaiSiteCheckAllowed",
       "name": "PD-AI Website Check Allowed"
+    },
+    {
+      "code": "pdai-agent-allowed",
+      "constant": "PdaiAgentAllowed",
+      "name": "PD-AI Domain Service Allowed"
     },
     {
       "code": "polimetrika-data-agent-allowed",

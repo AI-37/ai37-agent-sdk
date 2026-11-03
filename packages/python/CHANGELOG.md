@@ -3,6 +3,15 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a29] - 2026-11-03
+
+### Added
+
+- Фича `pdai-agent` (`BillingFeatureCode.PdaiAgent`) и привилегия `pdai-agent-allowed`
+  (`BillingPrivilegeCode.PdaiAgentAllowed`) для сервиса домена PD-AI `pdai-agent`; паритет с TS
+  `0.1.0-alpha.37`. Регистрация кода не выдаёт право организациям: его дают тарифы `pdai_*` в
+  каталоге Lago контура `pd-ai-prod`.
+
 ## [0.1.0a28] - 2026-10-30
 
 ### Added
