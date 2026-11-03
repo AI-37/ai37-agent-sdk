@@ -4,6 +4,19 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a31]
+
+### Fixed
+- **Ход в существующую задачу видит свой запрос, а не тот, что задачу создал.** Незавершённую
+  задачу a2a-sdk ведёт один долгоживущий producer (`ActiveTask._run_producer`), созданный
+  `asyncio.create_task` на первом запросе, — он унаследовал contextvars того запроса, а следующие
+  ходы получает через очередь. `current_ctx()`, `current_bearer()`, `current_checkpointer()` и
+  `req.ctx` на втором и следующих ходах отдавали scope первого запроса: в прод (minstroy, 02.11)
+  пользователь вернулся в диалог через три дня, guard проверил свежий JWT, а в billing `/state` ушёл
+  трёхдневный → `401 invalid bearer token`. Теперь `HostCallContextBuilder` кладёт scope запроса в
+  `ServerCallContext.state` (`CALL_CONTEXT_SCOPE_KEY`), а `HostExecutor.execute` поднимает его на
+  время хода. TS-хост не затронут: `@a2a-js/sdk` зовёт `execute` в async-контексте каждого запроса.
+
 ## [0.1.0a30]
 
 Паритет с `@ai37/agent-host` 0.4.1.

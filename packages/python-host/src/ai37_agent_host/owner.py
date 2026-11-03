@@ -17,7 +17,7 @@ from a2a.server.context import ServerCallContext
 from a2a.server.routes.common import DefaultServerCallContextBuilder
 from starlette.requests import Request
 
-from .als import current_ctx
+from .als import CALL_CONTEXT_SCOPE_KEY, current_ctx, current_scope
 
 
 class JwtUser(User):
@@ -52,7 +52,19 @@ def current_call_context() -> ServerCallContext:
 
 
 class HostCallContextBuilder(DefaultServerCallContextBuilder):
-    """Контекст A2A-запроса с пользователем из JWT хода вместо Starlette ``request.user``."""
+    """Контекст A2A-запроса с пользователем из JWT хода вместо Starlette ``request.user``.
+
+    Заодно уносит в ``state`` scope самого запроса (ctx, bearer, checkpointer): executor
+    восстанавливает его на ходу, а не читает ContextVar producer'а задачи — тот застыл на первом
+    запросе (см. ``CALL_CONTEXT_SCOPE_KEY``).
+    """
+
+    def build(self, request: Request) -> ServerCallContext:
+        context = super().build(request)
+        scope = current_scope()
+        if scope is not None:
+            context.state[CALL_CONTEXT_SCOPE_KEY] = scope
+        return context
 
     def build_user(self, request: Request) -> User:
         user = current_user()
