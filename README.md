@@ -4,12 +4,12 @@
 # ai37-agent-sdk
 
 ## Описание
-Монорепо общих библиотек для агентов AI37. SDK (`@ai37/agent-sdk` для TS, `ai37-agent-sdk` для Python) проверяет user-JWT по JWKS, делает billing preflight и отправляет metered usage (runtime state, `llmKey`, гейт по `entitlementStatus`), форвардит тот же user-JWT при вызове суб-агента по A2A и даёт обёртку `AgentContext`. Поверх SDK лежит host-слой (`@ai37/agent-host` / `ai37-agent-host`): HTTP-сервер агента с A2A, AG-UI, MCP и Postgres task store. В том же монорепо публикуются два вспомогательных пакета: `@ai37/docx` (markdown → DOCX) и `ai37-capture-contract` (контракт захвата карточки товара для мониторинга цен). SDK не выполняет OIDC-логин: он только проверяет и форвардит уже выданный токен.
+Монорепо общих библиотек для агентов AI37. SDK (`@ai37/agent-sdk` для TS, `ai37-agent-sdk` для Python) проверяет user-JWT по JWKS, делает billing preflight и отправляет metered usage (runtime state, `llmKey`, гейт по `entitlementStatus`), форвардит тот же user-JWT при вызове суб-агента по A2A и даёт обёртку `AgentContext`. Поверх SDK лежит host-слой (`@ai37/agent-host` / `ai37-agent-host`): HTTP-сервер агента с A2A, AG-UI, MCP и Postgres task store, плюс модуль project-knowledge (пул проекта document-service, служебный токен, мост chat-backend). В том же монорепо публикуются два вспомогательных пакета: `@ai37/docx` (markdown → DOCX) и `ai37-capture-contract` (контракт захвата карточки товара для мониторинга цен). SDK не выполняет OIDC-логин: он только проверяет и форвардит уже выданный токен.
 
 ## Стек
-- TypeScript, Node ≥ 22, npm, tsup, vitest: `@ai37/agent-sdk` (0.1.0-alpha.37), `@ai37/agent-host` (0.4.1), `@ai37/docx` (0.1.0-alpha.1).
-- `@ai37/agent-host`: `@a2a-js/sdk` ^1.3.0, Express 4, `@ag-ui/core`/`@ag-ui/encoder`, `prom-client`, Langfuse/OpenTelemetry; peer-зависимости: `@ai37/agent-sdk`, LangChain/LangGraph checkpoint (+postgres), `@modelcontextprotocol/sdk`, `kysely`, `pg`, `zod`.
-- Python ≥ 3.11, poetry, ruff, mypy, pytest: `ai37-agent-sdk` (0.1.0a29; pyjwt, httpx), `ai37-agent-host` (0.1.0a31; `a2a-sdk` ≥ 1.1.0, FastAPI/Starlette, sse-starlette, prometheus-client; extras `redis`, `postgres`, `observability`).
+- TypeScript, Node ≥ 22, npm, tsup, vitest: `@ai37/agent-sdk` (0.1.0-alpha.37), `@ai37/agent-host` (0.5.0), `@ai37/docx` (0.1.0-alpha.1).
+- `@ai37/agent-host`: `@a2a-js/sdk` ^1.3.0, Express 4, `@ag-ui/core`/`@ag-ui/encoder`, `@ai37/a2ui-catalog-schemas`, `prom-client`, Langfuse/OpenTelemetry; peer-зависимости: `@ai37/agent-sdk`, LangChain/LangGraph checkpoint (+postgres), `@modelcontextprotocol/sdk`, `kysely`, `pg`, `zod` (все опциональные, кроме `@ai37/agent-sdk`).
+- Python ≥ 3.11, poetry, ruff, mypy, pytest: `ai37-agent-sdk` (0.1.0a29; pyjwt, httpx), `ai37-agent-host` (0.1.0a32; `a2a-sdk` ≥ 1.1.0, FastAPI/Starlette, sse-starlette, prometheus-client; extras `redis`, `postgres`, `observability`).
 - Python ≥ 3.12, pydantic 2: `ai37-capture-contract` (0.1.0).
 - Общий контракт в `contract/` (JSON Schema + `feature-codes.json`), кодоген `scripts/codegen.mjs`.
 
@@ -17,6 +17,8 @@
 Агент поднимается через `createAgentHost(...)` (TS) или `create_agent_host(...)` (Python). Входящий запрос проходит JWT-guard: это `AgentContext` из SDK, то есть `auth.verify` по JWKS и billing preflight (`assertExecutionAllowed`; `entitlementStatus != 'active'` → отказ, `payment_failed` → `PAYMENT_FAILED`, `no_resources` → `NO_TOKENS`). Потом вызывается `handler` агента: LLM идёт с `apiKey = llmKey` из runtime state, после успешного хода отправляется `reportUsage`. Для вызова суб-агента `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`), relay-клиент лежит в `@ai37/agent-host/relay`.
 
 TS-хост по умолчанию работает с `legacyCompat`: запрос без заголовка `A2A-Version` (или с `0.3`) идёт через compat-слой A2A 0.3, запрос с `1.0` — в обработчик 1.x. Состояние хода (multi-turn/HITL) хранится в task store, общем для A2A и AG-UI: по умолчанию in-memory, durable-вариант — Postgres из `@ai37/agent-host/task-store`.
+
+Манифест вложений `metadata.ai37.context_files` (тип `ContextFile`) несёт необязательное поле `recognition` (`ContextFileRecognition`): итог стадии распознавания файла в пуле проекта document-service — `state` (`ready` / `empty` / `error` / `stopped` / `rejected`), `seriesId`, `pageCount`, `code` и `reason` отказа. Поле заполняет chat-backend в режиме `ATTACHMENT_INGEST_MODE=raw`, когда сам загрузил файлы хода в DS и дождался распознавания; агенты, не знающие поля, видят обычный манифест. В Python-хосте `parse_a2a_message` нормализует `recognition` из protobuf-`Struct` (незнакомое/промежуточное состояние читается как отсутствие поля, `pageCount`-float приводится к int).
 
 ```mermaid
 flowchart LR
@@ -27,19 +29,20 @@ flowchart LR
   A -->|apiKey = llmKey| L[LLM-шлюз]
   A -->|a2a forward user-JWT| S[суб-агент]
   H --> T[(task store: Postgres a2a_tasks)]
+  A -->|uploadToProjectPool / findProjectDocumentByTitle / listProjectPoolDocuments| D[document-service: пул проекта]
 ```
 
 ## Структура каталогов
 - `contract/` — общий контракт: JSON Schema claims, billing runtime state, A2A-расширения routing/showcase (+ векторы), `feature-codes.json`, `env.md`.
 - `packages/ts/` — `@ai37/agent-sdk`: `auth`, `billing`, `a2a` (forward, routing, showcase), `policy`, `context`, `codes`, `testing`, `dev`, CLI.
 - `packages/python/` — `ai37-agent-sdk`, Python-порт тех же модулей (`auth`, `billing`, `a2a`, `policy`, `testing`, `log_redaction`).
-- `packages/ts-host/` — `@ai37/agent-host`: A2A executor, AG-UI, MCP, relay, skills, dsh (рантайм harness-сессий), task-store, store-backend’ы и attachments, project-knowledge, observability, CLI task store.
-- `packages/python-host/` — `ai37-agent-host`, Python-порт хоста (A2A, AG-UI, MCP, relay, store_backend, project_knowledge, Postgres/Redis task store, Langfuse).
+- `packages/ts-host/` — `@ai37/agent-host`: A2A executor, AG-UI, MCP, relay, skills, dsh (рантайм harness-сессий), task-store, store-backend’ы и attachments, project-knowledge (пул проекта DS, service-token, мост chat-backend), observability, CLI task store.
+- `packages/python-host/` — `ai37-agent-host`, Python-порт хоста (A2A, AG-UI, MCP, relay, store_backend, project_knowledge, parse, Postgres/Redis task store, Langfuse).
 - `packages/ts-docx/` — `@ai37/docx`: детерминированный рендер markdown → DOCX.
 - `packages/capture-contract/` — `ai37-capture-contract`: модели захвата карточки товара (minstroy ↔ website-scraper).
 - `scripts/` — `codegen.mjs` (contract → `codes.ts`/`codes.py`).
 - `openspec/` — спецификации изменений AG-UI (action input, tool-call HITL).
-- `docs/` — план миграции на приватные реестры.
+- `docs/` — план миграции на приватные реестры, планы срезов (`docs/plans/…`).
 
 ## Публичные интерфейсы
 - **SDK (npm/PyPI):** модули `auth`, `billing` (в т.ч. `BILLING_USER_MESSAGES`, `billingUserMessage`/`billing_user_message`, `explainDenial`, `BillingDenialReason`), `a2a`, `context` (`AgentContext`), `codes`, `policy`, `testing`. Subpath-экспорты TS: `.`, `./dev`, `./testing`.
@@ -50,8 +53,10 @@ flowchart LR
   - `/agui` — AG-UI SSE за JWT-guard;
   - `/mcp` + `/.well-known/oauth-protected-resource` — опционально, при `opts.mcp` (401 + `WWW-Authenticate`);
   - `GET /api/v1/health`, `GET /api/v1/version`, `GET /metrics` (Prometheus, вне guard).
+- **Модуль project-knowledge (`@ai37/agent-host`, реэкспорт из корня):** `uploadToProjectPool`, `findProjectDocumentByTitle`, `listProjectPoolDocuments` (+ константа `MAX_SERIES_IDS` = 50), `serviceToken`, `indexToProject`, `ProjectPoolError`, `ProjectKnowledgeError`, `ServiceTokenError`, `ProjectPoolDocument`, `ProjectPoolDocumentState`, `ListProjectPoolDocumentsOptions`. `listProjectPoolDocuments({ documentServiceUrl, projectKey, seriesIds, bearer })` читает `GET /api/project-pools/{key}/documents?seriesIds=…` и возвращает строки реестра (`state`, `pageCount`, `readyPages`) только для запрошенных серий: пустой список — пустой ответ без запроса, больше 50 серий — `ProjectPoolError('invalid_query')` без запроса, строки чужих пулов отбрасываются.
+- **Типы манифеста:** `ContextFile` с необязательным `recognition?: ContextFileRecognition`, тип `ContextFileRecognitionState` (реэкспорт из `.` и `./relay`).
 - **CLI `ai37-agent-host-task-store`:** `migrate | check | cleanup` для таблицы `a2a_tasks` (строка подключения из `DATABASE_URL`).
-- **`ai37-agent-host` (Python):** та же поверхность (`/api/v1/health`, `/api/v1/version`, `/.well-known/agent-card.json`, `/a2a/v1`, `/agui`, `/mcp`, `/metrics`).
+- **`ai37-agent-host` (Python):** та же поверхность (`/api/v1/health`, `/api/v1/version`, `/.well-known/agent-card.json`, `/a2a/v1`, `/agui`, `/mcp`, `/metrics`); из корня экспортируются `ContextFile`, `ContextFileRecognition`, `ContextFileRecognitionState`, project_knowledge (`upload_to_project_pool`, `find_project_document_by_title`, `service_token`, `index_to_project`).
 - **`@ai37/docx`:** `renderMarkdownToDocx(markdown)`.
 
 ## Зависимости в экосистеме
@@ -60,6 +65,8 @@ flowchart LR
 - billing-microservice — runtime state (`llmKey`, `entitlementStatus`), preflight, usage.
 - LLM-шлюз (LiteLLM) — через `llmKey` из runtime state.
 - Суб-агенты по A2A — forward user-JWT.
+- document-service (DS) — пул проекта: загрузка файла, поиск документа по названию, чтение реестра документов по `seriesIds`; organization берётся из токена/пула.
+- chat-backend — мост «добавить в базу проекта» (`indexToProject`), артефакты тредов/проектов, чтение файлов хода.
 - Postgres — durable task store и LangGraph-чекпоинтер в host-слое; Redis — опциональный `RedisTaskStore` в Python-хосте.
 - `@ai37/a2ui-catalog-schemas` (ai37-a2ui-catalog) — зависимость `@ai37/agent-host`.
 - Langfuse — опциональная трассировка ходов.
@@ -79,13 +86,15 @@ flowchart LR
 - `AI37_AUTH_MODE` (`jwks` | `insecure-dev`), `AI37_DEV_CLAIMS_FILE` — dev-обход подписи (запрещён при прод-признаках).
 - `BILLING_MICROSERVICE_BASE_URL`, `BILLING_MODE` (`http` | `fake`), `BILLING_IDENTITY_SOURCE`, `LLM_KEY_SOURCE`.
 - `A2A_AUTH_MODE` — `forward-user-jwt`.
-- Host-слой: `DATABASE_URL`, `TASK_STORE_EXTERNAL_SCHEMA` (CLI task store); `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`/`LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENABLED`, `LANGFUSE_CAPTURE_CONTENT`, `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_RELEASE`; `CHAT_BACKEND_URL`, `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` (project-knowledge).
+- Host-слой: `DATABASE_URL`, `TASK_STORE_EXTERNAL_SCHEMA` (CLI task store); `LITELLM_BASE_URL` (`LITELLM_BASE_URL_ENV`); `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`/`LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENABLED`, `LANGFUSE_CAPTURE_CONTENT`, `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_RELEASE`; `CHAT_BACKEND_URL`, `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` (project-knowledge); `ATTACHMENT_INGEST_MODE` (у продюсера chat-backend: `raw` включает заполнение `ContextFile.recognition`).
+- `AI37_NPM_TOKEN` — токен приватного npm для сборки `packages/ts-host`.
 - `llmKey` берётся только из runtime state billing, не из env и не из JWT.
 
 ## Данные и хранилища
 - У SDK нет собственной БД.
 - `@ai37/agent-host/task-store` — Postgres-таблица `a2a_tasks`: схему создаёт `ai37-agent-host-task-store migrate` (через `a2a-db upgrade`). Если её ведёт сам сервис, ставится `TASK_STORE_EXTERNAL_SCHEMA=true`. Ретенция — `cleanup` (`--terminal-days 7`, `--stale-days 14` по умолчанию).
 - Python-хост: `PostgresTaskStore` (extra `postgres`) и `RedisTaskStore` (extra `redis`).
+- Пул проекта DS — внешнее хранилище document-service; SDK/хост только читают и пишут через HTTP (`/api/project-pools/{key}/documents`), своей схемы не создают.
 
 ## Быстрый старт (локально)
 Библиотеки, отдельного сервиса нет. Разработка — через корневой Makefile:
