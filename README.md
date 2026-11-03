@@ -4,82 +4,115 @@
 # ai37-agent-sdk
 
 ## Описание
-SDK для агентов экосистемы AI37: закрывает сквозные задачи auth (верификация user-JWT по JWKS), billing (runtime state, metered usage, `llmKey`, гейт отказа по `entitlementStatus`, включая `payment_failed`), A2A-forward того же user-JWT и обёртку `AgentContext`. Это монорепо двух реализаций (TypeScript и Python) с общим контрактом, плюс host-слой агентов (`@ai37/agent-host`). SDK не выполняет OIDC-логин — он проверяет и форвардит уже выданный токен.
+Монорепо общих библиотек для агентов AI37. SDK (`@ai37/agent-sdk` для TS, `ai37-agent-sdk` для Python) проверяет user-JWT по JWKS, делает billing preflight и отправляет metered usage (runtime state, `llmKey`, гейт по `entitlementStatus`), форвардит тот же user-JWT при вызове суб-агента по A2A и даёт обёртку `AgentContext`. Поверх SDK лежит host-слой (`@ai37/agent-host` / `ai37-agent-host`): HTTP-сервер агента с A2A, AG-UI, MCP и Postgres task store. В том же монорепо публикуются два вспомогательных пакета: `@ai37/docx` (markdown → DOCX) и `ai37-capture-contract` (контракт захвата карточки товара для мониторинга цен). SDK не выполняет OIDC-логин: он только проверяет и форвардит уже выданный токен.
 
 ## Стек
-- TypeScript (Node ≥ 22), npm, tsup (пакет `@ai37/agent-sdk`).
-- Python (≥ 3.11), poetry, ruff, mypy, pytest (пакет `ai37-agent-sdk`).
-- Общий контракт в `contract/` (JSON Schema, `feature-codes.json`, `env.md`), кодоген `make codegen`.
-- Host-слой: `packages/ts-host` и `packages/python-host` (A2A, AG-UI, MCP, Redis task store, observability/Langfuse).
+- TypeScript, Node ≥ 22, npm, tsup, vitest: `@ai37/agent-sdk` (0.1.0-alpha.37), `@ai37/agent-host` (0.4.1), `@ai37/docx` (0.1.0-alpha.1).
+- `@ai37/agent-host`: `@a2a-js/sdk` ^1.3.0, Express 4, `@ag-ui/core`/`@ag-ui/encoder`, `prom-client`, Langfuse/OpenTelemetry; peer-зависимости: `@ai37/agent-sdk`, LangChain/LangGraph checkpoint (+postgres), `@modelcontextprotocol/sdk`, `kysely`, `pg`, `zod`.
+- Python ≥ 3.11, poetry, ruff, mypy, pytest: `ai37-agent-sdk` (0.1.0a29; pyjwt, httpx), `ai37-agent-host` (0.1.0a31; `a2a-sdk` ≥ 1.1.0, FastAPI/Starlette, sse-starlette, prometheus-client; extras `redis`, `postgres`, `observability`).
+- Python ≥ 3.12, pydantic 2: `ai37-capture-contract` (0.1.0).
+- Общий контракт в `contract/` (JSON Schema + `feature-codes.json`), кодоген `scripts/codegen.mjs`.
 
 ## Схема работы
-Агент получает A2A-запрос с Bearer user-JWT; `AgentContext` (SDK):
-1. `auth.verify` — проверка подписи/iss/aud/exp по JWKS (кэш ключей);
-2. billing preflight (`assertExecutionAllowed`) — entitlement (любое значение `!= 'active'` → отказ; `payment_failed` → `PAYMENT_FAILED` проверяется первым, `no_resources` → `NO_TOKENS`), остаток токенов, `llmKey`. Пользовательский текст отказа берётся из единой карты `BILLING_USER_MESSAGES` / `billing_user_message`;
-3. LLM-вызов с `apiKey = llmKey`;
-4. доменная работа;
-5. `reportUsage` после успеха.
+Агент поднимается через `createAgentHost(...)` (TS) или `create_agent_host(...)` (Python). Входящий запрос проходит JWT-guard: это `AgentContext` из SDK, то есть `auth.verify` по JWKS и billing preflight (`assertExecutionAllowed`; `entitlementStatus != 'active'` → отказ, `payment_failed` → `PAYMENT_FAILED`, `no_resources` → `NO_TOKENS`). Потом вызывается `handler` агента: LLM идёт с `apiKey = llmKey` из runtime state, после успешного хода отправляется `reportUsage`. Для вызова суб-агента `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`), relay-клиент лежит в `@ai37/agent-host/relay`.
 
-При вызове суб-агента модуль `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`). Для тестов без сети есть подпакет `testing` (фейки, фикстуры, in-memory billing, тест-токены).
+TS-хост по умолчанию работает с `legacyCompat`: запрос без заголовка `A2A-Version` (или с `0.3`) идёт через compat-слой A2A 0.3, запрос с `1.0` — в обработчик 1.x. Состояние хода (multi-turn/HITL) хранится в task store, общем для A2A и AG-UI: по умолчанию in-memory, durable-вариант — Postgres из `@ai37/agent-host/task-store`.
 
 ```mermaid
 flowchart LR
-  C[UI / другой агент] -->|A2A Bearer user-JWT| AG[Агент / AgentContext]
-  AG -->|auth.verify| J[JWKS]
-  AG -->|billing preflight + usage| B[billing]
-  AG -->|apiKey = llmKey| L[LLM-шлюз]
-  AG -->|a2a.forward user-JWT| S[суб-агент]
+  C[UI / оркестратор / другой агент] -->|A2A или AG-UI, Bearer user-JWT| H[agent-host]
+  H -->|AgentContext: auth.verify| J[JWKS / Authentik]
+  H -->|billing preflight + usage| B[billing-microservice]
+  H --> A[handler агента]
+  A -->|apiKey = llmKey| L[LLM-шлюз]
+  A -->|a2a forward user-JWT| S[суб-агент]
+  H --> T[(task store: Postgres a2a_tasks)]
 ```
 
 ## Структура каталогов
-- `contract/` — общий контракт SDK: JSON Schema runtime state (включая `entitlementStatus`), коды фич/привилегий, `env.md`.
-- `packages/ts/` — TypeScript-реализация SDK (`@ai37/agent-sdk`).
-- `packages/python/` — Python-реализация SDK (`ai37-agent-sdk`).
-- `packages/ts-host/`, `packages/python-host/` — host-слой агентов (A2A, AG-UI, MCP, task store, observability).
+- `contract/` — общий контракт: JSON Schema claims, billing runtime state, A2A-расширения routing/showcase (+ векторы), `feature-codes.json`, `env.md`.
+- `packages/ts/` — `@ai37/agent-sdk`: `auth`, `billing`, `a2a` (forward, routing, showcase), `policy`, `context`, `codes`, `testing`, `dev`, CLI.
+- `packages/python/` — `ai37-agent-sdk`, Python-порт тех же модулей (`auth`, `billing`, `a2a`, `policy`, `testing`, `log_redaction`).
+- `packages/ts-host/` — `@ai37/agent-host`: A2A executor, AG-UI, MCP, relay, skills, dsh (рантайм harness-сессий), task-store, store-backend’ы и attachments, project-knowledge, observability, CLI task store.
+- `packages/python-host/` — `ai37-agent-host`, Python-порт хоста (A2A, AG-UI, MCP, relay, store_backend, project_knowledge, Postgres/Redis task store, Langfuse).
+- `packages/ts-docx/` — `@ai37/docx`: детерминированный рендер markdown → DOCX.
+- `packages/capture-contract/` — `ai37-capture-contract`: модели захвата карточки товара (minstroy ↔ website-scraper).
+- `scripts/` — `codegen.mjs` (contract → `codes.ts`/`codes.py`).
+- `openspec/` — спецификации изменений AG-UI (action input, tool-call HITL).
+- `docs/` — план миграции на приватные реестры.
 
 ## Публичные интерфейсы
-- **SDK (npm/PyPI):** модули `auth`, `billing`, `a2a`, `context` (`AgentContext`), `codes`, `testing`. В `billing` публично экспортируются `BILLING_USER_MESSAGES`, `DEFAULT_BILLING_USER_MESSAGE`, `billingUserMessage`/`billing_user_message`, `friendlyBillingMessage`, `explainDenial`, `BillingDenialReason` (включая `PAYMENT_FAILED`). Python-пакет без CLI (follow-up).
-- **CLI (TS):** dev-утилиты (`devJwks`, `devBilling`, `devKey`).
-- **Host-слой `@ai37/agent-host`:** A2A, AG-UI, MCP, task-релей, store-backend’ы, observability.
+- **SDK (npm/PyPI):** модули `auth`, `billing` (в т.ч. `BILLING_USER_MESSAGES`, `billingUserMessage`/`billing_user_message`, `explainDenial`, `BillingDenialReason`), `a2a`, `context` (`AgentContext`), `codes`, `policy`, `testing`. Subpath-экспорты TS: `.`, `./dev`, `./testing`.
+- **CLI `ai37-agent-sdk` (TS):** dev-утилиты `devJwks`, `devBilling`, `devKey`. У Python-пакета CLI нет.
+- **`@ai37/agent-host`:** subpath-экспорты `.`, `./relay`, `./skills`, `./dsh`, `./task-store`. HTTP-поверхность, которую собирает `createAgentHost`:
+  - `GET /.well-known/agent-card.json` — гибридная Agent Card (поля 0.3 + `supportedInterfaces` 1.0/0.3);
+  - `/a2a/v1` — A2A JSON-RPC (базовый путь настраивается через `basePath`) за JWT-guard;
+  - `/agui` — AG-UI SSE за JWT-guard;
+  - `/mcp` + `/.well-known/oauth-protected-resource` — опционально, при `opts.mcp` (401 + `WWW-Authenticate`);
+  - `GET /api/v1/health`, `GET /api/v1/version`, `GET /metrics` (Prometheus, вне guard).
+- **CLI `ai37-agent-host-task-store`:** `migrate | check | cleanup` для таблицы `a2a_tasks` (строка подключения из `DATABASE_URL`).
+- **`ai37-agent-host` (Python):** та же поверхность (`/api/v1/health`, `/api/v1/version`, `/.well-known/agent-card.json`, `/a2a/v1`, `/agui`, `/mcp`, `/metrics`).
+- **`@ai37/docx`:** `renderMarkdownToDocx(markdown)`.
 
 ## Зависимости в экосистеме
 ### Зависит от
-- billing-сервиса (`BILLING_BASE_URL`): preflight, runtime state, usage; billing кодирует причину отказа в `entitlementStatus` (`active` / `no_resources` / `payment_failed`).
-- JWKS/OIDC issuer (`JWKS_URL`, `ISSUER`, `AUDIENCE`).
-- LLM-шлюза (через `llmKey` из runtime state).
-- Суб-агентов по A2A (forward user-JWT).
-- Redis — только для host-слоя.
+- Authentik (OIDC issuer/JWKS) — проверка user-JWT.
+- billing-microservice — runtime state (`llmKey`, `entitlementStatus`), preflight, usage.
+- LLM-шлюз (LiteLLM) — через `llmKey` из runtime state.
+- Суб-агенты по A2A — forward user-JWT.
+- Postgres — durable task store и LangGraph-чекпоинтер в host-слое; Redis — опциональный `RedisTaskStore` в Python-хосте.
+- `@ai37/a2ui-catalog-schemas` (ai37-a2ui-catalog) — зависимость `@ai37/agent-host`.
+- Langfuse — опциональная трассировка ходов.
+- Приватные реестры: Verdaccio `npm.app.sp-ai.ru`, `pypi.app.sp-ai.ru`.
 
 ### От него зависят
-- Агенты AI37, использующие SDK/`AgentContext`.
-- Host-пакеты `@ai37/agent-host` (ts-host/python-host) поверх SDK.
+- spai-chat-backend и его форки (оркестратор на `@ai37/agent-host`).
+- search-agent и форки `{spai,pdai,graphema}-search-agent`.
+- spai-elevator-calc-agent, spai-thermal-calc-agent, spai-daylight-factor-calc-agent, spai-consultant-agent.
+- pdai-doc-gen-agent, pdai-site-check, polimetrika-data-agent (`ai37-agent-host`), minstroy (`ai37-agent-sdk` + `ai37-agent-host`).
+- document-service и форки, spai-ui (по components.md).
+- minstroy и website-scraper — потребители `ai37-capture-contract`.
 
 ## Конфигурация
-Ключевые параметры (передаются в настройки SDK; см. `contract/env.md`):
-- `ISSUER`, `AUDIENCE`, `JWKS_URL` — auth (JWT-verify).
-- `BILLING_BASE_URL` — billing.
-- `required` — обязательность проверки auth/billing.
-- `llmKey` — из runtime state billing, не из env/JWT; не логировать.
+Единые имена переменных (`contract/env.md`):
+- `AI37_OIDC_ISSUER`, `AI37_OIDC_JWKS_URL`, `AI37_OIDC_AUDIENCE` — проверка JWT; `AI37_AUTH_REQUIRED` — обязательность JWT.
+- `AI37_AUTH_MODE` (`jwks` | `insecure-dev`), `AI37_DEV_CLAIMS_FILE` — dev-обход подписи (запрещён при прод-признаках).
+- `BILLING_MICROSERVICE_BASE_URL`, `BILLING_MODE` (`http` | `fake`), `BILLING_IDENTITY_SOURCE`, `LLM_KEY_SOURCE`.
+- `A2A_AUTH_MODE` — `forward-user-jwt`.
+- Host-слой: `DATABASE_URL`, `TASK_STORE_EXTERNAL_SCHEMA` (CLI task store); `LANGFUSE_PUBLIC_KEY`, `LANGFUSE_SECRET_KEY`, `LANGFUSE_HOST`/`LANGFUSE_BASE_URL`, `LANGFUSE_TRACING_ENABLED`, `LANGFUSE_CAPTURE_CONTENT`, `LANGFUSE_TRACING_ENVIRONMENT`, `LANGFUSE_RELEASE`; `CHAT_BACKEND_URL`, `SERVICE_CLIENT_ID`, `SERVICE_CLIENT_SECRET` (project-knowledge).
+- `llmKey` берётся только из runtime state billing, не из env и не из JWT.
 
 ## Данные и хранилища
-— У SDK нет собственной БД/миграций. Host-слой использует Redis task store (`packages/*-host/redis_task_store.py`) и store-backend’ы (chat/attachments/file-context).
+- У SDK нет собственной БД.
+- `@ai37/agent-host/task-store` — Postgres-таблица `a2a_tasks`: схему создаёт `ai37-agent-host-task-store migrate` (через `a2a-db upgrade`). Если её ведёт сам сервис, ставится `TASK_STORE_EXTERNAL_SCHEMA=true`. Ретенция — `cleanup` (`--terminal-days 7`, `--stale-days 14` по умолчанию).
+- Python-хост: `PostgresTaskStore` (extra `postgres`) и `RedisTaskStore` (extra `redis`).
 
 ## Быстрый старт (локально)
-— (в предоставленных материалах нет отдельных команд установки/локального запуска; SDK потребляется как зависимость, а разработка/проверка выполняется через корневые Makefile-таргеты — см. ниже).
+Библиотеки, отдельного сервиса нет. Разработка — через корневой Makefile:
+```bash
+make codegen           # contract/feature-codes.json → codes.ts + codes.py
+make ts                # @ai37/agent-sdk: npm ci + lint + test + build
+make ts-docx           # @ai37/docx
+make py                # ai37-agent-sdk: poetry install --with dev + ruff + mypy + pytest
+make capture-contract  # ai37-capture-contract
+```
+Для `@ai37/agent-host` (`packages/ts-host`) нужен собранный `packages/ts` и токен приватного npm (`AI37_NPM_TOKEN`, корневой `.npmrc`): `npm ci && npm run verify`.
 
 ## Как запускать тесты
 ```bash
-make codegen   # кодоген codes.ts/codes.py из contract/
-make ts        # TS: lint + test + build
-make py        # Python: ruff + mypy + pytest
-make verify    # codegen-парити + оба пакета
+make verify   # codegen-парити + ts + ts-docx + py + capture-contract
 ```
+По пакетам: `npm test` (`vitest run`) в `packages/ts`, `packages/ts-host`, `packages/ts-docx`; `poetry run pytest` в `packages/python`, `packages/python-host`, `packages/capture-contract`. Postgres-тесты task store (`test/task-store.pg.test.ts`, `tests/test_postgres_task_store.py`) требуют живой Postgres; в CI это `postgres:18-alpine`.
 
 ## Деплой
-Библиотека, не сервис: публикация в npm/PyPI через GitHub Actions (`publish-ts.yml`, `publish-python.yml`, `publish-ts-host.yml`, `publish-python-host.yml`, `publish-capture-contract.yml`). Helm/terraform не используются.
+Не деплоится, публикуется как библиотеки. CI `ci.yml` — одна джоба `ci-green` на PR, проверяет все пакеты по очереди. Публикация — workflow’ы `publish-ts.yml`, `publish-ts-host.yml`, `publish-ts-docx.yml` (npm → `https://npm.app.sp-ai.ru/`) и `publish-python.yml`, `publish-python-host.yml`, `publish-capture-contract.yml` (twine → `https://pypi.app.sp-ai.ru/`), у каждого есть режим `dry_run`. Helm/terraform нет.
 
 ## Связанные документы
-- `ecosystem/v2/09-agent-runtime.md` — рантайм агентов.
+- `ecosystem/v2/09-agent-runtime.md` — рантайм агентов и SDK.
+- `ecosystem/v2/02-authentication.md`, `ecosystem/v2/03-billing.md`, `ecosystem/v2/04-a2a-conventions.md`, `ecosystem/v2/10-agui-protocol.md`.
+- `ecosystem/v2.2/02-agent-host-unification.md` — `@ai37/agent-host`.
+- `ecosystem/v2.2/04-state-storage-postgres.md`, `ecosystem/v2.4/02-postgres-only-state-and-queues.md` — Postgres task store.
+- `ecosystem/v2.4/03-mcp-surfaces.md`, `ecosystem/v5/02-oauth-for-mcp.md` — MCP-поверхность хоста.
 <!-- ai37:card:end -->
 
 <!-- Ниже — только уникальный человеческий контекст (замысел, инварианты, грабли).
