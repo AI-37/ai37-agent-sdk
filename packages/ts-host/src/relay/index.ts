@@ -21,6 +21,7 @@ export type {
   A2uiComponent,
   A2uiAction,
   ContextFile,
+  ContextFileKind,
   ContextFileRecognition,
   ContextFileRecognitionState,
 } from '../types'

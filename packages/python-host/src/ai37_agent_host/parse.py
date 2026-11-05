@@ -137,6 +137,8 @@ def _to_context_file(raw: dict[str, Any]) -> ContextFile:
         mime=raw.get("mime"),
         has_raw=raw.get("hasRaw"),
         recognition=_to_recognition(raw.get("recognition")),
+        # Незнакомый вид — обычный файл: новый продюсер не должен ломать старого агента.
+        kind="voice" if raw.get("kind") == "voice" else None,
     )
 
 

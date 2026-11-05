@@ -40,6 +40,10 @@ class IntentEnvelope:
 ContextFileRecognitionState = Literal["ready", "empty", "error", "stopped", "rejected"]
 
 
+#: Вид вложения в манифесте; пока один — голосовая запись композера.
+ContextFileKind = Literal["voice"]
+
+
 @dataclass
 class ContextFileRecognition:
     """Итог стадии распознавания для файла манифеста (``context_files[].recognition``)."""
@@ -81,6 +85,10 @@ class ContextFile:
     #: Чем кончилось распознавание файла в пуле проекта DS (chat-backend, режим ``raw``). Есть
     #: поле — файл прошёл стадию распознавания в этом ходе; нет — обычная запись манифеста.
     recognition: ContextFileRecognition | None = None
+    #: Чем файл был для человека, если это не обычное вложение: ``voice`` — запись голосового
+    #: ввода композера. По ``mime`` её не отличить (mp3 совещания через «+» — обычный документ).
+    #: ``None`` — обычный файл или продюсер поля не прислал.
+    kind: ContextFileKind | None = None
 
 
 @dataclass

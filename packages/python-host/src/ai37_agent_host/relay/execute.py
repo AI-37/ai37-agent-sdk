@@ -127,6 +127,8 @@ def _context_file_dict(f: ContextFile) -> dict[str, Any]:
         out["mime"] = f.mime
     if f.has_raw is not None:
         out["hasRaw"] = f.has_raw
+    if f.kind is not None:
+        out["kind"] = f.kind
     return out
 
 
