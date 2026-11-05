@@ -70,6 +70,23 @@ describe('executeRemoteA2a (relay)', () => {
     expect(p.configuration.acceptedOutputModes).toEqual(['text/markdown'])
   })
 
+  it('context_files уходит субагенту целиком: kind голосовой записи и прочие поля не теряются', async () => {
+    const { client, calls } = fakeClient(() => inputRequiredTaskWithForm('task-1'))
+    const voice = {
+      ref: 'chat-attachment:v1',
+      name: 'voice-1.webm',
+      scope: 'chat' as const,
+      mime: 'audio/webm',
+      hasRaw: true,
+      kind: 'voice' as const,
+    }
+    const plain = { ref: 'chat-attachment:f1', name: 'Счёт.pdf', scope: 'chat' as const }
+    await executeRemoteA2a(client, { query: 'x', contextRefs: [voice.ref], contextFiles: [voice, plain] })
+    const p = calls[0] as { message: { metadata: Record<string, any> } }
+    expect(p.message.metadata.ai37.context_files).toEqual([voice, plain])
+    expect(p.message.metadata.ai37.context_files[1]).not.toHaveProperty('kind')
+  })
+
   it('поднимает A2UI-форму из артефакта формы + taskId + state', async () => {
     const { client } = fakeClient(() => inputRequiredTaskWithForm('task-9'))
     const res = await executeRemoteA2a(client, { query: 'hi', contextId: 'ctx-1' })
