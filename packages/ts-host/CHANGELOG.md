@@ -3,6 +3,17 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.6.1] - 2026-11-05
+
+### Fixed
+- `uploadToProjectPool` ставит `Content-Length` руками только потоку. У байтов и `Blob` длину
+  проставляет сам fetch. Второй такой заголовок npm-undici 7, который стоит глобальным диспетчером
+  в chat-backend, отклоняет (`UND_ERR_INVALID_ARG: invalid content-length header`), и любая загрузка
+  вложения в пул проекта падала с `network_error`. Polimetrika держала для этого хотфикс в форке
+  chat-backend, и синк с upstream его потерял.
+- `ProjectPoolError('network_error')` сохраняет исходную ошибку в `cause`: вызывающий может записать
+  в лог цепочку fetch/undici, а не только код.
+
 ## [0.6.0] - 2026-11-05
 
 Голосовые записи композера как вложения (план `docs/plans/polimetrika-voice-source-decision-history.md`,

@@ -1,6 +1,6 @@
 {
   "name": "@ai37/agent-host",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "AI37 agent host: Express + A2A + AG-UI + JWT-guard (поверх @ai37/agent-sdk)",
   "type": "module",
   "license": "Apache-2.0",
@@ -155,6 +155,7 @@
     "tsup": "^8.5.0",
     "typescript": "^5.9.3",
     "typescript-eslint": "^8.72.0",
+    "undici": "^7.30.2",
     "vitest": "^4.0.8",
     "zod": "^4.4.3"
   }

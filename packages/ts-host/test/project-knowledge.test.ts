@@ -1,6 +1,7 @@
 import { createServer, type IncomingHttpHeaders } from 'node:http'
 import type { AddressInfo } from 'node:net'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { Agent, getGlobalDispatcher, setGlobalDispatcher } from 'undici'
 import { requestScope } from '../src/als'
 import {
   findProjectDocumentByTitle,
@@ -68,10 +69,11 @@ describe('uploadToProjectPool', () => {
     expect(headersOf(calls[0])).toMatchObject({
       Authorization: 'Bearer jwt-user',
       'Content-Type': 'application/pdf',
-      'Content-Length': String(PDF.byteLength),
       'X-File-Name': encodeURIComponent('Протокол расчёта (a1b2c3d4).pdf'),
       'X-Project-Name': encodeURIComponent('ЖК «Сосны»'),
     })
+    // Длину байтов проставляет сам fetch: второй заголовок undici 7 отклонил бы.
+    expect(headersOf(calls[0])['Content-Length']).toBeUndefined()
   })
 
   it('без projectName не шлёт X-Project-Name, не-PDF уходит как octet-stream', async () => {
@@ -185,10 +187,51 @@ describe('uploadToProjectPool', () => {
     const broken = (async () => {
       throw new TypeError('fetch failed')
     }) as unknown as typeof fetch
-    await expect(uploadToProjectPool(upload({ fetchImpl: broken }))).rejects.toMatchObject({
-      code: 'network_error',
-    })
+    const error = (await uploadToProjectPool(upload({ fetchImpl: broken })).catch(
+      (e: unknown) => e,
+    )) as ProjectPoolError
+    expect(error).toMatchObject({ code: 'network_error' })
+    // Исходная ошибка не теряется: вызывающий может записать её в лог.
+    expect((error.cause as Error).message).toBe('fetch failed')
   })
+
+  it.each([
+    ['байты', () => PDF],
+    ['Blob', () => new Blob([PDF])],
+    ['поток', () => ({ stream: new Blob([PDF]).stream(), size: PDF.byteLength })],
+  ])(
+    'с глобальным диспетчером npm-undici 7 (как в chat-backend) доходит до сервера: %s',
+    async (_kind, file) => {
+      const received: { headers?: IncomingHttpHeaders; body?: Buffer } = {}
+      const server = createServer((req, res) => {
+        const chunks: Buffer[] = []
+        req.on('data', (chunk: Buffer) => chunks.push(chunk))
+        req.on('end', () => {
+          received.headers = req.headers
+          received.body = Buffer.concat(chunks)
+          res.writeHead(201, { 'content-type': 'application/json' })
+          res.end(JSON.stringify({ id: 'series-undici' }))
+        })
+      })
+      await new Promise<void>((resolve) => server.listen(0, '127.0.0.1', resolve))
+      const previous = getGlobalDispatcher()
+      setGlobalDispatcher(new Agent())
+      try {
+        const { port } = server.address() as AddressInfo
+        const res = await uploadToProjectPool(
+          upload({ documentServiceUrl: `http://127.0.0.1:${port}`, file: file() }),
+        )
+        expect(res).toEqual({ seriesId: 'series-undici' })
+        // DS без длины тело не читает: у всех видов тела она доходит, а не chunked.
+        expect(received.headers?.['content-length']).toBe(String(PDF.byteLength))
+        expect(received.headers?.['transfer-encoding']).toBeUndefined()
+        expect(received.body?.equals(Buffer.from(PDF))).toBe(true)
+      } finally {
+        setGlobalDispatcher(previous)
+        server.close()
+      }
+    },
+  )
 })
 
 describe('findProjectDocumentByTitle', () => {
