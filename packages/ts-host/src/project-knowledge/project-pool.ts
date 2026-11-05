@@ -87,15 +87,19 @@ export class ProjectPoolError extends Error {
     readonly status?: number,
     /** Через сколько секунд повторить (`upload_busy`): из `Retry-After`, иначе из тела. */
     readonly retryAfterSeconds?: number,
+    /** Исходная ошибка (`network_error`): цепочка `cause` от fetch/undici для логов вызывающего. */
+    options?: ErrorOptions,
   ) {
-    super(`project pool: ${code}${status ? ` (HTTP ${status})` : ''}`)
+    super(`project pool: ${code}${status ? ` (HTTP ${status})` : ''}`, options)
     this.name = 'ProjectPoolError'
   }
 }
 
 /**
  * Загружает файл в пул проекта DS. Тело идёт потоком, без multipart: имя в `X-File-Name`
- * (encodeURIComponent), размер в `Content-Length`. Повтор того же содержимого не ошибка: DS
+ * (encodeURIComponent). `Content-Length` руками ставится только потоку: у байтов и Blob длину
+ * проставляет сам fetch, а второй такой заголовок npm-undici 7 (глобальный диспетчер chat-backend)
+ * отклоняет с `invalid content-length header`. Повтор того же содержимого не ошибка: DS
  * отвечает `duplicate`, и функция возвращает `duplicateOf`.
  *
  * ```ts
@@ -107,14 +111,15 @@ export class ProjectPoolError extends Error {
 export async function uploadToProjectPool(
   opts: UploadToProjectPoolOptions,
 ): Promise<ProjectPoolUploadResult> {
-  const { body, size } = uploadBody(opts.file)
+  const { body, streamLength } = uploadBody(opts.file)
   const headers: Record<string, string> = {
     Authorization: `Bearer ${opts.bearer}`,
     Accept: 'application/json',
     'Content-Type': opts.contentType ?? defaultContentType(opts.fileName),
-    'Content-Length': String(size),
     'X-File-Name': encodeURIComponent(opts.fileName),
   }
+  // Поток fetch отправил бы chunked, а DS без длины тело не читает (411).
+  if (streamLength !== undefined) headers['Content-Length'] = String(streamLength)
   if (opts.projectName) headers['X-Project-Name'] = encodeURIComponent(opts.projectName)
   const init: RequestInit & { duplex?: 'half' } = { method: 'POST', headers, body }
   // Поток в fetch Node уходит только полудуплексом.
@@ -244,10 +249,10 @@ function poolUrl(opts: { documentServiceUrl: string; projectKey: string }): stri
   return `${base}/api/project-pools/${encodeURIComponent(opts.projectKey)}/documents`
 }
 
-function uploadBody(file: ProjectPoolFile): { body: BodyInit; size: number } {
-  if (file instanceof Uint8Array) return { body: file as BodyInit, size: file.byteLength }
-  if (file instanceof Blob) return { body: file, size: file.size }
-  return { body: file.stream, size: file.size }
+/** Тело запроса; `streamLength` — только у потока: его длину fetch сам не знает. */
+function uploadBody(file: ProjectPoolFile): { body: BodyInit; streamLength?: number } {
+  if (file instanceof Uint8Array || file instanceof Blob) return { body: file as BodyInit }
+  return { body: file.stream, streamLength: file.size }
 }
 
 function defaultContentType(fileName: string): string {
@@ -263,8 +268,8 @@ async function call(
   const fetchImpl = opts.fetchImpl ?? globalThis.fetch
   try {
     return await fetchImpl(url, { ...init, signal: AbortSignal.timeout(timeoutMs) })
-  } catch {
-    throw new ProjectPoolError('network_error')
+  } catch (e) {
+    throw new ProjectPoolError('network_error', undefined, undefined, { cause: e })
   }
 }
 
