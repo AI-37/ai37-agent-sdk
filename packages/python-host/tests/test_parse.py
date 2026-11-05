@@ -129,6 +129,19 @@ def test_parse_context_file_without_or_with_unknown_recognition():
     assert broken.recognition.page_count is None
 
 
+def test_parse_context_file_kind():
+    voice, plain, unknown = _files(
+        {"ref": "chat-attachment:1", "name": "voice-1.webm", "scope": "chat", "kind": "voice"},
+        {"ref": "chat-attachment:2", "name": "meeting.mp3", "scope": "chat", "mime": "audio/mpeg"},
+        {"ref": "chat-attachment:3", "name": "c.pdf", "scope": "chat", "kind": "sketch"},
+    )
+    assert voice.kind == "voice"
+    # Аудио, приложенное через «+», — обычный документ, хотя mime у него тоже audio/*.
+    assert plain.kind is None
+    # Вид, которого агент не знает, читается как обычный файл.
+    assert unknown.kind is None
+
+
 def test_parse_trace_carrier_keeps_tracestate_and_baggage():
     # Ключи как у injectTraceContext ts-host: плоско в message.metadata, рядом с конвертом ai37.
     rc = _rc(

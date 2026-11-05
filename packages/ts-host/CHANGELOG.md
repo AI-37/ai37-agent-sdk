@@ -3,6 +3,16 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.6.0] - 2026-11-05
+
+Голосовые записи композера как вложения (план `docs/plans/polimetrika-voice-source-decision-history.md`,
+AI-37/docs#599, срез S2).
+
+### Added
+- `ContextFile.kind` (`ContextFileKind`): `voice` — запись голосового ввода, которую UI положил на
+  полку чата рядом с распознанным текстом. По `mime` её не отличить от аудио, приложенного через «+»,
+  поэтому вид передаётся явно. Поле необязательное: без него файл обычный.
+
 ## [0.5.0] - 2026-11-03
 
 Стадия распознавания в chat-backend (план `docs/plans/polimetrika-recognition-gate.md`,

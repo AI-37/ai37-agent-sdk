@@ -96,7 +96,8 @@ async def test_completed_with_a2ui_and_progress_and_forward():
                 scope="chat",
                 mime="text/csv",
                 has_raw=True,
-            )
+            ),
+            ContextFile(ref="chat-attachment:2", name="voice-1.webm", scope="chat", kind="voice"),
         ],
         supported_catalog_ids=["cat-v2"],
     )
@@ -117,6 +118,8 @@ async def test_completed_with_a2ui_and_progress_and_forward():
     # вернуть ему выбор «первый попавшийся файл».
     assert forwarded["mime"] == "text/csv"
     assert forwarded["hasRaw"] is True
+    assert "kind" not in forwarded
+    assert meta["ai37"]["context_files"][1]["kind"] == "voice"
     assert meta["a2uiClientCapabilities"]["v0.9"]["supportedCatalogIds"] == ["cat-v2"]
 
 

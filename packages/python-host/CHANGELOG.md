@@ -4,6 +4,14 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a33]
+
+Паритет с `@ai37/agent-host` 0.6.0 (план `docs/plans/polimetrika-voice-source-decision-history.md`, AI-37/docs#599).
+
+### Added
+- `ContextFile.kind` (`ContextFileKind`): `voice` — голосовая запись композера на полке чата. Незнакомый
+  вид читается как отсутствие поля. Relay передаёт поле субагенту вместе с `mime` и `hasRaw`.
+
 ## [0.1.0a32]
 
 Паритет с `@ai37/agent-host` 0.5.0 (план `docs/plans/polimetrika-recognition-gate.md`, AI-37/docs#590).
