@@ -148,8 +148,12 @@ export interface FindProjectDocumentByTitleOptions {
   timeoutMs?: number
 }
 
+/**
+ * Состояние документа DS. `recognized` — страницы распознаны и читаются, индекс ещё не применён
+ * (строится или не построился); `ready` — документ есть в поиске.
+ */
 export type ProjectPoolDocumentState =
-  'queued' | 'processing' | 'ready' | 'empty' | 'error' | 'stopped'
+  'queued' | 'processing' | 'recognized' | 'ready' | 'empty' | 'error' | 'stopped'
 
 /** Строка реестра пула (`GET /api/project-pools/{key}/documents`). */
 export interface ProjectPoolDocument {
@@ -161,6 +165,8 @@ export interface ProjectPoolDocument {
   createdAt: string
   pageCount: number
   readyPages: number
+  /** Сколько страниц текущей версии уже в индексе. Нет у DS постарше. */
+  indexedPages?: number
   author: string | null
 }
 

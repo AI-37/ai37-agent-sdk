@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.7.0] - 2026-11-06
+
+Статус документа «распознан» перед «готов к поиску» (план `docs/plans/polimetrika-demo-pack-platform.md`,
+AI-37/docs#607, срез S3c).
+
+### Added
+- `ProjectPoolDocumentState` и `ContextFileRecognitionState` получают `recognized`: страницы документа
+  распознаны и читаются, а в поиске его ещё нет (индекс строится или не построился). Стадия
+  распознавания chat-backend отдаёт ход на этом состоянии; что делать с документом, решает агент.
+- `ProjectPoolDocument.indexedPages` и `ContextFileRecognition.indexedPages`: сколько страниц уже в
+  индексе. Поле необязательное, DS постарше его не отдаёт.
+
 ## [0.6.1] - 2026-11-05
 
 ### Fixed

@@ -105,6 +105,26 @@ def test_parse_context_file_recognition():
     assert rejected.recognition.reason == "формат не поддерживается"
 
 
+def test_parse_context_file_recognized_with_indexed_pages():
+    (recognized,) = _files(
+        {
+            "ref": "project-attachment:1",
+            "name": "показания.csv",
+            "scope": "project",
+            "recognition": {
+                "state": "recognized",
+                "seriesId": "s-1",
+                "pageCount": 202.0,
+                "indexedPages": 57.0,
+            },
+        },
+    )
+    assert recognized.recognition is not None
+    assert recognized.recognition.state == "recognized"
+    assert recognized.recognition.page_count == 202
+    assert recognized.recognition.indexed_pages == 57
+
+
 def test_parse_context_file_without_or_with_unknown_recognition():
     plain, unknown, broken = _files(
         {"ref": "chat-attachment:1", "name": "a.pdf", "scope": "chat"},
