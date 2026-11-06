@@ -142,7 +142,7 @@ def _to_context_file(raw: dict[str, Any]) -> ContextFile:
     )
 
 
-_RECOGNITION_STATES = frozenset({"ready", "empty", "error", "stopped", "rejected"})
+_RECOGNITION_STATES = frozenset({"recognized", "ready", "empty", "error", "stopped", "rejected"})
 
 
 def _to_recognition(raw: Any) -> ContextFileRecognition | None:
@@ -153,6 +153,7 @@ def _to_recognition(raw: Any) -> ContextFileRecognition | None:
         state=raw["state"],
         series_id=_str_or_none(raw.get("seriesId")),
         page_count=_count_or_none(raw.get("pageCount")),
+        indexed_pages=_count_or_none(raw.get("indexedPages")),
         code=_str_or_none(raw.get("code")),
         reason=_str_or_none(raw.get("reason")),
     )

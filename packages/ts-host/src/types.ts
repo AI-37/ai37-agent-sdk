@@ -65,16 +65,21 @@ export interface ContextFile {
 export type ContextFileKind = 'voice'
 
 /**
- * Конечное состояние файла после стадии распознавания: состояния документа DS
- * (`ProjectPoolDocumentState` без промежуточных) плюс `rejected` — DS или мост файл не приняли.
+ * Состояние файла, с которым стадия распознавания отдаёт ход агенту: состояния документа DS
+ * (`ProjectPoolDocumentState` без `queued`/`processing`) плюс `rejected` — DS или мост файл не приняли.
+ * `recognized` — страницы готовы и читаются, но в поиске документа ещё нет: индекс строится
+ * (`indexedPages` из `pageCount`) или не построился. Что с таким документом делать, решает агент.
  */
-export type ContextFileRecognitionState = 'ready' | 'empty' | 'error' | 'stopped' | 'rejected'
+export type ContextFileRecognitionState =
+  'recognized' | 'ready' | 'empty' | 'error' | 'stopped' | 'rejected'
 
 export interface ContextFileRecognition {
   state: ContextFileRecognitionState
   /** id серии документа в пуле проекта DS; нет у `rejected`. */
   seriesId?: string
   pageCount?: number
+  /** Сколько страниц уже в поиске; у `ready` равно `pageCount`. Нет у DS постарше. */
+  indexedPages?: number
   /** Машинный код отказа (`rejected`): код DS или моста, как есть. */
   code?: string
   /** Причина для пользователя по-русски, готовая к показу. */

@@ -4,6 +4,16 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a34]
+
+Паритет с `@ai37/agent-host` 0.7.0 (план `docs/plans/polimetrika-demo-pack-platform.md`, AI-37/docs#607, S3c).
+
+### Added
+- `ContextFileRecognitionState` получает `recognized` (страницы готовы, в поиске документа ещё нет),
+  `ContextFileRecognition.indexed_pages` — сколько страниц уже в индексе.
+- `ProjectPoolDocument.indexed_pages`; ``None`` — DS постарше поле не отдаёт. Состояние `recognized`
+  приходит в `state` как есть.
+
 ## [0.1.0a33]
 
 Паритет с `@ai37/agent-host` 0.6.0 (план `docs/plans/polimetrika-voice-source-decision-history.md`, AI-37/docs#599).

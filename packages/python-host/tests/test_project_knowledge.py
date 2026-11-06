@@ -464,3 +464,21 @@ async def test_index_to_project_malformed_and_missing_route():
     with pytest.raises(ProjectKnowledgeError) as caught:
         await _index(client, lambda: "jwt")
     assert caught.value.code == "not_found"
+
+
+async def test_find_reads_recognized_state_and_indexed_pages():
+    recognized = {**_doc("a", "Показания"), "state": "recognized", "indexedPages": 120.0}
+    client, _, _ = _scripted(_reply(200, {"documents": [recognized], "nextCursor": None}))
+    found = await _find(client, "Показания")
+    assert found is not None
+    assert found.state == "recognized"
+    # Из protobuf/JSON число может прийти float'ом.
+    assert found.indexed_pages == 120
+
+
+async def test_find_without_indexed_pages_from_older_ds():
+    reply = _reply(200, {"documents": [_doc("a", "Показания")], "nextCursor": None})
+    client, _, _ = _scripted(reply)
+    found = await _find(client, "Показания")
+    assert found is not None
+    assert found.indexed_pages is None

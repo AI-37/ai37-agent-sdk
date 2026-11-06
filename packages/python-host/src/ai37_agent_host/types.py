@@ -35,9 +35,13 @@ class IntentEnvelope:
     params: dict[str, Any] | None = None
 
 
-#: Конечное состояние файла после стадии распознавания: состояния документа DS без
-#: промежуточных плюс ``rejected`` (DS или мост файл не приняли).
-ContextFileRecognitionState = Literal["ready", "empty", "error", "stopped", "rejected"]
+#: Состояние файла, с которым стадия распознавания отдаёт ход агенту: состояния документа DS
+#: без ``queued``/``processing`` плюс ``rejected`` (DS или мост файл не приняли).
+#: ``recognized`` — страницы готовы и читаются, но в поиске документа ещё нет; что с ним делать,
+#: решает агент.
+ContextFileRecognitionState = Literal[
+    "recognized", "ready", "empty", "error", "stopped", "rejected"
+]
 
 
 #: Вид вложения в манифесте; пока один — голосовая запись композера.
@@ -52,6 +56,8 @@ class ContextFileRecognition:
     #: id серии документа в пуле проекта DS; нет у ``rejected``.
     series_id: str | None = None
     page_count: int | None = None
+    #: Сколько страниц уже в поиске; у ``ready`` равно ``page_count``. Нет у DS постарше.
+    indexed_pages: int | None = None
     #: Машинный код отказа (``rejected``): код DS или моста, как есть.
     code: str | None = None
     #: Причина для пользователя по-русски, готовая к показу.

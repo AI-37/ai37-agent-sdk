@@ -73,12 +73,16 @@ class ProjectPoolDocument:
     #: id серии документа в DS.
     id: str
     title: str
-    #: ``queued`` | ``processing`` | ``ready`` | ``empty`` | ``error`` | ``stopped``.
+    #: ``queued`` | ``processing`` | ``recognized`` | ``ready`` | ``empty`` | ``error`` |
+    #: ``stopped``.
+    #: ``recognized`` — страницы распознаны и читаются, в поиске документа ещё нет.
     state: str
     stage: str = ""
     created_at: str = ""
     page_count: int = 0
     ready_pages: int = 0
+    #: Сколько страниц текущей версии уже в индексе; ``None`` — DS постарше поле не отдаёт.
+    indexed_pages: int | None = None
     author: str | None = None
     raw: dict[str, Any] = field(default_factory=dict)
 
@@ -281,6 +285,13 @@ def _document(row: dict[str, Any]) -> ProjectPoolDocument:
         created_at=str(row.get("createdAt", "")),
         page_count=int(row.get("pageCount") or 0),
         ready_pages=int(row.get("readyPages") or 0),
+        indexed_pages=_indexed_pages(row.get("indexedPages")),
         author=row.get("author") if isinstance(row.get("author"), str) else None,
         raw=row,
     )
+
+
+def _indexed_pages(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, int | float) or value < 0:
+        return None
+    return int(value)
