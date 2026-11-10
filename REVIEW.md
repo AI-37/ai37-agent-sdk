@@ -26,6 +26,11 @@
 - Host layer: `packages/ts-host/**`, `packages/python-host/**` — the public packages `@ai37/agent-host`/`ai37-agent-host` (A2A/AG-UI/MCP/Redis task store/observability; durable checkpointer).
 - `scripts/codegen.mjs` — the `codes.*` generator; changing it changes the output for all consumers.
 
-**Autonomy threshold (refinement):** this is a published library sitting under all agents — **never auto-approve** for: (a) any public-API change (adding/renaming/removing an export, changing a signature) in TS or Python; (b) breaking changes to semantics (billing-denial order/codes, forward-header format, the `AgentContext` contract); (c) a version bump in `package.json`/`pyproject.toml` or changes to `publish-*.yml`; (d) edits to `contract/**` and `scripts/codegen.mjs`. All of this → `comment` + escalate to a human (the owners). A missing parity change in the other implementation, or a change to a public symbol without a meaningful test on real input, is `request_changes`.
+**Autonomy threshold (refinement):** this is a published library sitting under all agents — the paths above get the strictest reading, and the human bar is the contract's «When a human is needed»:
+- (a) public API: an ADDITIVE export with a meaningful test in both implementations → `approve`; removing/renaming an export or changing a signature without the BREAKING mark in the CHANGELOG and the matching bump → `request_changes`.
+- (b) semantics (billing-denial order/codes, forward-header format, the `AgentContext` contract): a change the merged plan sanctions → judge it on its merits; an unsanctioned change that breaks deployed agents → `comment` (a human decides whether to break them).
+- (c) versions and releases follow the contract's «Versions & releases» A/B/C: the bump + CHANGELOG that A requires is expected, not escalated; `publish-*.yml` gets a strict review, and a human is called only when the registry or its credentials change.
+- (d) `contract/**` and `scripts/codegen.mjs`: a change that keeps both implementations in parity and is covered by tests → `approve`; a parity gap → `request_changes`.
+A missing parity change in the other implementation, or a change to a public symbol without a meaningful test on real input, is `request_changes`.
 
 Write the review summary and all inline comments in RUSSIAN (the developers read Russian); these instructions are in English only for your understanding.
