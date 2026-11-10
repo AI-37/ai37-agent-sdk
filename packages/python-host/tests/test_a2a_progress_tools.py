@@ -71,3 +71,16 @@ async def test_start_without_end_publishes_nothing():
     progress.emit(ToolEvent(phase="start", name="docs_read"))
     await progress.finish()
     assert updater.calls == []
+
+
+async def test_args_of_end_win_over_args_of_start():
+    """Агент знает итоговые аргументы только к концу вызова: они важнее аргументов ``start``."""
+    updater = _Updater()
+    progress = A2aProgress(updater, "t")  # type: ignore[arg-type]
+    progress.emit(ToolEvent(phase="start", name="docs_read", id="a", args={"page": 1}))
+    progress.emit(
+        ToolEvent(phase="end", name="docs_read", id="a", args={"page": 3}, result="готово")
+    )
+    await progress.finish()
+    [call] = _tools(updater)
+    assert (call["id"], call["args"], call["result"]) == ("a", {"page": 3}, "готово")
