@@ -1,6 +1,8 @@
 <!-- Maintained for the AI-37 doc-bot PR reviewer. Repo-specific overlay; the common review
      contract (three lenses, false-positive rules, autonomy) is the bot's built-in prompt —
-     canonical text in AI-37/docs plans/doc-bot-pr-review/reviews/_common.md. -->
+     canonical text in AI-37/ai37-dev plugins/ai37/skills/post-review/references/contract.md
+     (loaded by the bot from ai37-dev's default branch on every review; docs/plans/doc-bot-pr-review/reviews/_common.md
+     is the historical draft, not the source). -->
 
 # REVIEW.md — ai37-agent-sdk
 > Inherits the common contract: reviews/_common.md (the bot loads it as the global default). This file covers only the repo-specific specifics.
