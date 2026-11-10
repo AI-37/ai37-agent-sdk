@@ -9,7 +9,7 @@
 ## Стек
 - TypeScript, Node ≥ 22, npm, tsup, vitest: `@ai37/agent-sdk` (0.1.0-alpha.37), `@ai37/agent-host` (0.7.0), `@ai37/docx` (0.1.0-alpha.1).
 - `@ai37/agent-host`: `@a2a-js/sdk` ^1.3.0, Express 4, `@ag-ui/core`/`@ag-ui/encoder`, `@ai37/a2ui-catalog-schemas`, `prom-client`, Langfuse/OpenTelemetry; peer-зависимости: `@ai37/agent-sdk` (≥ 0.1.0-alpha.11), LangChain/LangGraph checkpoint (+postgres), `@modelcontextprotocol/sdk`, `kysely`, `pg`, `zod` (все опциональные, кроме `@ai37/agent-sdk`). В devDependencies — `undici` ^7.30.2 (тесты воспроизводят глобальный диспетчер npm-undici 7).
-- Python ≥ 3.11, poetry, ruff, mypy, pytest: `ai37-agent-sdk` (0.1.0a29; pyjwt, httpx), `ai37-agent-host` (0.1.0a34; `a2a-sdk` ≥ 1.1.0, FastAPI/Starlette, sse-starlette, prometheus-client; extras `redis`, `postgres`, `observability`). Версия интерпретатора закреплена файлами `.python-version` в `packages/python` и `packages/python-host` — 3.13.18 (та же версия в CI, есть на ubuntu-latest).
+- Python ≥ 3.11, poetry, ruff, mypy, pytest: `ai37-agent-sdk` (0.1.0a29; pyjwt, httpx), `ai37-agent-host` (0.1.0a35; `a2a-sdk` ≥ 1.1.0, FastAPI/Starlette, sse-starlette, prometheus-client; extras `redis`, `postgres`, `observability`). Версия интерпретатора закреплена файлами `.python-version` в `packages/python` и `packages/python-host` — 3.13.18 (та же версия в CI, есть на ubuntu-latest).
 - Python ≥ 3.12, pydantic 2: `ai37-capture-contract` (0.1.0).
 - Общий контракт в `contract/` (JSON Schema + `feature-codes.json`), кодоген `scripts/codegen.mjs`.
 
@@ -17,6 +17,8 @@
 Агент поднимается через `createAgentHost(...)` (TS) или `create_agent_host(...)` (Python). Входящий запрос проходит JWT-guard: это `AgentContext` из SDK, то есть `auth.verify` по JWKS и billing preflight (`assertExecutionAllowed`; `entitlementStatus != 'active'` → отказ, `payment_failed` → `PAYMENT_FAILED`, `no_resources` → `NO_TOKENS`). Потом вызывается `handler` агента: LLM идёт с `apiKey = llmKey` из runtime state, после успешного хода отправляется `reportUsage`. Для вызова суб-агента `a2a` форвардит тот же user-JWT (`buildA2AAuthHeaders` / `forwardAuthFetch`), relay-клиент лежит в `@ai37/agent-host/relay`.
 
 TS-хост по умолчанию работает с `legacyCompat`: запрос без заголовка `A2A-Version` (или с `0.3`) идёт через compat-слой A2A 0.3, запрос с `1.0` — в обработчик 1.x. Состояние хода (multi-turn/HITL) хранится в task store, общем для A2A и AG-UI: по умолчанию in-memory, durable-вариант — Postgres из `@ai37/agent-host/task-store`.
+
+Прогресс хода публикуется в A2A-стрим нативными `status-update` со `state: working` и metadata: `ai37/node`, `ai37/reasoning`, `ai37/tool`; текст хода — append-дельтами артефакта `answer`. В Python-хосте (с 0.1.0a35) `A2aProgress` больше не отбрасывает `ToolEvent`: пара `start`/`end` уходит одним завершённым вызовом `metadata['ai37/tool'] = {id, name, args, result}` — ровно в той форме, в какой его читают relay (`RemoteA2aToolCall`) и chat-backend (`TOOL_CALL_*`). Пара сопоставляется по `id`, а без него — по имени; аргументы берутся из `end`, если он их несёт, иначе из `start`; значения приводятся к JSON (даты — строкой); `start` без `end` не публикуется, а `end` без `start` публикуется без `args`/`result`. Порядок событий хода сохраняется (синхронный `emit` → очередь → async-drain).
 
 Манифест вложений `metadata.ai37.context_files` (тип `ContextFile`) несёт необязательное поле `recognition` (`ContextFileRecognition`): итог стадии распознавания файла в пуле проекта document-service — `state` (`recognized` / `ready` / `empty` / `error` / `stopped` / `rejected`), `seriesId`, `pageCount`, `indexedPages`, `code` и `reason` отказа. `recognized` — страницы документа распознаны и читаются, но в индексе поиска документа ещё нет (индекс строится или не построился); `indexedPages` — сколько страниц текущей версии уже в индексе, поле необязательное (DS постарше его не отдаёт). Поле заполняет chat-backend в режиме `ATTACHMENT_INGEST_MODE=raw`, когда сам загрузил файлы хода в DS и дождался распознавания; агенты, не знающие поля, видят обычный манифест. В Python-хосте `parse_a2a_message` нормализует `recognition` из protobuf-`Struct` (незнакомое/промежуточное состояние читается как отсутствие поля, `pageCount`/`indexedPages`-float приводятся к int).
 
@@ -39,7 +41,7 @@ flowchart LR
 - `packages/ts/` — `@ai37/agent-sdk`: `auth`, `billing`, `a2a` (forward, routing, showcase), `policy`, `context`, `codes`, `testing`, `dev`, CLI.
 - `packages/python/` — `ai37-agent-sdk`, Python-порт тех же модулей (`auth`, `billing`, `a2a`, `policy`, `testing`, `log_redaction`); `.python-version` — 3.13.18.
 - `packages/ts-host/` — `@ai37/agent-host`: A2A executor, AG-UI, MCP, relay, skills, dsh (рантайм harness-сессий), task-store, store-backend’ы и attachments, project-knowledge (пул проекта DS, service-token, мост chat-backend), observability, CLI task store.
-- `packages/python-host/` — `ai37-agent-host`, Python-порт хоста (A2A, AG-UI, MCP, relay, store_backend, project_knowledge, parse, Postgres/Redis task store, Langfuse); `.python-version` — 3.13.18.
+- `packages/python-host/` — `ai37-agent-host`, Python-порт хоста (A2A executor и `a2a_progress`, AG-UI, MCP, relay, store_backend, project_knowledge, parse, Postgres/Redis task store, Langfuse); `.python-version` — 3.13.18.
 - `packages/ts-docx/` — `@ai37/docx`: детерминированный рендер markdown → DOCX.
 - `packages/capture-contract/` — `ai37-capture-contract`: модели захвата карточки товара (minstroy ↔ website-scraper).
 - `scripts/` — `codegen.mjs` (contract → `codes.ts`/`codes.py`).
@@ -59,6 +61,7 @@ flowchart LR
 - **Типы манифеста:** `ContextFile` с необязательными `recognition?: ContextFileRecognition` и `kind?: ContextFileKind`; `ContextFileKind = 'voice'` (вид вложения: голосовая запись композера); `ContextFileRecognitionState` = `recognized | ready | empty | error | stopped | rejected`; `ContextFileRecognition.indexedPages?` — сколько страниц уже в поиске (у `ready` равно `pageCount`); все три типа реэкспортируются из `.` и `./relay`.
 - **CLI `ai37-agent-host-task-store`:** `migrate | check | cleanup` для таблицы `a2a_tasks` (строка подключения из `DATABASE_URL`).
 - **`ai37-agent-host` (Python):** та же поверхность (`/api/v1/health`, `/api/v1/version`, `/.well-known/agent-card.json`, `/a2a/v1`, `/agui`, `/mcp`, `/metrics`); из корня экспортируются `ContextFile`, `ContextFileKind`, `ContextFileRecognition` (`state`, `series_id`, `page_count`, `indexed_pages`, `code`, `reason`), `ContextFileRecognitionState` (включая `recognized`), project_knowledge (`upload_to_project_pool`, `find_project_document_by_title`, `service_token`, `index_to_project`). `ProjectPoolDocument` в Python несёт `indexed_pages: int | None` (`None` — DS постарше поле не отдаёт), состояние `recognized` приходит в `state` как есть.
+- **A2A-прогресс Python-хоста (`A2aProgress`):** `node`/`reasoning` → `status-update working` с metadata `ai37/node` / `ai37/reasoning`; `ToolEvent` (`phase = start | end`, `id?`, `name`, `args?`, `result?`) → один `status-update working` с `metadata['ai37/tool'] = {id, name, args, result}` на `end` (JSON-совместимые значения, `id` генерируется, если его не было); пауза тишины `A2A_KEEPALIVE_S = 20` даёт keepalive-`working` без metadata.
 - **`@ai37/docx`:** `renderMarkdownToDocx(markdown)`.
 
 ## Зависимости в экосистеме
@@ -75,7 +78,7 @@ flowchart LR
 - Приватные реестры: Verdaccio `npm.app.sp-ai.ru`, `pypi.app.sp-ai.ru`.
 
 ### От него зависят
-- spai-chat-backend и его форки (оркестратор на `@ai37/agent-host`).
+- spai-chat-backend и его форки (оркестратор на `@ai37/agent-host`; читает `ai37/tool` из A2A-стрима как `TOOL_CALL_*`).
 - search-agent и форки `{spai,pdai,graphema}-search-agent`.
 - spai-elevator-calc-agent, spai-thermal-calc-agent, spai-daylight-factor-calc-agent, spai-consultant-agent.
 - pdai-doc-gen-agent, pdai-site-check, polimetrika-data-agent (`ai37-agent-host`), minstroy (`ai37-agent-sdk` + `ai37-agent-host`).
