@@ -4,6 +4,17 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a35]
+
+План `docs/plans/polimetrika-intake-progress.md` (AI-37/docs#637, S4).
+
+### Added
+- **Вызовы инструментов агента доходят до карточки шагов.** `A2aProgress` больше не отбрасывает
+  `ToolEvent`: пара `start`/`end` уходит одним завершённым вызовом в `status-update working` с
+  `metadata['ai37/tool'] = {id, name, args, result}` — в той форме, в какой его уже читают relay
+  (`RemoteA2aToolCall`) и chat-backend (`TOOL_CALL_*`). Аргументы берутся из `start`, если `end` их
+  не несёт; значения приводятся к JSON (даты — строкой). `start` без `end` не публикуется.
+
 ## [0.1.0a34]
 
 Паритет с `@ai37/agent-host` 0.7.0 (план `docs/plans/polimetrika-demo-pack-platform.md`, AI-37/docs#607, S3c).

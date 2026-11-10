@@ -9,8 +9,10 @@
   * финализация — через ``TaskUpdater`` (submit/start_work/add_artifact/complete/failed/
     requires_input), а не построением Task-dict;
   * ``node``/``reasoning`` → ``update_status(WORKING, metadata={'ai37/node'|'ai37/reasoning'})``
-    (стрим-событие ``TaskStatusUpdateEvent``); persist-state — в data-part финального артефакта
-    (``TaskStatus`` не имеет metadata; ``TaskUpdater`` не пишет ``Task.metadata``).
+    (стрим-событие ``TaskStatusUpdateEvent``); ``tool`` — пара start/end → один завершённый вызов в
+    ``metadata={'ai37/tool': {id, name, args, result}}``, как его читает relay; persist-state — в
+    data-part финального артефакта (``TaskStatus`` не имеет metadata; ``TaskUpdater`` не пишет
+    ``Task.metadata``).
   * ``text`` → нативные append-дельты артефакта ``answer`` до завершения handler'а;
     финальный ``status.message`` сохраняет полный канонический ответ.
 """
