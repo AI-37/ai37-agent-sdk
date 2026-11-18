@@ -39,19 +39,24 @@ telemetry = ["opentelemetry-api (>=1.33.0)", "opentelemetry-sdk (>=1.33.0)"]
 
 [[package]]
 name = "ai37-agent-sdk"
-version = "0.1.0a1"
+version = "0.1.0a30"
 description = "AI37 agent SDK (Python): JWKS auth + billing + A2A forward for ecosystem agents"
 optional = false
-python-versions = "<4.0,>=3.11"
+python-versions = ">=3.11,<4.0"
 groups = ["main"]
 files = [
-    {file = "ai37_agent_sdk-0.1.0a1-py3-none-any.whl", hash = "sha256:9f09b9180605de044a45fd8a1203e0f54f21d88fcac98a326829d1a14785dce8"},
-    {file = "ai37_agent_sdk-0.1.0a1.tar.gz", hash = "sha256:ec85748764438e21ca3df769c7b0f810480ddd1e632c5ca4810da763716d2caa"},
+    {file = "ai37_agent_sdk-0.1.0a30-py3-none-any.whl", hash = "sha256:83e7bce7a0e65c5824ce75e08fc4c9a9f9ceb07ca33f87e45cfc794f3b961ba1"},
+    {file = "ai37_agent_sdk-0.1.0a30.tar.gz", hash = "sha256:259e139f82061b82d5aca23d173ee18118b7caa14afbb306e2332b25deca471f"},
 ]
 
 [package.dependencies]
 httpx = ">=0.27,<0.29"
 pyjwt = {version = ">=2.9.0,<3.0.0", extras = ["crypto"]}
+
+[package.source]
+type = "legacy"
+url = "https://pypi.app.sp-ai.ru/simple"
+reference = "ai37"
 
 [[package]]
 name = "aiologic"
@@ -2054,4 +2059,4 @@ redis = ["redis"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "0eed07684c58c395480f16a3fc09a9385a72fe395e92bbbd44f4a44bf60ce047"
+content-hash = "5738ef59d19fc61c82f4a21f56c81e1a55df08ab84e170afefe231b7f452d865"
