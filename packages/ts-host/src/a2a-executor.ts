@@ -18,7 +18,7 @@ import { finalTaskEvents, toTask } from './build-task'
 import { withTurnObservability } from './observability/langfuse'
 import type { AgentHandler, AgentInput, AgentResult } from './types'
 import { observeTurn, recordBillingDenied, normFinalState } from './metrics'
-import { BillingExecutionDeniedError } from '@ai37/agent-sdk'
+import { BillingExecutionDeniedError, resolveRequestLocale } from '@ai37/agent-sdk'
 
 /**
  * A2A-адаптер host'а: парсит сообщение → вызывает `AgentHandler` с verified
@@ -76,9 +76,13 @@ export class HostExecutor implements AgentExecutor {
       ...optionalInputFields(rc, parsed, accepted, supportedCatalogIds),
     }
 
-    // Диалог и ход — в ALS: publishArtifact и прочие вызовы «от имени хода» берут их оттуда.
+    // Диалог, ход и локаль — в ALS: publishArtifact и прочие вызовы «от имени хода» берут их оттуда.
+    // Локаль: metadata.ai37.locale → claims → ru (currentLocale/withUserLocale в когниции).
     const scope = requestScope.getStore()
-    if (scope) scope.turn = { contextId: rc.contextId, taskId: rc.taskId }
+    if (scope) {
+      scope.turn = { contextId: rc.contextId, taskId: rc.taskId }
+      scope.locale = resolveRequestLocale(parsed.metadata.locale, ctx?.claims)
+    }
 
     // Progress stays native: node/reasoning → status-update, text → artifact-update.
     // The final Task retains the canonical complete message for send/persistence.

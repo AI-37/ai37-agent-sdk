@@ -124,6 +124,7 @@ def _to_ai37_metadata(raw: dict[str, Any]) -> Ai37Metadata:
         ),
         trace_id=raw.get("trace_id"),
         accepted_output_modes=raw.get("acceptedOutputModes"),
+        locale=raw.get("locale") if isinstance(raw.get("locale"), str) else None,
     )
 
 

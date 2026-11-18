@@ -6,6 +6,7 @@ import { dataPart, textPart } from './parts'
 import { filterA2uiByCatalog, type OutputNegotiation } from './output-modes'
 import { toA2uiSnapshot } from './a2ui'
 import type { A2uiComponent, A2uiSnapshot, AgentResult } from './types'
+import { hostMessage } from './host-messages'
 
 const now = (): string => new Date().toISOString()
 
@@ -122,7 +123,7 @@ export function toTask(
   if (result.status === 'failed') {
     return {
       ...base,
-      status: status(TaskState.TASK_STATE_FAILED, agentMessage(taskId, contextId, result.message ?? 'Ошибка')),
+      status: status(TaskState.TASK_STATE_FAILED, agentMessage(taskId, contextId, result.message ?? hostMessage('failed'))),
       artifacts: [],
       metadata: undefined,
     }
@@ -135,7 +136,7 @@ export function toTask(
       ...base,
       status: status(
         TaskState.TASK_STATE_INPUT_REQUIRED,
-        agentMessage(taskId, contextId, result.message ?? 'Уточните', form),
+        agentMessage(taskId, contextId, result.message ?? hostMessage('inputRequired'), form),
       ),
       artifacts: (opts.legacyFormArtifact ?? true) ? [formArtifact(taskId, form)] : [],
       metadata: result.state !== undefined ? { state: result.state } : undefined,

@@ -3,6 +3,7 @@ import type { ZodRawShape } from 'zod'
 import { negotiateOutput } from '../output-modes'
 import type { AgentHandler, AgentResult } from '../types'
 import type { McpToolAnnotations, McpToolDef } from './types'
+import { hostMessage } from '../host-messages'
 
 export interface BridgeToolOptions {
   /** Имя MCP-tool (напр. `calc_lifts`). */
@@ -29,7 +30,7 @@ function defaultRender(result: AgentResult): string {
       ? result.result
       : JSON.stringify(result.result, null, 2)
   }
-  return result.status === 'failed' ? 'Ошибка выполнения' : 'Готово'
+  return hostMessage(result.status === 'failed' ? 'toolFailed' : 'done')
 }
 
 /**

@@ -135,6 +135,14 @@ export interface Ai37Metadata {
    * является). Носитель — только AG-UI (`forwardedProps.ai37`), как у `acceptedOutputModes`.
    */
   rerun_last_turn?: boolean
+  /**
+   * Язык пользователя на этом ходу — тег BCP-47 (`es`, `es-MX`, `ca-ES-valencia`). Строка, а не
+   * union: новый язык не ломает старых потребителей. Host разрешает локаль хода
+   * (`resolveRequestLocale`: это поле → claim `locale` → claim `org_locale` → `ru`) и кладёт в
+   * `HostScope.locale`; когниция берёт её через `currentLocale()` / `withUserLocale()`. Relay
+   * форвардит поле сабагентам (`RemoteA2aRequest.locale`).
+   */
+  locale?: string
 }
 
 /**

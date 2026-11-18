@@ -26,7 +26,7 @@ from a2a.server.agent_execution import AgentExecutor, RequestContext
 from a2a.server.events import EventQueue
 from a2a.server.tasks import TaskUpdater
 from a2a.types import Task, TaskState, TaskStatus
-from ai37_agent_sdk import BillingExecutionDeniedError
+from ai37_agent_sdk import BillingExecutionDeniedError, resolve_request_locale
 from google.protobuf.json_format import MessageToDict
 
 from .a2a_progress import A2A_KEEPALIVE_S, A2aProgress
@@ -40,6 +40,7 @@ from .als import (
     scope_context,
 )
 from .build_task import data_part, resolve_result_a2ui, text_part
+from .host_messages import host_message
 from .metrics import norm_final_state, observe_turn, record_billing_denied
 from .observability.langfuse import BeginTurnArgs, with_turn_observability
 from .output_modes import negotiate_output
@@ -152,10 +153,12 @@ class HostExecutor(AgentExecutor):
             task_state=_read_prior_state(context),
         )
 
-        # Диалог и ход — в ALS: publish_artifact и прочие вызовы «от имени хода» берут их оттуда.
+        # Диалог, ход и локаль — в ALS: publish_artifact и прочие вызовы «от имени хода» берут их
+        # оттуда. Локаль: metadata.ai37.locale → claims → ru (current_locale в когниции).
         scope = current_scope()
         if scope is not None:
             scope.turn = HostTurn(context_id=context_id, task_id=task_id)
+            scope.locale = resolve_request_locale(parsed.metadata.locale, agent_input.claims)
 
         # keepalive: долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
         progress = A2aProgress(updater, task_id, keepalive_s=A2A_KEEPALIVE_S)
@@ -224,7 +227,8 @@ class HostExecutor(AgentExecutor):
         a2ui, followup = resolve_result_a2ui(result, negotiation)
 
         if result.status == "failed":
-            await updater.failed(message=self._agent_msg(updater, result.message or "Ошибка"))
+            message = result.message or host_message("failed")
+            await updater.failed(message=self._agent_msg(updater, message))
             return
 
         if result.status == "input-required":
@@ -239,7 +243,7 @@ class HostExecutor(AgentExecutor):
             # вопрос гигиены, и решать его надо отдельным слотом состояния, а не здесь.
             await updater.add_artifact(parts=[data_part(payload)], name="input-required")
             await updater.requires_input(
-                message=self._agent_msg(updater, result.message or "Уточните")
+                message=self._agent_msg(updater, result.message or host_message("input_required"))
             )
             return
 

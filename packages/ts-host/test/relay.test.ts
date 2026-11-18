@@ -87,6 +87,38 @@ describe('executeRemoteA2a (relay)', () => {
     expect(p.message.metadata.ai37.context_files[1]).not.toHaveProperty('kind')
   })
 
+  it('locale уходит в metadata.ai37.locale как есть, без обрезки тега', async () => {
+    const { client, calls } = fakeClient(() => inputRequiredTaskWithForm('task-1'))
+    await executeRemoteA2a(client, { query: 'x', locale: 'ca-ES-valencia', confirmMode: 'auto' })
+    const p = calls[0] as { message: { metadata: Record<string, any> } }
+    expect(p.message.metadata.ai37).toEqual({ locale: 'ca-ES-valencia', confirm_mode: 'auto' })
+  })
+
+  it('extraMetadata.ai37 (интент скилла) сливается с конвертом: locale и context_refs не теряются', async () => {
+    const { client, calls } = fakeClient(() => inputRequiredTaskWithForm('task-1'))
+    await executeRemoteA2a(client, {
+      query: 'x',
+      locale: 'es',
+      contextRefs: ['chat-attachment:41'],
+      extraMetadata: { ai37: { intent: { skill: 'norm-parameter' }, confirm_mode: 'auto' }, hop: 2 },
+    })
+    const p = calls[0] as { message: { metadata: Record<string, any> } }
+    expect(p.message.metadata.ai37).toEqual({
+      locale: 'es',
+      context_refs: ['chat-attachment:41'],
+      intent: { skill: 'norm-parameter' },
+      confirm_mode: 'auto',
+    })
+    expect(p.message.metadata.hop).toBe(2)
+  })
+
+  it('без locale и без конверта — поля ai37 нет вовсе (старое поведение)', async () => {
+    const { client, calls } = fakeClient(() => inputRequiredTaskWithForm('task-1'))
+    await executeRemoteA2a(client, { query: 'x' })
+    const p = calls[0] as { message: { metadata?: Record<string, any> } }
+    expect(p.message.metadata?.ai37).toBeUndefined()
+  })
+
   it('поднимает A2UI-форму из артефакта формы + taskId + state', async () => {
     const { client } = fakeClient(() => inputRequiredTaskWithForm('task-9'))
     const res = await executeRemoteA2a(client, { query: 'hi', contextId: 'ctx-1' })

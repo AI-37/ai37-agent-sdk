@@ -26,6 +26,10 @@ class Claims(TypedDict, total=False):
     org_role: OrgRole
     email: str
     name: str
+    #: Язык пользователя из профиля (тег BCP-47); нет — «как в браузере».
+    locale: str
+    #: Язык организации (тег BCP-47) — для работы без хода пользователя.
+    org_locale: str
 
 
 class JwtVerifier(Protocol):

@@ -3,6 +3,26 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a30] - 2026-11-18
+
+Локаль пользователя (AI-37/docs#589, срез 3); паритет с TS `0.1.0-alpha.38`.
+
+### Added
+
+- `ai37_agent_sdk.locale`: `SUPPORTED_LOCALES` (`SupportedLocale` с `native_name` и `fallback`),
+  `FALLBACK_LOCALE`, `LEGACY_DEFAULT_LOCALE`, `canonical_locale_tag`, `locale_chain`,
+  `normalize_locale`, `resolve_request_locale`, `t`, `locale_native_name`,
+  `user_locale_instruction` — та же семантика, что в TS; общие векторы `contract/locale.vectors.json`.
+  `resolve_request_locale` не падает на claims не-словаре.
+- `BILLING_USER_MESSAGES_BY_LOCALE`, `DEFAULT_BILLING_USER_MESSAGE_BY_LOCALE`;
+  `billing_user_message(reason, locale=…)` и `friendly_billing_message(err, locale=…)`.
+- `Claims.locale`, `Claims.org_locale`.
+
+### Changed
+
+- `BILLING_USER_MESSAGES` и `DEFAULT_BILLING_USER_MESSAGE` остаются русскими; без локали текст тот же,
+  что раньше.
+
 ## [0.1.0a29] - 2026-11-03
 
 ### Added
