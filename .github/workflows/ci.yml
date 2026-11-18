@@ -218,6 +218,10 @@ jobs:
         id: python-host
         if: ${{ !cancelled() && steps.py-host.outcome == 'success' }}
         working-directory: packages/python-host
+        # ai37-agent-sdk из лока лежит только в приватном индексе ai37 (как в publish-python-host.yml).
+        env:
+          POETRY_HTTP_BASIC_AI37_USERNAME: ci-read
+          POETRY_HTTP_BASIC_AI37_PASSWORD: ${{ secrets.AI37_PYPI_TOKEN }}
         run: |
           poetry env use python && poetry install --with dev --no-interaction
           poetry run pip install --no-deps ../python
