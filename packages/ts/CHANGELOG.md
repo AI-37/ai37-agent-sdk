@@ -3,6 +3,36 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.38] - 2026-11-18
+
+Локаль пользователя (план docs `plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 3); паритет с
+Python `0.1.0a30`.
+
+### Added
+
+- `SUPPORTED_LOCALES` — список языков данными, не типом: `ru`, `en`, `es` (европейский), `de`, `fr`,
+  `pt` (бразильский); у записи есть `nativeName` и необязательный `fallback` (задел под `ca` → `es`).
+  `FALLBACK_LOCALE = 'en'`, `LEGACY_DEFAULT_LOCALE = 'ru'`.
+- `normalizeLocale()` — язык браузера или профиля в локаль из списка (решение В8: всё чужое и
+  пустое — `en`); `canonicalLocaleTag()` и `localeChain()` — тег BCP-47 без обрезки и цепочка
+  «точный тег → без региона и варианта → `fallback` → `en`».
+- `resolveRequestLocale(metadataLocale, claims)` — локаль хода для бэкенда и агентов:
+  `metadata.ai37.locale` → claim `locale` → claim `org_locale` → `ru`. Язык вне списка (`pl`) не
+  отвергается.
+- `t(locale, dict)` — детерминированные строки агента по цепочке фолбэков; `userLocaleInstruction()`
+  — секция системного промпта о языке ответа и доменном контенте (нормы и ссылки в оригинале).
+- `BILLING_USER_MESSAGES_BY_LOCALE`, `DEFAULT_BILLING_USER_MESSAGE_BY_LOCALE` — тексты отказа
+  биллинга на шести языках; `billingUserMessage(reason, locale?)` и `friendlyBillingMessage(err,
+  locale?)` принимают локаль.
+- `Claims.locale`, `Claims.org_locale` (необязательные).
+- Контракт: `contract/a2a-ai37-metadata.schema.json` (конверт `metadata.ai37` с полем `locale`),
+  `claims.schema.json` v1.3 (`locale`, `org_locale`), общие векторы `contract/locale.vectors.json`.
+
+### Changed
+
+- `BILLING_USER_MESSAGES` и `DEFAULT_BILLING_USER_MESSAGE` строятся из словарей по языкам и остаются
+  русскими; `billingUserMessage` без локали отдаёт русский текст, как раньше.
+
 ## [0.1.0-alpha.37] - 2026-11-03
 
 ### Added

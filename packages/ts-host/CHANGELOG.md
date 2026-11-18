@@ -3,6 +3,29 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.8.0] - 2026-11-18
+
+Локаль хода (план `docs/plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 3). Требует
+`@ai37/agent-sdk` ≥ 0.1.0-alpha.38 (peer поднят).
+
+### Added
+- `Ai37Metadata.locale` и `HostScope.locale`: A2A-исполнитель и AG-UI-роутер разрешают локаль хода
+  (`metadata.ai37.locale` → claim `locale` → claim `org_locale` → `ru`) и кладут её в scope. Тег не
+  обрезается (`es-MX`, `ca-ES-valencia`), язык вне списка (`pl`) проходит как есть.
+- `currentLocale()` — локаль хода (вне хода и на MCP — из claims, иначе `ru`); `withUserLocale(prompt,
+  locale?)` — по образцу `withPartnerInstructions` дописывает к системному промпту язык ответа и
+  правило доменного контента.
+- `RemoteA2aRequest.locale` → `message.metadata.ai37.locale`: relay форвардит язык сабагенту.
+
+### Changed
+- Фолбэки «Ошибка», «Уточните» (`toTask`), «Ошибка выполнения», «Готово» (MCP-мост) и отказы
+  диспетчера скиллов идут на языке хода; без локали — по-русски, как раньше.
+- Relay: `extraMetadata.ai37` сливается с собранным конвертом (его поля важнее), а не заменяет его.
+  Раньше интент скилла через escape hatch стирал `context_refs`/`context_files`, если вызывающий
+  не пересобирал конверт сам; теперь он не стирает и `locale`.
+- `requestScope` — один на процесс (`globalThis` + `Symbol.for`), как OTel-хэндл: subpath-бандлы
+  (`skills`, `relay`) видят scope, который открыл хост.
+
 ## [0.7.0] - 2026-11-06
 
 Статус документа «распознан» перед «готов к поиску» (план `docs/plans/polimetrika-demo-pack-platform.md`,

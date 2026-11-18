@@ -1,6 +1,6 @@
 {
   "name": "@ai37/docx",
-  "version": "0.1.0-alpha.1",
+  "version": "0.1.0-alpha.2",
   "description": "Deterministic markdown-to-DOCX renderer for AI37 agents",
   "type": "module",
   "license": "Apache-2.0",
