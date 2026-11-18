@@ -12,7 +12,7 @@ python = "^3.11"
 # Базовый SDK (auth/billing/a2a/context/output-modes).
 # Версионное ограничение (не path!): при сборке wheel даёт валидный Requires-Dist для PyPI.
 # `>=…a1` явно разрешает предрелиз, иначе pip не поставит 0.1.0a1 без --pre.
-ai37-agent-sdk = ">=0.1.0a1,<0.2.0"
+ai37-agent-sdk = ">=0.1.0a30,<0.2.0"
 # Несущий A2A-протокол (Starlette-сервер, AgentExecutor, TaskUpdater, TaskStore).
 # >=1.1.0 ОБЯЗАТЕЛЬНО: resume-снапшот executor'а (a2a_executor.py, ветка current_task) корректен
 # только с 1.1.0 — в 1.0.2 стрим-консьюмер перезаписывал Task-событие сохранённым таском из стора
