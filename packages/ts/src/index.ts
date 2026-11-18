@@ -22,3 +22,16 @@ export type {
 } from './context'
 export * from './output-modes'
 export * from './policy'
+export {
+  FALLBACK_LOCALE,
+  LEGACY_DEFAULT_LOCALE,
+  SUPPORTED_LOCALES,
+  canonicalLocaleTag,
+  localeChain,
+  localeNativeName,
+  normalizeLocale,
+  resolveRequestLocale,
+  t,
+  userLocaleInstruction,
+} from './locale'
+export type { LocaleClaims, LocaleDict, SupportedLocale } from './locale'

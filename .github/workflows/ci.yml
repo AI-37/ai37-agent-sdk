@@ -203,7 +203,11 @@ jobs:
 
       # ───────────────────────── ai37-agent-host (Python) ─────────────────────────
       # Зависит от ai37-agent-sdk версионным ограничением (не path) — poetry install тянет
-      # опубликованный SDK с PyPI, сиблинг собирать не нужно.
+      # опубликованный SDK с PyPI. Поверх ставим SDK из этого же коммита (`pip install --no-deps
+      # ../python`), как ts-host берёт `file:../ts`: хост проверяется против того SDK, с которым
+      # его выпустят, а не против давно опубликованного из лока. Публикация хоста (publish-python-
+      # host.yml) сиблинг не ставит — хост, которому нужен неопубликованный SDK, не уйдёт в индекс,
+      # пока ограничение и лок не подняты до опубликованной версии.
       - uses: actions/setup-python@v6
         id: py-host
         if: ${{ !cancelled() && steps.poetry.outcome == 'success' }}
@@ -214,7 +218,9 @@ jobs:
         id: python-host
         if: ${{ !cancelled() && steps.py-host.outcome == 'success' }}
         working-directory: packages/python-host
-        run: poetry env use python && poetry install --with dev --no-interaction
+        run: |
+          poetry env use python && poetry install --with dev --no-interaction
+          poetry run pip install --no-deps ../python
       - name: py · ai37-agent-host · ruff
         if: ${{ !cancelled() && steps.python-host.outcome == 'success' }}
         working-directory: packages/python-host

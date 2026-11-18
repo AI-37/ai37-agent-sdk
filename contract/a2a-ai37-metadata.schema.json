@@ -1,0 +1,63 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://schemas.ai37.ru/a2a/metadata/ai37/v1",
+  "title": "AI37 A2A envelope metadata.ai37",
+  "description": "Единый конверт message.metadata.ai37 (docs ecosystem/v2/04-a2a-conventions.md, РЕШЕНИЕ 8), форвардится по всей цепочке вместе с user-JWT. Все поля необязательные; новые поля добавляются аддитивно, агент неизвестные поля игнорирует. Типы SDK: Ai37Metadata в @ai37/agent-host и ai37-agent-host. $id — идентификатор, не сетевой адрес.",
+  "type": "object",
+  "additionalProperties": true,
+  "properties": {
+    "tenant": { "type": "string", "description": "user:<sub>; партнёр виджета — тоже user, виджет распознаётся по channel." },
+    "product": { "type": "string", "description": "Тег продукта (не биллинг)." },
+    "app_id": { "type": "string" },
+    "channel": { "type": "string", "enum": ["web", "widget", "revit"] },
+    "thread_id": { "type": "string" },
+    "session_id": { "type": "string" },
+    "trace_id": { "type": "string", "description": "Сквозная observability (09)." },
+    "context_refs": {
+      "type": "array",
+      "items": { "type": "string" },
+      "description": "Указатели на контекст: project-attachment:<id> | chat-attachment:<id> | … (12-context-and-state.md)."
+    },
+    "context_files": {
+      "type": "array",
+      "description": "Манифест приложенных файлов (имена и summary, без тел) рядом с context_refs.",
+      "items": {
+        "type": "object",
+        "required": ["ref", "name", "scope"],
+        "additionalProperties": true,
+        "properties": {
+          "ref": { "type": "string" },
+          "name": { "type": "string" },
+          "scope": { "type": "string", "enum": ["project", "chat"] },
+          "summary": { "type": "string" },
+          "isLarge": { "type": "boolean" },
+          "mime": { "type": "string" },
+          "hasRaw": { "type": "boolean" },
+          "kind": { "type": "string", "enum": ["voice"] },
+          "recognition": { "type": "object" }
+        }
+      }
+    },
+    "intent": {
+      "type": "object",
+      "required": ["skill"],
+      "properties": {
+        "skill": { "type": "string" },
+        "params": { "type": "object" }
+      },
+      "description": "Структурный интент: включает дешёвый режим intent-ноды агента (без LLM-классификации)."
+    },
+    "confirm_mode": {
+      "type": "string",
+      "enum": ["ask", "auto"],
+      "description": "Человеко-гейт: auto — сабагент может считать oneshot без подтверждения; ask/нет — диалог и confirm."
+    },
+    "instructions": { "type": "string", "description": "Постоянная инструкция владельца или партнёра (виджет)." },
+    "locale": {
+      "type": "string",
+      "pattern": "^[A-Za-z]{2,3}(-[A-Za-z0-9]{1,8})*$",
+      "examples": ["ru", "en", "es", "de", "fr", "pt", "es-MX", "ca-ES-valencia"],
+      "description": "Язык пользователя на этом ходу — полный тег BCP-47, без обрезки до языка. Строка, а не enum: язык вне SUPPORTED_LOCALES (например pl) не отвергается — агент отвечает LLM на нём, а детерминированные строки берёт по цепочке фолбэков до en. Порядок разрешения в бэкенде: это поле → claim locale → claim org_locale → ru (обратная совместимость). Агент без поддержки поля его игнорирует. docs ecosystem/v2.4/06-i18n-locale.md."
+    }
+  }
+}

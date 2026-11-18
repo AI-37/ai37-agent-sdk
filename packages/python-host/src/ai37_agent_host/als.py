@@ -13,7 +13,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from ai37_agent_sdk import AgentContext
+from ai37_agent_sdk import AgentContext, resolve_request_locale, user_locale_instruction
 
 
 @dataclass
@@ -57,6 +57,10 @@ class HostScope:
     #: Диалог и ход: кладут executor и AG-UI-роутер до вызова handler'а, независимо от трассировки.
     #: Нужны вызовам «от имени хода» без проброса через сигнатуры (:func:`publish_artifact`).
     turn: HostTurn | None = None
+    #: Локаль хода (тег BCP-47), разрешённая хостом: ``metadata.ai37.locale`` → claim ``locale``
+    #: → claim ``org_locale`` → ``ru``. Кладут executor и AG-UI-роутер; читает
+    #: :func:`current_locale`.
+    locale: str | None = None
 
 
 _request_scope: contextvars.ContextVar[HostScope | None] = contextvars.ContextVar(
@@ -128,6 +132,30 @@ def current_checkpointer() -> Any:
     """
     scope = _request_scope.get()
     return scope.checkpointer if scope else None
+
+
+def current_locale() -> str:
+    """Локаль текущего хода (тег BCP-47, без обрезки: ``es-MX`` остаётся ``es-MX``).
+
+    Вне хода и на путях, где host её не положил (MCP), — из claims verified-контекста, иначе
+    ``ru``, как было до локали. Детерминированные строки агента: ``t(current_locale(), {...})``.
+    """
+    scope = _request_scope.get()
+    if scope is not None and scope.locale:
+        return scope.locale
+    claims = scope.ctx.claims if scope is not None and scope.ctx is not None else None
+    return resolve_request_locale(None, claims)
+
+
+def with_user_locale(system_prompt: str, locale: str | None = None) -> str:
+    """Дописать к системному промпту секцию о языке ответа (docs#589 §1).
+
+    Отвечать на языке пользователя и по возможности рассуждать на нём же, а цитаты норм, названия
+    документов и ссылки «[название, пункт]» оставлять в оригинале. Секция видна и в запросе к LLM,
+    и в трейсе; сам промпт остаётся на русском. ``locale`` не задан — локаль хода
+    (:func:`current_locale`). Язык вне ``SUPPORTED_LOCALES`` (``pl``) называется тегом.
+    """
+    return f"{system_prompt}\n\n{user_locale_instruction(locale or current_locale())}"
 
 
 def current_trace_id() -> str | None:

@@ -113,6 +113,10 @@ class Ai37Metadata:
     #: Принимаемые клиентом форматы текста — носитель ТОЛЬКО для AG-UI (`forwardedProps.ai37`).
     #: Для A2A носитель — нативный `params.configuration.acceptedOutputModes`.
     accepted_output_modes: list[str] | None = None
+    #: Язык пользователя на этом ходу — тег BCP-47 (``es``, ``es-MX``), как пришёл. Host разрешает
+    #: локаль хода (``resolve_request_locale``: это поле → claim ``locale`` → claim ``org_locale``
+    #: → ``ru``) и кладёт в ``HostScope.locale``; когниция берёт её через :func:`current_locale`.
+    locale: str | None = None
 
 
 @dataclass

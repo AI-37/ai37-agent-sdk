@@ -1,6 +1,7 @@
 import type { AgentHandler, AgentRequest, AgentResult } from '../types'
 import type { SkillRegistry } from './registry'
 import type { SkillProvider } from './types'
+import { hostMessage } from '../host-messages'
 
 /**
  * Маркер владельца многоходовки в `AgentResult.state`: диспетчер дописывает его к state
@@ -36,7 +37,7 @@ export function createSkillDispatchHandler(registry: SkillRegistry): AgentHandle
       if (typeof skill === 'string') {
         return {
           status: 'failed',
-          message: `Запрошенный скилл «${skill}» недоступен у этого агента.`,
+          message: hostMessage('skillUnavailable')(skill),
         }
       }
 
@@ -45,7 +46,7 @@ export function createSkillDispatchHandler(registry: SkillRegistry): AgentHandle
           // Гейтованный скилл без verified-контекста невыполним по определению — fail-closed.
           return {
             status: 'failed',
-            message: 'Скилл требует авторизованного доступа, а ход пришёл без него.',
+            message: hostMessage('skillNeedsAuth'),
           }
         }
         await req.ctx.assertExecutionAllowed(skill.billing)

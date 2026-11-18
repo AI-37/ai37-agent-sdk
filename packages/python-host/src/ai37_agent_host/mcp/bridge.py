@@ -14,6 +14,7 @@ import uuid
 from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 
+from ..host_messages import host_message
 from ..output_modes import negotiate_output
 from ..types import (
     AgentHandler,
@@ -53,7 +54,7 @@ def _default_render(result: AgentResult) -> str:
         if isinstance(result.result, str):
             return result.result
         return json.dumps(result.result, ensure_ascii=False, indent=2)
-    return "Ошибка выполнения" if result.status == "failed" else "Готово"
+    return host_message("tool_failed" if result.status == "failed" else "done")
 
 
 def bridge_handler_to_mcp_tool(

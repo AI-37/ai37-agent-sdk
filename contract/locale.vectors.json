@@ -1,0 +1,65 @@
+{
+  "description": "Общие векторы локали для TS (@ai37/agent-sdk src/locale.ts) и Python (ai37_agent_sdk.locale): обе реализации обязаны давать одинаковый результат. Контракт — docs ecosystem/v2.4/06-i18n-locale.md.",
+  "supportedLocales": ["ru", "en", "es", "de", "fr", "pt"],
+  "canonicalLocaleTag": [
+    ["ES-mx", "es-MX"],
+    ["ca-es-VALENCIA", "ca-ES-valencia"],
+    ["zh-hant-tw", "zh-Hant-TW"],
+    ["es-419", "es-419"],
+    ["pt_BR", "pt-BR"],
+    [" de ", "de"],
+    ["", null],
+    ["e", null],
+    ["русский", null],
+    ["en--US", null],
+    [42, null],
+    [null, null]
+  ],
+  "localeChain": [
+    ["ca-ES-valencia", ["ca-ES-valencia", "ca-ES", "ca", "en"]],
+    ["es-MX", ["es-MX", "es", "en"]],
+    ["en-GB", ["en-GB", "en"]],
+    ["pl", ["pl", "en"]],
+    ["", ["en"]],
+    [null, ["en"]]
+  ],
+  "normalizeLocale": [
+    ["es-ES", "es"],
+    ["pt-BR", "pt"],
+    ["ru-RU", "ru"],
+    ["DE", "de"],
+    ["fr-CA", "fr"],
+    ["uk", "en"],
+    ["be", "en"],
+    ["kk", "en"],
+    ["ja", "en"],
+    ["pl", "en"],
+    ["", "en"],
+    [null, "en"]
+  ],
+  "resolveRequestLocale": [
+    {"metadata": "es", "claims": {"locale": "de", "org_locale": "fr"}, "expected": "es"},
+    {"metadata": null, "claims": {"locale": "de", "org_locale": "fr"}, "expected": "de"},
+    {"metadata": null, "claims": {"org_locale": "fr"}, "expected": "fr"},
+    {"metadata": null, "claims": null, "expected": "ru"},
+    {"metadata": "auto", "claims": {"locale": "pt"}, "expected": "pt"},
+    {"metadata": 42, "claims": {"locale": "auto", "org_locale": "es"}, "expected": "es"},
+    {"metadata": "<script>", "claims": null, "expected": "ru"},
+    {"metadata": "es-mx", "claims": null, "expected": "es-MX"},
+    {"metadata": "ca-ES-valencia", "claims": null, "expected": "ca-ES-valencia"},
+    {"metadata": "pl", "claims": null, "expected": "pl"}
+  ],
+  "userLocaleInstruction": {
+    "es": "## Язык ответа\nОтвечай пользователю на языке: Español (es) — даже если вопрос, контекст или документы на другом языке. По возможности рассуждай на этом же языке.\nВсё, что относится к документам, оставляй на языке документа: цитаты норм (СП, ГОСТ, ПУЭ и др.), названия и номера документов, номера пунктов, ссылки вида «[название, пункт]». Пояснения к ним пиши на языке ответа.",
+    "pl": "## Язык ответа\nОтвечай пользователю на языке: язык с тегом BCP-47 «pl» — даже если вопрос, контекст или документы на другом языке. По возможности рассуждай на этом же языке.\nВсё, что относится к документам, оставляй на языке документа: цитаты норм (СП, ГОСТ, ПУЭ и др.), названия и номера документов, номера пунктов, ссылки вида «[название, пункт]». Пояснения к ним пиши на языке ответа."
+  },
+  "billingUserMessage": [
+    ["PAYMENT_FAILED", "fr", "Le paiement n’a pas abouti. Mettez à jour votre moyen de paiement ou ajoutez une autre carte."],
+    ["NO_TOKENS", "es", "Has alcanzado el límite de uso. Elige otro plan o amplía los límites en la página de pago."],
+    ["ENTITLEMENT_INACTIVE", "de", "Ihr Abonnement ist nicht aktiv. Hinterlegen Sie erneut eine Karte oder aktualisieren Sie den Tarif auf der Abrechnungsseite."],
+    ["MISSING_FEATURE", "pt-BR", "Este assistente não está disponível na sua assinatura atual."],
+    ["MISSING_PRIVILEGE", "pl", "This assistant feature is not available on your current subscription."],
+    ["UNKNOWN", "en", "The assistant is not available. Check your subscription."],
+    ["NO_TOKENS", null, "Достигнут лимит использования — выберите другой план, либо увеличьте лимиты на странице оплаты."]
+  ]
+}

@@ -30,6 +30,8 @@ export {
   currentCheckpointer,
   currentPartnerInstructions,
   withPartnerInstructions,
+  currentLocale,
+  withUserLocale,
   currentTraceId,
   currentSessionId,
   currentTurnId,

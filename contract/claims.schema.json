@@ -1,8 +1,8 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://ai37.ru/contracts/ai37-agent-sdk/claims.schema.json",
-  "title": "AI37 user-JWT claims (v1.2)",
-  "description": "Claims, которые агент извлекает из access-JWT после JWKS-верификации. v1.2: один issuer. app_id появляется в v2 (мультипродукт) и здесь опционален.",
+  "title": "AI37 user-JWT claims (v1.3)",
+  "description": "Claims, которые агент извлекает из access-JWT после JWKS-верификации. v1.2: один issuer. app_id появляется в v2 (мультипродукт) и здесь опционален. v1.3: необязательные locale и org_locale — язык пользователя и организации (docs#589).",
   "type": "object",
   "required": ["iss", "aud", "sub", "exp", "iat", "org_id", "billing_org_id"],
   "additionalProperties": true,
@@ -20,6 +20,8 @@
     "billing_org_id": { "type": "string", "description": "ID customer в billing (через property mapping OIDC-провайдера)" },
     "app_id": { "type": "string", "description": "Продукт = приложение OIDC-провайдера (v2). В v1.2 может отсутствовать." },
     "email": { "type": "string" },
-    "name": { "type": "string" }
+    "name": { "type": "string" },
+    "locale": { "type": "string", "description": "Язык пользователя из профиля — тег BCP-47 (attributes.settings.locale в Authentik). Нет claim — «как в браузере». Источник локали хода после metadata.ai37.locale" },
+    "org_locale": { "type": "string", "description": "Язык организации — тег BCP-47 (settings.locale группы организации). Для работы без хода пользователя и последний источник локали хода перед ru" }
   }
 }

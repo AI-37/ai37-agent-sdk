@@ -20,7 +20,7 @@ import type {
   AgentStatus,
 } from './types'
 import { observeTurn, recordBillingDenied, normFinalState } from './metrics'
-import { BillingExecutionDeniedError } from '@ai37/agent-sdk'
+import { BillingExecutionDeniedError, resolveRequestLocale } from '@ai37/agent-sdk'
 
 /**
  * AG-UI SSE-адаптер (канон). Эмитит каноничные AG-UI-события через `@ag-ui/encoder`,
@@ -155,6 +155,8 @@ export function aguiRouter(
       if (typeof metadata.instructions === 'string' && metadata.instructions.trim()) {
         scope.instructions = metadata.instructions.trim()
       }
+      // Локаль хода: forwardedProps.ai37.locale → claims → ru (currentLocale/withUserLocale в когниции).
+      scope.locale = resolveRequestLocale(metadata.locale, ctx?.claims)
     }
 
     // Multi-turn/HITL: состояние прошлого хода thread'а из task-store

@@ -17,6 +17,7 @@ from .als import (
     current_langfuse_callbacks,
     current_langfuse_handler,
     current_langfuse_trace,
+    current_locale,
     current_scope,
     current_supported_catalog_ids,
     current_trace_id,
@@ -24,6 +25,7 @@ from .als import (
     reset_scope,
     scope_context,
     set_scope,
+    with_user_locale,
 )
 from .artifacts import (
     ArtifactPublishError,
@@ -145,6 +147,8 @@ __all__ = [
     "scope_context",
     "current_scope",
     "current_ctx",
+    "current_locale",
+    "with_user_locale",
     "current_bearer",
     "current_accepted_output_modes",
     "current_supported_catalog_ids",

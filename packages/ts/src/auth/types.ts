@@ -25,6 +25,10 @@ export interface Claims {
   org_role?: OrgRole
   email?: string
   name?: string
+  /** Язык пользователя из профиля (тег BCP-47); нет — «как в браузере». См. `resolveRequestLocale`. */
+  locale?: string
+  /** Язык организации (тег BCP-47) — для работы без хода пользователя. */
+  org_locale?: string
   [claim: string]: unknown
 }
 

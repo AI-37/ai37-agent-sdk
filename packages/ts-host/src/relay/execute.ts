@@ -51,7 +51,16 @@ export interface RemoteA2aRequest {
    * Ставит доверенная граница (агрегатор/оркестратор). НЕ путать с `configuration.blocking` (транспорт).
    */
   confirmMode?: 'ask' | 'auto'
-  /** Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. */
+  /**
+   * Язык пользователя (тег BCP-47, как пришёл) → `message.metadata.ai37.locale`. Оркестратор передаёт
+   * локаль своего хода (`currentLocale()`), чтобы сабагент ответил на том же языке.
+   */
+  locale?: string
+  /**
+   * Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. Ключ `ai37` сливается с
+   * собранным конвертом (его поля важнее), а не заменяет его: интент скилла не стирает локаль и
+   * `context_refs` хода.
+   */
   extraMetadata?: Record<string, unknown>
   /**
    * Стрим: обрыв, если от агента дольше этого не пришло ни одного события. Агент на `agent-host`
@@ -86,21 +95,36 @@ export interface RemoteA2aResult {
   raw: Message | Task
 }
 
-function buildParams(req: RemoteA2aRequest, withResume: boolean): SendMessageRequest {
-  const metadata: Record<string, unknown> = {}
-  if (req.supportedCatalogIds?.length) {
-    metadata.a2uiClientCapabilities = { 'v0.9': { supportedCatalogIds: req.supportedCatalogIds } }
-  }
-  // ai37-конверт собираем единым объектом (НЕ перезаписываем по одному полю): context_refs (указатели)
-  // + context_files (манифест имён) едут вместе.
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === 'object' && value !== null && !Array.isArray(value)
+}
+
+/**
+ * ai37-конверт собираем единым объектом (НЕ перезаписываем по одному полю): context_refs (указатели),
+ * context_files (манифест имён), confirm_mode и locale едут вместе. `extraMetadata.ai37` сливается
+ * поверх — так интент скилла (chat-backend шлёт его через escape hatch) не стирает остальной конверт.
+ */
+function buildAi37Envelope(req: RemoteA2aRequest, extraAi37: unknown): Record<string, unknown> {
   const ai37: Record<string, unknown> = {}
   if (req.contextRefs?.length) ai37.context_refs = req.contextRefs
   if (req.contextFiles?.length) ai37.context_files = req.contextFiles
   // Человеко-гейт: форвардим вниз, чтобы сабагент знал, можно ли считать без confirm (машинный вызов).
   if (req.confirmMode) ai37.confirm_mode = req.confirmMode
-  if (Object.keys(ai37).length > 0) metadata.ai37 = ai37
+  if (req.locale) ai37.locale = req.locale
+  if (isRecord(extraAi37)) Object.assign(ai37, extraAi37)
+  return ai37
+}
+
+function buildParams(req: RemoteA2aRequest, withResume: boolean): SendMessageRequest {
+  const metadata: Record<string, unknown> = {}
+  if (req.supportedCatalogIds?.length) {
+    metadata.a2uiClientCapabilities = { 'v0.9': { supportedCatalogIds: req.supportedCatalogIds } }
+  }
   if (req.action) metadata.a2uiAction = { userAction: req.action }
-  if (req.extraMetadata) Object.assign(metadata, req.extraMetadata)
+  const { ai37: extraAi37, ...extra } = req.extraMetadata ?? {}
+  Object.assign(metadata, extra)
+  const ai37 = buildAi37Envelope(req, extraAi37)
+  if (Object.keys(ai37).length > 0) metadata.ai37 = ai37
   // Langfuse v4 distributed tracing: кладём W3C trace-context активного turn-спана оркестратора
   // (`traceparent`/`tracestate`) в metadata → суб-агент продолжит ТОТ ЖЕ трейс. {} (no-op), если
   // трассировка выключена.

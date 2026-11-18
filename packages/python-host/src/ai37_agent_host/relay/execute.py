@@ -50,7 +50,12 @@ class RemoteA2aRequest:
     context_refs: list[str] | None = None
     #: Манифест приложенных файлов → ``metadata.ai37.context_files``.
     context_files: list[ContextFile] | None = None
-    #: Доп. поля в ``message.metadata`` (напр. relay hop-guard) — escape hatch.
+    #: Язык пользователя (тег BCP-47, как пришёл) → ``metadata.ai37.locale``. Оркестратор передаёт
+    #: локаль своего хода (``current_locale()``), чтобы суб-агент ответил на том же языке.
+    locale: str | None = None
+    #: Доп. поля в ``message.metadata`` (напр. relay hop-guard) — escape hatch. Ключ ``ai37``
+    #: сливается с собранным конвертом (его поля важнее), а не заменяет его: интент скилла не
+    #: стирает локаль и ``context_refs`` хода.
     extra_metadata: dict[str, Any] | None = None
     #: Обрыв, если от агента дольше этого не пришло ни одного события (keepalive тоже считается).
     idle_timeout_ms: int | None = None
@@ -141,6 +146,24 @@ def _action_dict(a: A2uiAction) -> dict[str, Any]:
     return out
 
 
+def _build_ai37_envelope(req: RemoteA2aRequest, extra_ai37: object) -> dict[str, Any]:
+    """ai37-конверт единым объектом: context_refs, context_files и locale едут вместе.
+
+    ``extra_metadata["ai37"]`` сливается поверх — так интент скилла (его шлют через escape hatch)
+    не стирает остальной конверт.
+    """
+    ai37: dict[str, Any] = {}
+    if req.context_refs:
+        ai37["context_refs"] = req.context_refs
+    if req.context_files:
+        ai37["context_files"] = [_context_file_dict(f) for f in req.context_files]
+    if req.locale:
+        ai37["locale"] = req.locale
+    if isinstance(extra_ai37, dict):
+        ai37.update(extra_ai37)
+    return ai37
+
+
 def _build_request(req: RemoteA2aRequest, with_resume: bool) -> Any:
     """Собрать protobuf ``SendMessageRequest`` (ParseDict принимает camelCase)."""
     from a2a.types.a2a_pb2 import SendMessageRequest
@@ -150,18 +173,14 @@ def _build_request(req: RemoteA2aRequest, with_resume: bool) -> Any:
         metadata["a2uiClientCapabilities"] = {
             "v0.9": {"supportedCatalogIds": req.supported_catalog_ids}
         }
-    # ai37-конверт собираем единым объектом (context_refs + context_files едут вместе).
-    ai37: dict[str, Any] = {}
-    if req.context_refs:
-        ai37["context_refs"] = req.context_refs
-    if req.context_files:
-        ai37["context_files"] = [_context_file_dict(f) for f in req.context_files]
-    if ai37:
-        metadata["ai37"] = ai37
     if req.action:
         metadata["a2uiAction"] = {"userAction": _action_dict(req.action)}
-    if req.extra_metadata:
-        metadata.update(req.extra_metadata)
+    extra = dict(req.extra_metadata or {})
+    extra_ai37 = extra.pop("ai37", None)
+    metadata.update(extra)
+    ai37 = _build_ai37_envelope(req, extra_ai37)
+    if ai37:
+        metadata["ai37"] = ai37
     # W3C trace-context активного turn/remote-a2a спана вниз ({} если трассировка off).
     metadata.update(inject_trace_context())
 

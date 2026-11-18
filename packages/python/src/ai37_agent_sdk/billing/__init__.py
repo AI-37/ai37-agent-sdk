@@ -9,7 +9,9 @@ from .client import (
 )
 from .errors import (
     BILLING_USER_MESSAGES,
+    BILLING_USER_MESSAGES_BY_LOCALE,
     DEFAULT_BILLING_USER_MESSAGE,
+    DEFAULT_BILLING_USER_MESSAGE_BY_LOCALE,
     BillingConfigurationError,
     BillingExecutionDeniedError,
     BillingRequestError,
@@ -38,7 +40,9 @@ __all__ = [
     "friendly_billing_message",
     "billing_user_message",
     "BILLING_USER_MESSAGES",
+    "BILLING_USER_MESSAGES_BY_LOCALE",
     "DEFAULT_BILLING_USER_MESSAGE",
+    "DEFAULT_BILLING_USER_MESSAGE_BY_LOCALE",
     "normalize_billing_base_url",
     "BillingClient",
     "BillingExecutionRequirement",

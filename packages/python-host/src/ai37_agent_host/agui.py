@@ -29,6 +29,8 @@ import uuid
 from collections.abc import AsyncIterator
 from typing import Any
 
+from ai37_agent_sdk import resolve_request_locale
+
 from .a2ui import component_to_a2ui_operations
 from .als import HostTurn, current_ctx, current_scope
 from .observability.langfuse import BeginTurnArgs, with_turn_observability
@@ -159,6 +161,7 @@ def extract_ai37(body: dict[str, Any]) -> Ai37Metadata:
         session_id=_get("session_id", "sessionId"),
         trace_id=_get("trace_id", "traceId"),
         accepted_output_modes=raw.get("acceptedOutputModes"),
+        locale=raw.get("locale") if isinstance(raw.get("locale"), str) else None,
     )
     if not meta.thread_id:
         if isinstance(fp.get("thread_id"), str):
@@ -522,6 +525,8 @@ async def _run_turn(
     if scope is not None:
         # Диалог и ход (на AG-UI оба = thread_id) — как на A2A-пути, для publish_artifact.
         scope.turn = HostTurn(context_id=thread_id, task_id=thread_id)
+        # Локаль хода: forwardedProps.ai37.locale → claims → ru (current_locale в когниции).
+        scope.locale = resolve_request_locale(metadata.locale, ctx.claims if ctx else None)
         scope.accepted_output_modes = accepted
         if supported_catalog_ids:
             scope.supported_catalog_ids = supported_catalog_ids

@@ -1,5 +1,9 @@
 import { AsyncLocalStorage } from 'node:async_hooks'
-import type { AgentContext } from '@ai37/agent-sdk'
+import {
+  resolveRequestLocale,
+  userLocaleInstruction,
+  type AgentContext,
+} from '@ai37/agent-sdk'
 // `import type` — тип стирается при сборке, поэтому als.ts НЕ тянет @langchain/langgraph-checkpoint
 // в рантайм (пакет — optional peer). Держит als.ts «лёгким», как и langfuse-типы (`unknown`).
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
@@ -30,6 +34,11 @@ export interface HostScope {
    * `withPartnerInstructions()` (видимо в трейсе). Пусто → no-op.
    */
   instructions?: string
+  /**
+   * Локаль хода (тег BCP-47), разрешённая хостом: `metadata.ai37.locale` → claim `locale` → claim
+   * `org_locale` → `ru`. Кладут A2A-исполнитель и AG-UI-роутер; читается через `currentLocale()`.
+   */
+  locale?: string
   /**
    * Per-turn Langfuse-наблюдаемость (turn-спан + LangChain `CallbackHandler`). Заполняется
    * executor'ом/AG-UI-роутером внутри `withTurnObservability` ДО вызова handler'а, поэтому
@@ -76,7 +85,14 @@ export interface HostLangfuseScope {
   handler?: unknown
 }
 
-export const requestScope = new AsyncLocalStorage<HostScope>()
+// Один scope на процесс, а не на бандл: tsup собирает subpath-entry (`skills`, `relay`) независимыми
+// бандлами, и module-local экземпляр получил бы несколько копий. Тогда `currentLocale()` в диспетчере
+// скиллов (бандл skills) не видел бы scope, который открыл хост (бандл index). Тот же приём, что у
+// OTel-хэндла в observability/langfuse.ts.
+const SCOPE_SLOT = Symbol.for('ai37.agent-host.requestScope')
+const scopeSlots = globalThis as unknown as Record<symbol, AsyncLocalStorage<HostScope> | undefined>
+export const requestScope: AsyncLocalStorage<HostScope> = (scopeSlots[SCOPE_SLOT] ??=
+  new AsyncLocalStorage<HostScope>())
 
 export const currentCtx = (): AgentContext | undefined =>
   requestScope.getStore()?.ctx
@@ -126,6 +142,27 @@ export const withPartnerInstructions = (systemPrompt: string): string => {
   if (!instructions) return systemPrompt
   return `${systemPrompt}\n\n## Инструкция владельца (соблюдай в приоритете)\n${instructions}`
 }
+
+/**
+ * Локаль текущего хода (тег BCP-47, без обрезки: `es-MX` остаётся `es-MX`). Вне хода и на путях, где
+ * host её не положил (MCP), — из claims verified-контекста, иначе `ru`, как было до локали.
+ * Детерминированные строки агента: `t(currentLocale(), { ru: …, en: … })`.
+ */
+export const currentLocale = (): string => {
+  const scope = requestScope.getStore()
+  return scope?.locale ?? resolveRequestLocale(undefined, scope?.ctx?.claims)
+}
+
+/**
+ * Дописывает к системному промпту секцию о языке ответа: отвечать на языке пользователя и по
+ * возможности рассуждать на нём же, а цитаты норм, названия документов и ссылки «[название, пункт]»
+ * оставлять в оригинале (docs#589 §1). Агент зовёт её там же, где `withPartnerInstructions`:
+ * `new SystemMessage(withUserLocale(basePrompt))`. Секция видна и в запросе к LLM, и в трейсе.
+ * Сам промпт остаётся на русском. Язык вне `SUPPORTED_LOCALES` (`pl`) называется тегом — LLM его
+ * поймёт.
+ */
+export const withUserLocale = (systemPrompt: string, locale: string = currentLocale()): string =>
+  `${systemPrompt}\n\n${userLocaleInstruction(locale)}`
 
 /**
  * Стабильный id Langfuse-трейса текущего хода (или undefined, если трассировка выключена).
