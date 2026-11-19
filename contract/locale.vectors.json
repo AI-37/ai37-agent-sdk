@@ -23,6 +23,22 @@
     ["", ["en"]],
     [null, ["en"]]
   ],
+  "localeVariantChain": [
+    ["ca-ES-valencia", ["ca-ES-valencia", "ca-ES", "ca"]],
+    ["es-MX", ["es-MX", "es"]],
+    ["en-GB", ["en-GB", "en"]],
+    ["pl", ["pl"]],
+    ["", []],
+    [null, []]
+  ],
+  "pickLocaleVariant": [
+    {"variants": {"ru": "Р", "en": "E", "es": "S"}, "locale": "es-MX", "expected": "S"},
+    {"variants": {"ru": "Р", "en": "E", "es": "S"}, "locale": "pl", "expected": null},
+    {"variants": {"ES-mx": "M", "es": "S"}, "locale": "es-mx", "expected": "M"},
+    {"variants": {"en": "E", "не тег": "X"}, "locale": null, "expected": null},
+    {"variants": {"ru": "Р"}, "locale": "ru-RU", "expected": "Р"},
+    {"variants": null, "locale": "es", "expected": null}
+  ],
   "normalizeLocale": [
     ["es-ES", "es"],
     ["pt-BR", "pt"],

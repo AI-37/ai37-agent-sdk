@@ -1,3 +1,4 @@
+import { canonicalLocaleTag, localeVariantChain } from '../locale'
 import { compactText } from './text'
 
 /**
@@ -39,8 +40,35 @@ export interface AgentShowcaseCapability {
   skill?: string
 }
 
+/**
+ * Translation of one capability tile, matched to the base tile by `id`. The gate (`skill`) is not
+ * translated: it lives on the base tile only.
+ */
+export interface AgentShowcaseCapabilityVariant {
+  id: string
+  title?: string
+  summary?: string
+  starter?: string
+  examples?: string[]
+}
+
+/**
+ * Translation of the showcase into one language. Every field is optional: a missing one falls back
+ * along the locale chain and then to the Russian base. Norms are not here on purpose — a norm is
+ * cited in its original language (docs#589 §1).
+ */
+export interface AgentShowcaseVariant {
+  title?: string
+  summary?: string
+  computes?: string
+  starter?: string
+  examples?: string[]
+  capabilities?: AgentShowcaseCapabilityVariant[]
+}
+
 /** User-facing description of the agent for the product catalog (page and empty chat screen). */
 export interface AgentShowcaseProfile extends Record<string, unknown> {
+  /** Base text is Russian: consumers that know nothing about `i18n` keep showing it as before. */
   title: string
   summary: string
   computes?: string
@@ -49,6 +77,11 @@ export interface AgentShowcaseProfile extends Record<string, unknown> {
   examples?: string[]
   order?: number
   capabilities?: AgentShowcaseCapability[]
+  /**
+   * BCP-47 tag (canonical case after normalisation) → translation. Pick one with
+   * {@link localizeAgentShowcaseProfile}.
+   */
+  i18n?: Record<string, AgentShowcaseVariant>
 }
 
 export interface AgentShowcaseExtension {
@@ -66,6 +99,7 @@ const limits = {
   norms: { items: 4, code: 80, title: 200 },
   examples: { items: 4, length: 160 },
   capabilities: 6,
+  locales: 16,
 } as const
 
 const CAPABILITY_ID = /^[a-z0-9][a-z0-9-]{0,39}$/
@@ -168,6 +202,75 @@ function normalizeCapabilities(value: unknown): AgentShowcaseCapability[] {
   return result
 }
 
+type VariantText = Omit<AgentShowcaseVariant, 'capabilities'>
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/** Text fields shared by a translation and its tiles; absent or empty ones are not emitted. */
+function normalizeVariantText(raw: Record<string, unknown>): VariantText {
+  const text: VariantText = {}
+  const title = clampText(raw.title, limits.title)
+  if (title) text.title = title
+  const summary = clampText(raw.summary, limits.summary)
+  if (summary) text.summary = summary
+  const starter = clampText(raw.starter, limits.starter)
+  if (starter) text.starter = starter
+  const examples = normalizeExamples(raw.examples)
+  if (examples.length) text.examples = examples
+  return text
+}
+
+/** A tile translation for a tile the base does not have is dropped: there is nothing to translate. */
+function normalizeCapabilityVariants(
+  value: unknown,
+  baseIds: readonly string[],
+): AgentShowcaseCapabilityVariant[] {
+  if (!Array.isArray(value)) return []
+  const result: AgentShowcaseCapabilityVariant[] = []
+  for (const item of value) {
+    if (!isRecord(item) || typeof item.id !== 'string') continue
+    const id = item.id
+    if (!baseIds.includes(id) || result.some((c) => c.id === id)) continue
+    const text = normalizeVariantText(item)
+    if (Object.keys(text).length) result.push({ id, ...text })
+  }
+  return result
+}
+
+function normalizeVariant(
+  value: unknown,
+  baseIds: readonly string[],
+): AgentShowcaseVariant | undefined {
+  if (!isRecord(value)) return undefined
+  const variant: AgentShowcaseVariant = normalizeVariantText(value)
+  const computes = clampText(value.computes, limits.computes)
+  if (computes) variant.computes = computes
+  const capabilities = normalizeCapabilityVariants(value.capabilities, baseIds)
+  if (capabilities.length) variant.capabilities = capabilities
+  return Object.keys(variant).length ? variant : undefined
+}
+
+/**
+ * Translations are optional and additive: a key that is not a BCP-47 tag or an empty translation is
+ * dropped, the base profile survives. Keys come out in canonical case (`es-mx` → `es-MX`).
+ */
+function normalizeI18n(
+  value: unknown,
+  baseIds: readonly string[],
+): Record<string, AgentShowcaseVariant> {
+  const result: Record<string, AgentShowcaseVariant> = {}
+  if (!isRecord(value)) return result
+  for (const [key, raw] of Object.entries(value)) {
+    if (Object.keys(result).length >= limits.locales) break
+    const tag = canonicalLocaleTag(key)
+    const variant = tag && !(tag in result) ? normalizeVariant(raw, baseIds) : undefined
+    if (tag && variant) result[tag] = variant
+  }
+  return result
+}
+
 /** Optional fields are omitted rather than emitted empty: the card stays readable as JSON. */
 function normalizeOptionalFields(
   profile: Record<string, unknown>,
@@ -186,6 +289,8 @@ function normalizeOptionalFields(
   }
   const capabilities = normalizeCapabilities(profile.capabilities)
   if (capabilities.length) optional.capabilities = capabilities
+  const i18n = normalizeI18n(profile.i18n, capabilities.map((c) => c.id))
+  if (Object.keys(i18n).length) optional.i18n = i18n
   return optional
 }
 
@@ -233,4 +338,50 @@ export function parseAgentShowcaseExtension(
   } catch {
     return undefined
   }
+}
+
+/** The first translation along the chain that has the field, or `undefined`. */
+function firstText<K extends keyof VariantText>(
+  variants: readonly VariantText[],
+  field: K,
+): VariantText[K] {
+  return variants.find((variant) => variant[field] !== undefined)?.[field]
+}
+
+function overlayText<T extends VariantText>(base: T, variants: readonly VariantText[]): T {
+  const result = { ...base }
+  for (const field of ['title', 'summary', 'computes', 'starter', 'examples'] as const) {
+    const value = firstText(variants, field)
+    if (value !== undefined) Object.assign(result, { [field]: value })
+  }
+  return result
+}
+
+/**
+ * The showcase in the user's language. Each field is taken from the first translation along
+ * {@link localeVariantChain} that has it (`es-MX` → `es-MX`, then `es`), otherwise from the Russian
+ * base: a language without a translation (`pl`, or `ru` itself) sees the base text. Norms, order and
+ * tile gates always come from the base. The result has no `i18n`: it is what the catalog returns.
+ *
+ * Expects a normalised profile (from {@link normalizeAgentShowcaseProfile} or
+ * {@link parseAgentShowcaseExtension}) — its translation keys are already in canonical case.
+ */
+export function localizeAgentShowcaseProfile(
+  profile: AgentShowcaseProfile,
+  locale: string | undefined,
+): AgentShowcaseProfile {
+  const { i18n, ...base } = profile
+  const variants = localeVariantChain(locale)
+    .map((tag) => i18n?.[tag])
+    .filter((variant): variant is AgentShowcaseVariant => variant !== undefined)
+  const localized = overlayText(base as AgentShowcaseProfile, variants)
+  if (base.capabilities) {
+    localized.capabilities = base.capabilities.map((capability) =>
+      overlayText(
+        capability,
+        variants.flatMap((v) => v.capabilities?.filter((c) => c.id === capability.id) ?? []),
+      ),
+    )
+  }
+  return localized
 }

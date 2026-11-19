@@ -90,10 +90,12 @@ def _declared_fallback(tags: list[str]) -> str | None:
     return None
 
 
-def locale_chain(locale: str | None) -> list[str]:
-    """Цепочка поиска строки: точный тег → без варианта и региона → ``fallback`` → ``en``.
+def locale_variant_chain(locale: str | None) -> list[str]:
+    """Цепочка вариантов, которые локаль объявляет сама: точный тег → без варианта и региона →
+    ``fallback``.
 
-    Невалидная или пустая локаль → ``['en']``.
+    Без ``en`` в конце: им кончается :func:`locale_chain`, а у переведённых вариантов карточки
+    запасной вариант свой — русская база. Невалидная или пустая локаль → ``[]``.
     """
     chain: list[str] = []
     nxt = canonical_locale_tag(locale)
@@ -101,9 +103,33 @@ def locale_chain(locale: str | None) -> list[str]:
         prefixes = [p for p in _tag_prefixes(nxt) if p not in chain]
         chain.extend(prefixes)
         nxt = _declared_fallback(prefixes)
+    return chain
+
+
+def locale_chain(locale: str | None) -> list[str]:
+    """Цепочка поиска строки: точный тег → без варианта и региона → ``fallback`` → ``en``.
+
+    Невалидная или пустая локаль → ``['en']``.
+    """
+    chain = locale_variant_chain(locale)
     if FALLBACK_LOCALE not in chain:
         chain.append(FALLBACK_LOCALE)
     return chain
+
+
+def pick_locale_variant(variants: Mapping[str, T] | None, locale: str | None) -> T | None:
+    """Вариант для локали из словаря ``тег → вариант`` по :func:`locale_variant_chain`.
+
+    ``es-MX`` найдёт ``es``. Ничего не нашлось — ``None``, и вызывающий берёт свою базу: у карточек
+    агентов это русские поля, поэтому язык вне словаря (``pl``) видит русский текст, а не
+    английский. Ключи словаря сравниваются по каноническому тегу.
+    """
+    by_tag: dict[str, T] = {}
+    for key, value in (variants or {}).items():
+        tag = canonical_locale_tag(key)
+        if tag and tag not in by_tag and value is not None:
+            by_tag[tag] = value
+    return next((by_tag[tag] for tag in locale_variant_chain(locale) if tag in by_tag), None)
 
 
 def normalize_locale(locale: str | None) -> str:

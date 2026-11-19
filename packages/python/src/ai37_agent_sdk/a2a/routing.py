@@ -1,8 +1,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterable, Mapping
-from typing import Any, Literal, TypedDict, cast
+from typing import Any, Literal, NotRequired, TypedDict, cast
 
+from ..locale import canonical_locale_tag, locale_variant_chain
 from .text import compact_text
 
 # Versioned identifier, not an endpoint. Consumers must not dereference it.
@@ -36,10 +37,23 @@ AI37_ROUTING_INTENTS: frozenset[str] = frozenset(
 )
 
 
+class AgentRoutingVariant(TypedDict, total=False):
+    """Домены и исключения ещё на одном языке. Интенты — коды, их не переводят. В испанском запросе
+    нет русской фразы-исключения, и без перевода guard молча перестаёт работать (docs#589 §3.5)."""
+
+    domains: list[str]
+    excludes: list[str]
+
+
 class AgentRoutingProfile(TypedDict):
+    """Базовые фразы — на русском: потребитель, который про ``i18n`` не знает, работает по ним, как
+    раньше. ``i18n`` — тег BCP-47 → перевод; добавить его к базе —
+    :func:`localize_agent_routing_profile`."""
+
     domains: list[str]
     intents: list[AgentRoutingIntent]
     excludes: list[str]
+    i18n: NotRequired[dict[str, AgentRoutingVariant]]
 
 
 class AgentRoutingExtension(TypedDict):
@@ -69,6 +83,50 @@ def _strings(value: object, field: str, *, max_items: int, max_length: int) -> l
     return result
 
 
+_DOMAINS_LIMITS = {"max_items": 12, "max_length": 80}
+_EXCLUDES_LIMITS = {"max_items": 12, "max_length": 160}
+_LOCALES_MAX = 16
+
+
+def _variant_strings(value: object, field: str, limits: dict[str, int]) -> list[str]:
+    """Кривой переведённый список отбрасывается сам по себе: маршрутизацию агенту он не ломает."""
+    if value is None:
+        return []
+    try:
+        return _strings(value, field, **limits)
+    except (TypeError, ValueError):
+        return []
+
+
+def _variant(value: object) -> AgentRoutingVariant | None:
+    if not isinstance(value, Mapping):
+        return None
+    variant: AgentRoutingVariant = {}
+    domains = _variant_strings(value.get("domains"), "domains", _DOMAINS_LIMITS)
+    if domains:
+        variant["domains"] = domains
+    excludes = _variant_strings(value.get("excludes"), "excludes", _EXCLUDES_LIMITS)
+    if excludes:
+        variant["excludes"] = excludes
+    return variant or None
+
+
+def _i18n(value: object) -> dict[str, AgentRoutingVariant]:
+    """В отличие от базовых списков переводы нестрогие: поле необязательное и аддитивное, и битый
+    перевод должен стоить только себя, а не всего профиля. Ключи — в каноническом регистре."""
+    result: dict[str, AgentRoutingVariant] = {}
+    if not isinstance(value, Mapping):
+        return result
+    for key, raw in value.items():
+        if len(result) >= _LOCALES_MAX:
+            break
+        tag = canonical_locale_tag(key)
+        variant = _variant(raw) if tag and tag not in result else None
+        if tag and variant:
+            result[tag] = variant
+    return result
+
+
 def normalize_agent_routing_profile(value: object) -> AgentRoutingProfile:
     if not isinstance(value, Mapping):
         raise TypeError("routing profile must be an object")
@@ -84,11 +142,15 @@ def normalize_agent_routing_profile(value: object) -> AgentRoutingProfile:
         intent = cast(AgentRoutingIntent, item)
         if intent not in intents:
             intents.append(intent)
-    return {
-        "domains": _strings(value.get("domains"), "domains", max_items=12, max_length=80),
+    profile: AgentRoutingProfile = {
+        "domains": _strings(value.get("domains"), "domains", **_DOMAINS_LIMITS),
         "intents": intents,
-        "excludes": _strings(value.get("excludes"), "excludes", max_items=12, max_length=160),
+        "excludes": _strings(value.get("excludes"), "excludes", **_EXCLUDES_LIMITS),
     }
+    i18n = _i18n(value.get("i18n"))
+    if i18n:
+        profile["i18n"] = i18n
+    return profile
 
 
 def build_agent_routing_extension(profile: AgentRoutingProfile) -> AgentRoutingExtension:
@@ -111,3 +173,35 @@ def parse_agent_routing_extension(
         except (TypeError, ValueError):
             return None
     return None
+
+
+def _merge_phrases(lists: list[list[str]]) -> list[str]:
+    """Сначала база, потом переводы; фраза, повторённая в другом регистре, остаётся одна."""
+    result: list[str] = []
+    seen: set[str] = set()
+    for phrase in (p for phrases in lists for p in phrases):
+        if phrase.casefold() not in seen:
+            seen.add(phrase.casefold())
+            result.append(phrase)
+    return result
+
+
+def localize_agent_routing_profile(
+    profile: AgentRoutingProfile, locale: str | None
+) -> AgentRoutingProfile:
+    """Профиль для хода на заданном языке: русская база плюс переводы по
+    :func:`~ai37_agent_sdk.locale.locale_variant_chain` (``es-MX`` → ``es-MX`` и ``es``).
+
+    База остаётся: пользователи смешивают языки, а промпт планировщика русский; перевод только
+    добавляет фразы и никогда не убирает исключение. Язык без перевода получает базу как есть. В
+    результате нет ``i18n``. Ждёт нормализованный профиль — ключи переводов в нём канонические.
+    """
+    i18n = profile.get("i18n") or {}
+    variants = [i18n[tag] for tag in locale_variant_chain(locale) if tag in i18n]
+    return {
+        "domains": _merge_phrases([profile["domains"], *(v.get("domains", []) for v in variants)]),
+        "intents": list(profile["intents"]),
+        "excludes": _merge_phrases(
+            [profile["excludes"], *(v.get("excludes", []) for v in variants)]
+        ),
+    }

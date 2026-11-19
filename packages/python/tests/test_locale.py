@@ -24,7 +24,9 @@ from ai37_agent_sdk import (
     friendly_billing_message,
     locale_chain,
     locale_native_name,
+    locale_variant_chain,
     normalize_locale,
+    pick_locale_variant,
     resolve_request_locale,
     t,
     user_locale_instruction,
@@ -62,6 +64,16 @@ def test_vectors_canonical_locale_tag(raw: object, expected: str | None) -> None
 @pytest.mark.parametrize(("raw", "expected"), VECTORS["localeChain"])
 def test_vectors_locale_chain(raw: str | None, expected: list[str]) -> None:
     assert locale_chain(raw) == expected
+
+
+@pytest.mark.parametrize(("raw", "expected"), VECTORS["localeVariantChain"])
+def test_vectors_locale_variant_chain(raw: str | None, expected: list[str]) -> None:
+    assert locale_variant_chain(raw) == expected
+
+
+@pytest.mark.parametrize("case", VECTORS["pickLocaleVariant"])
+def test_vectors_pick_locale_variant(case: dict[str, Any]) -> None:
+    assert pick_locale_variant(case["variants"], case["locale"]) == case["expected"]
 
 
 @pytest.mark.parametrize(("raw", "expected"), VECTORS["normalizeLocale"])

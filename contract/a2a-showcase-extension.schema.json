@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.ai37.ru/a2a/extensions/showcase/v1",
   "title": "AI37 A2A showcase extension v1",
-  "description": "User-facing description of an agent for the product catalog (agents page and empty chat screen), embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Text is the agent's own: norms must be verifiable, an empty list means the agent cites no norms and the surface prints nothing. Normalisation clamps over-long strings and drops malformed items instead of rejecting the card — only a missing title or summary makes the profile unusable.",
+  "description": "User-facing description of an agent for the product catalog (agents page and empty chat screen), embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Text is the agent's own: norms must be verifiable, an empty list means the agent cites no norms and the surface prints nothing. Normalisation clamps over-long strings and drops malformed items instead of rejecting the card — only a missing title or summary makes the profile unusable. Base text is Russian; translations live in the optional `i18n` map and are picked by the consumer (additive: consumers that ignore it keep showing the Russian base).",
   "type": "object",
   "additionalProperties": false,
   "required": ["title", "summary"],
@@ -56,6 +56,49 @@
             "description": "Id of a skill in the same card whose `x-ai37.skills[id].billing` gates this tile. Normalisation checks the shape only and drops a malformed value; the catalog decides whether the skill exists.",
             "type": "string",
             "pattern": "^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$"
+          }
+        }
+      }
+    },
+    "i18n": {
+      "description": "Translations of the showcase, keyed by BCP-47 tag (`en`, `es`, `es-MX`, `ca-ES-valencia`). Every field is optional: a missing one falls back along the locale chain (exact tag → language → declared fallback) and then to the Russian base. A language without an entry sees the base. Norms, order and tile gates are not translated: norms are cited in their original language. A key that is not a BCP-47 tag or an empty entry is dropped, the profile survives.",
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": { "pattern": "^[A-Za-z]{2,3}([-_][A-Za-z0-9]{1,8})*$" },
+      "additionalProperties": { "$ref": "#/$defs/variant" }
+    }
+  },
+  "$defs": {
+    "examples": {
+      "type": "array",
+      "maxItems": 4,
+      "uniqueItems": true,
+      "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+    },
+    "variant": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+        "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "computes": { "type": "string", "minLength": 1, "maxLength": 240 },
+        "starter": { "type": "string", "minLength": 1, "maxLength": 160 },
+        "examples": { "$ref": "#/$defs/examples" },
+        "capabilities": {
+          "description": "Tile translations matched to base tiles by `id`; a translation for a tile the base does not have is dropped. `skill` is not here: the gate stays on the base tile.",
+          "type": "array",
+          "maxItems": 6,
+          "items": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["id"],
+            "properties": {
+              "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,39}$" },
+              "title": { "type": "string", "minLength": 1, "maxLength": 60 },
+              "summary": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "starter": { "type": "string", "minLength": 1, "maxLength": 160 },
+              "examples": { "$ref": "#/$defs/examples" }
+            }
           }
         }
       }

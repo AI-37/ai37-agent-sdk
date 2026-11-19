@@ -1,0 +1,604 @@
+{
+  "$comment": "Общие тест-векторы переводов showcase/v1 и routing/v1 (docs#589, срез 5) для TS (packages/ts/test/extension-i18n.test.ts) и Python (packages/python/tests/test_extension_i18n.py): оба SDK обязаны давать ровно expected.",
+  "showcaseNormalize": [
+    {
+      "name": "keys are canonicalised, junk keys and empty entries dropped, norms and gates are not translated",
+      "input": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "capabilities": [
+          {
+            "id": "find",
+            "title": "Найти",
+            "summary": "Найдёт пункт"
+          }
+        ],
+        "i18n": {
+          "ES-mx": {
+            "title": " Título <b> ",
+            "norms": [
+              {
+                "code": "X"
+              }
+            ],
+            "order": 5
+          },
+          "en": {
+            "capabilities": [
+              {
+                "id": "find",
+                "title": "Find",
+                "skill": "document-search"
+              },
+              {
+                "id": "missing",
+                "title": "Missing"
+              },
+              {
+                "id": "find",
+                "title": "Duplicate"
+              },
+              {
+                "title": "No id"
+              }
+            ]
+          },
+          "русский": {
+            "title": "Не тег"
+          },
+          "de": {},
+          "fr": "строка",
+          "pt": {
+            "capabilities": [
+              {
+                "id": "missing",
+                "title": "Faltando"
+              }
+            ]
+          },
+          "it": {
+            "title": "   "
+          }
+        }
+      },
+      "expected": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "capabilities": [
+          {
+            "id": "find",
+            "title": "Найти",
+            "summary": "Найдёт пункт"
+          }
+        ],
+        "i18n": {
+          "es-MX": {
+            "title": "Título b"
+          },
+          "en": {
+            "capabilities": [
+              {
+                "id": "find",
+                "title": "Find"
+              }
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "the first of two keys with the same canonical tag wins",
+      "input": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "i18n": {
+          "es": {
+            "title": "Uno"
+          },
+          "ES": {
+            "title": "Dos"
+          }
+        }
+      },
+      "expected": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "i18n": {
+          "es": {
+            "title": "Uno"
+          }
+        }
+      }
+    },
+    {
+      "name": "translated text is clamped like the base",
+      "input": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "i18n": {
+          "en": {
+            "title": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT",
+            "examples": [
+              "Same",
+              "same",
+              "  "
+            ]
+          }
+        }
+      },
+      "expected": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "i18n": {
+          "en": {
+            "title": "TTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTTT…",
+            "examples": [
+              "Same"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "i18n that is not an object is omitted",
+      "input": {
+        "title": "Поиск",
+        "summary": "Поиск по документам",
+        "i18n": [
+          "en"
+        ]
+      },
+      "expected": {
+        "title": "Поиск",
+        "summary": "Поиск по документам"
+      }
+    }
+  ],
+  "showcaseLocalize": {
+    "profile": {
+      "title": "Расчёт лифтов",
+      "summary": "Подбор числа и параметров лифтов",
+      "norms": [
+        {
+          "code": "ГОСТ 34758-2021"
+        }
+      ],
+      "starter": "Запусти расчёт лифтов",
+      "examples": [
+        "Подбери лифты для дома в 17 этажей"
+      ],
+      "order": 3,
+      "capabilities": [
+        {
+          "id": "residential",
+          "title": "Жилые здания",
+          "summary": "Расчёт по ГОСТ Р 52941-2008",
+          "skill": "calc-lifts"
+        },
+        {
+          "id": "office",
+          "title": "Офисы и гостиницы",
+          "summary": "Расчёт по ГОСТ 34758-2021"
+        }
+      ],
+      "i18n": {
+        "en": {
+          "title": "Elevator calculation",
+          "summary": "Number and parameters of elevators",
+          "starter": "Start the elevator calculation",
+          "examples": [
+            "Size elevators for a 17-storey building"
+          ],
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Residential buildings"
+            }
+          ]
+        },
+        "es": {
+          "title": "Cálculo de ascensores",
+          "summary": "Número y parámetros de ascensores",
+          "capabilities": [
+            {
+              "id": "office",
+              "title": "Oficinas y hoteles",
+              "summary": "Cálculo según GOST 34758-2021"
+            }
+          ]
+        },
+        "es-MX": {
+          "title": "Cálculo de elevadores"
+        }
+      }
+    },
+    "cases": [
+      {
+        "name": "en: translated fields, base norms, order and tile gate",
+        "locale": "en",
+        "expected": {
+          "title": "Elevator calculation",
+          "summary": "Number and parameters of elevators",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Start the elevator calculation",
+          "examples": [
+            "Size elevators for a 17-storey building"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Residential buildings",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Офисы и гостиницы",
+              "summary": "Расчёт по ГОСТ 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "es: a field without translation falls back to the Russian base",
+        "locale": "es",
+        "expected": {
+          "title": "Cálculo de ascensores",
+          "summary": "Número y parámetros de ascensores",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Запусти расчёт лифтов",
+          "examples": [
+            "Подбери лифты для дома в 17 этажей"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Жилые здания",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Oficinas y hoteles",
+              "summary": "Cálculo según GOST 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "es-MX: own title, the rest from es",
+        "locale": "es-MX",
+        "expected": {
+          "title": "Cálculo de elevadores",
+          "summary": "Número y parámetros de ascensores",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Запусти расчёт лифтов",
+          "examples": [
+            "Подбери лифты для дома в 17 этажей"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Жилые здания",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Oficinas y hoteles",
+              "summary": "Cálculo según GOST 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "tag case does not matter",
+        "locale": "EN-gb",
+        "expected": {
+          "title": "Elevator calculation",
+          "summary": "Number and parameters of elevators",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Start the elevator calculation",
+          "examples": [
+            "Size elevators for a 17-storey building"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Residential buildings",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Офисы и гостиницы",
+              "summary": "Расчёт по ГОСТ 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "unknown language gets the base, not English",
+        "locale": "pl",
+        "expected": {
+          "title": "Расчёт лифтов",
+          "summary": "Подбор числа и параметров лифтов",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Запусти расчёт лифтов",
+          "examples": [
+            "Подбери лифты для дома в 17 этажей"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Жилые здания",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Офисы и гостиницы",
+              "summary": "Расчёт по ГОСТ 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "ru gets the base",
+        "locale": "ru",
+        "expected": {
+          "title": "Расчёт лифтов",
+          "summary": "Подбор числа и параметров лифтов",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Запусти расчёт лифтов",
+          "examples": [
+            "Подбери лифты для дома в 17 этажей"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Жилые здания",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Офисы и гостиницы",
+              "summary": "Расчёт по ГОСТ 34758-2021"
+            }
+          ]
+        }
+      },
+      {
+        "name": "no locale gets the base",
+        "locale": null,
+        "expected": {
+          "title": "Расчёт лифтов",
+          "summary": "Подбор числа и параметров лифтов",
+          "norms": [
+            {
+              "code": "ГОСТ 34758-2021"
+            }
+          ],
+          "starter": "Запусти расчёт лифтов",
+          "examples": [
+            "Подбери лифты для дома в 17 этажей"
+          ],
+          "order": 3,
+          "capabilities": [
+            {
+              "id": "residential",
+              "title": "Жилые здания",
+              "summary": "Расчёт по ГОСТ Р 52941-2008",
+              "skill": "calc-lifts"
+            },
+            {
+              "id": "office",
+              "title": "Офисы и гостиницы",
+              "summary": "Расчёт по ГОСТ 34758-2021"
+            }
+          ]
+        }
+      }
+    ]
+  },
+  "routingNormalize": [
+    {
+      "name": "a malformed translation costs only itself, the base and the rest survive",
+      "input": {
+        "domains": [
+          "лифты"
+        ],
+        "intents": [
+          "engineering_calculation"
+        ],
+        "excludes": [
+          "пожарный риск"
+        ],
+        "i18n": {
+          "es": {
+            "domains": [
+              " ascensores "
+            ],
+            "excludes": [
+              "riesgo de incendio",
+              "Riesgo de incendio"
+            ]
+          },
+          "en": {
+            "excludes": "not a list"
+          },
+          "de": {
+            "domains": [
+              42
+            ]
+          },
+          "123": {
+            "domains": [
+              "x"
+            ]
+          },
+          "fr": {
+            "excludes": [
+              "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+            ]
+          }
+        }
+      },
+      "expected": {
+        "domains": [
+          "лифты"
+        ],
+        "intents": [
+          "engineering_calculation"
+        ],
+        "excludes": [
+          "пожарный риск"
+        ],
+        "i18n": {
+          "es": {
+            "domains": [
+              "ascensores"
+            ],
+            "excludes": [
+              "riesgo de incendio"
+            ]
+          }
+        }
+      }
+    },
+    {
+      "name": "no translations — no i18n key",
+      "input": {
+        "domains": [
+          "лифты"
+        ],
+        "intents": [
+          "engineering_calculation"
+        ],
+        "excludes": [],
+        "i18n": {}
+      },
+      "expected": {
+        "domains": [
+          "лифты"
+        ],
+        "intents": [
+          "engineering_calculation"
+        ],
+        "excludes": []
+      }
+    }
+  ],
+  "routingLocalize": {
+    "profile": {
+      "domains": [
+        "лифты"
+      ],
+      "intents": [
+        "engineering_calculation"
+      ],
+      "excludes": [
+        "пожарный риск"
+      ],
+      "i18n": {
+        "es": {
+          "domains": [
+            "ascensores"
+          ],
+          "excludes": [
+            "riesgo de incendio"
+          ]
+        },
+        "es-MX": {
+          "excludes": [
+            "riesgo de fuego",
+            "Пожарный риск"
+          ]
+        }
+      }
+    },
+    "cases": [
+      {
+        "name": "es adds its phrases to the Russian base",
+        "locale": "es",
+        "expected": {
+          "domains": [
+            "лифты",
+            "ascensores"
+          ],
+          "intents": [
+            "engineering_calculation"
+          ],
+          "excludes": [
+            "пожарный риск",
+            "riesgo de incendio"
+          ]
+        }
+      },
+      {
+        "name": "es-MX takes its own and es phrases; a repeat of the base in another case is kept once",
+        "locale": "es-MX",
+        "expected": {
+          "domains": [
+            "лифты",
+            "ascensores"
+          ],
+          "intents": [
+            "engineering_calculation"
+          ],
+          "excludes": [
+            "пожарный риск",
+            "riesgo de fuego",
+            "riesgo de incendio"
+          ]
+        }
+      },
+      {
+        "name": "unknown language keeps the base",
+        "locale": "pl",
+        "expected": {
+          "domains": [
+            "лифты"
+          ],
+          "intents": [
+            "engineering_calculation"
+          ],
+          "excludes": [
+            "пожарный риск"
+          ]
+        }
+      }
+    ]
+  }
+}
