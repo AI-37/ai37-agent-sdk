@@ -73,10 +73,12 @@ function tagPrefixes(tag: string): string[] {
 }
 
 /**
- * Цепочка поиска строки для локали: точный тег → тег без варианта и региона → объявленный `fallback`
- * (со своими префиксами) → `en`. Невалидная или пустая локаль → `['en']`.
+ * Цепочка вариантов, которые локаль объявляет сама: точный тег → тег без варианта и региона →
+ * объявленный `fallback` (со своими префиксами). Без `en` в конце: им кончается {@link localeChain},
+ * а у переведённых вариантов карточки запасной вариант свой — русская база. Невалидная или пустая
+ * локаль → `[]`.
  */
-export function localeChain(locale: string | undefined): string[] {
+export function localeVariantChain(locale: string | undefined): string[] {
   const chain: string[] = []
   let next = canonicalLocaleTag(locale)
   while (next && !chain.includes(next)) {
@@ -85,8 +87,37 @@ export function localeChain(locale: string | undefined): string[] {
     next = prefixes.map((t) => findSupported(t)?.fallback).find(Boolean)
     next = canonicalLocaleTag(next)
   }
+  return chain
+}
+
+/**
+ * Цепочка поиска строки для локали: точный тег → тег без варианта и региона → объявленный `fallback`
+ * (со своими префиксами) → `en`. Невалидная или пустая локаль → `['en']`.
+ */
+export function localeChain(locale: string | undefined): string[] {
+  const chain = localeVariantChain(locale)
   if (!chain.includes(FALLBACK_LOCALE)) chain.push(FALLBACK_LOCALE)
   return chain
+}
+
+/**
+ * Вариант для локали из словаря `тег → вариант` по {@link localeVariantChain}: `es-MX` найдёт `es`.
+ * Ничего не нашлось — `undefined`, и вызывающий берёт свою базу: у карточек агентов это русские поля,
+ * поэтому язык вне словаря (`pl`) видит русский текст, а не английский. Ключи словаря сравниваются
+ * по каноническому тегу, так что `es-mx` в словаре тоже найдётся.
+ */
+export function pickLocaleVariant<T>(
+  variants: Readonly<Record<string, T>> | null | undefined,
+  locale: string | undefined,
+): T | undefined {
+  if (!variants) return undefined
+  const byTag = new Map<string, T>()
+  for (const [key, value] of Object.entries(variants)) {
+    const tag = canonicalLocaleTag(key)
+    if (tag && !byTag.has(tag) && value !== undefined) byTag.set(tag, value)
+  }
+  const found = localeVariantChain(locale).find((tag) => byTag.has(tag))
+  return found === undefined ? undefined : byTag.get(found)
 }
 
 /**

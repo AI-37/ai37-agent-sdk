@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://schemas.ai37.ru/a2a/extensions/routing/v1",
   "title": "AI37 A2A routing extension v1",
-  "description": "Compact semantic routing profile embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Continuation of an open HITL/wizard is orchestrator mode, not an intent.",
+  "description": "Compact semantic routing profile embedded in Agent Card capabilities.extensions. The $id is an identifier, not a network endpoint. Continuation of an open HITL/wizard is orchestrator mode, not an intent. Base phrases are Russian; the optional `i18n` map adds domains and excludes in other languages (additive: consumers that ignore it keep the Russian base).",
   "type": "object",
   "additionalProperties": false,
   "required": ["domains", "intents", "excludes"],
@@ -37,6 +37,30 @@
       "maxItems": 12,
       "uniqueItems": true,
       "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+    },
+    "i18n": {
+      "description": "Domains and excludes in other languages, keyed by BCP-47 tag. Intents are codes and are not translated. A consumer checks the base plus the entries along the locale chain of the turn (exact tag → language → declared fallback); a translation only adds phrases. A key that is not a BCP-47 tag or a malformed list is dropped, the profile survives.",
+      "type": "object",
+      "maxProperties": 16,
+      "propertyNames": { "pattern": "^[A-Za-z]{2,3}([-_][A-Za-z0-9]{1,8})*$" },
+      "additionalProperties": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "domains": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 80 }
+          },
+          "excludes": {
+            "type": "array",
+            "maxItems": 12,
+            "uniqueItems": true,
+            "items": { "type": "string", "minLength": 1, "maxLength": 160 }
+          }
+        }
+      }
     }
   }
 }

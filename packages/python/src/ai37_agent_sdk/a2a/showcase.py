@@ -4,6 +4,7 @@ import re
 from collections.abc import Iterable, Mapping
 from typing import Any, NotRequired, TypedDict, cast
 
+from ..locale import canonical_locale_tag, locale_variant_chain
 from .text import compact_text
 
 # Versioned identifier, not an endpoint. Consumers must not dereference it.
@@ -38,8 +39,36 @@ class AgentShowcaseCapability(TypedDict):
     skill: NotRequired[str]
 
 
+class AgentShowcaseCapabilityVariant(TypedDict):
+    """Перевод плитки, сопоставляется базовой плитке по ``id``. Гейт (``skill``) не переводится:
+    он живёт только на базовой плитке."""
+
+    id: str
+    title: NotRequired[str]
+    summary: NotRequired[str]
+    starter: NotRequired[str]
+    examples: NotRequired[list[str]]
+
+
+class AgentShowcaseVariant(TypedDict, total=False):
+    """Витрина на одном языке. Все поля необязательны: недостающее берётся дальше по цепочке
+    локали, а затем из русской базы. Нормативов здесь нет намеренно — норма цитируется на языке
+    оригинала (docs#589 §1)."""
+
+    title: str
+    summary: str
+    computes: str
+    starter: str
+    examples: list[str]
+    capabilities: list[AgentShowcaseCapabilityVariant]
+
+
 class AgentShowcaseProfile(TypedDict):
-    """Описание агента для витрины продукта: страница «Агенты» и пустой экран чата."""
+    """Описание агента для витрины продукта: страница «Агенты» и пустой экран чата.
+
+    Базовые поля — на русском: потребитель, который про ``i18n`` не знает, показывает их, как
+    раньше. ``i18n`` — тег BCP-47 (после нормализации в каноническом регистре) → перевод; выбрать
+    вариант — :func:`localize_agent_showcase_profile`."""
 
     title: str
     summary: str
@@ -49,6 +78,7 @@ class AgentShowcaseProfile(TypedDict):
     examples: NotRequired[list[str]]
     order: NotRequired[int]
     capabilities: NotRequired[list[AgentShowcaseCapability]]
+    i18n: NotRequired[dict[str, AgentShowcaseVariant]]
 
 
 class AgentShowcaseExtension(TypedDict):
@@ -68,6 +98,8 @@ _NORM_TITLE_MAX = 200
 _EXAMPLES_MAX_ITEMS = 4
 _EXAMPLE_MAX = 160
 _CAPABILITIES_MAX_ITEMS = 6
+_LOCALES_MAX = 16
+_VARIANT_TEXT_FIELDS = ("title", "summary", "computes", "starter", "examples")
 # Тот же шаблон, что в TS. fullmatch, а не match с `$`: `$` в Python пропускает хвостовой `\n`.
 _CAPABILITY_ID = re.compile(r"[a-z0-9][a-z0-9-]{0,39}")
 # id скилла — не slug: у Python-агентов `verify_single`, у TS-агентов `document-search`.
@@ -170,6 +202,72 @@ def _capabilities(value: object) -> list[AgentShowcaseCapability]:
     return result
 
 
+def _variant_text(raw: Mapping[str, Any]) -> dict[str, Any]:
+    """Текстовые поля перевода и его плиток; пустые и отсутствующие не выводим."""
+    text: dict[str, Any] = {}
+    for field, max_length in (
+        ("title", _TITLE_MAX),
+        ("summary", _SUMMARY_MAX),
+        ("starter", _STARTER_MAX),
+    ):
+        value = _clamp(raw.get(field), max_length)
+        if value:
+            text[field] = value
+    examples = _examples(raw.get("examples"))
+    if examples:
+        text["examples"] = examples
+    return text
+
+
+def _capability_variants(
+    value: object, base_ids: list[str]
+) -> list[AgentShowcaseCapabilityVariant]:
+    """Перевод плитки, которой нет в базе, отбрасывается: переводить нечего."""
+    if not isinstance(value, list):
+        return []
+    result: list[AgentShowcaseCapabilityVariant] = []
+    for item in value:
+        if not isinstance(item, Mapping):
+            continue
+        capability_id = item.get("id")
+        if capability_id not in base_ids or any(c["id"] == capability_id for c in result):
+            continue
+        text = _variant_text(cast(Mapping[str, Any], item))
+        if text:
+            result.append(cast(AgentShowcaseCapabilityVariant, {"id": capability_id, **text}))
+    return result
+
+
+def _variant(value: object, base_ids: list[str]) -> AgentShowcaseVariant | None:
+    if not isinstance(value, Mapping):
+        return None
+    raw = cast(Mapping[str, Any], value)
+    variant = _variant_text(raw)
+    computes = _clamp(raw.get("computes"), _COMPUTES_MAX)
+    if computes:
+        variant["computes"] = computes
+    capabilities = _capability_variants(raw.get("capabilities"), base_ids)
+    if capabilities:
+        variant["capabilities"] = capabilities
+    return cast(AgentShowcaseVariant, variant) if variant else None
+
+
+def _i18n(value: object, base_ids: list[str]) -> dict[str, AgentShowcaseVariant]:
+    """Переводы необязательны и аддитивны: ключ, который не тег BCP-47, и пустой перевод
+    отбрасываются, базовый профиль остаётся. Ключи выходят в каноническом регистре."""
+    result: dict[str, AgentShowcaseVariant] = {}
+    if not isinstance(value, Mapping):
+        return result
+    for key, raw in value.items():
+        if len(result) >= _LOCALES_MAX:
+            break
+        tag = canonical_locale_tag(key)
+        variant = _variant(raw, base_ids) if tag and tag not in result else None
+        if tag and variant:
+            result[tag] = variant
+    return result
+
+
 def _optional_fields(profile: Mapping[str, Any]) -> dict[str, Any]:
     """Пустые опциональные поля не выводим: карточка остаётся читаемой как JSON."""
     optional: dict[str, Any] = {}
@@ -191,6 +289,9 @@ def _optional_fields(profile: Mapping[str, Any]) -> dict[str, Any]:
     capabilities = _capabilities(profile.get("capabilities"))
     if capabilities:
         optional["capabilities"] = capabilities
+    i18n = _i18n(profile.get("i18n"), [c["id"] for c in capabilities])
+    if i18n:
+        optional["i18n"] = i18n
     return optional
 
 
@@ -229,3 +330,48 @@ def parse_agent_showcase_extension(
         except (TypeError, ValueError):
             return None
     return None
+
+
+def _overlay_text(base: Mapping[str, Any], variants: list[Mapping[str, Any]]) -> dict[str, Any]:
+    result = dict(base)
+    for field in _VARIANT_TEXT_FIELDS:
+        value = next((v[field] for v in variants if field in v), None)
+        if value is not None:
+            result[field] = value
+    return result
+
+
+def _tile_variants(
+    variants: list[AgentShowcaseVariant], capability_id: str
+) -> list[Mapping[str, Any]]:
+    return [
+        cast(Mapping[str, Any], tile)
+        for variant in variants
+        for tile in variant.get("capabilities", [])
+        if tile["id"] == capability_id
+    ]
+
+
+def localize_agent_showcase_profile(
+    profile: AgentShowcaseProfile, locale: str | None
+) -> AgentShowcaseProfile:
+    """Витрина на языке пользователя.
+
+    Каждое поле берётся из первого перевода по :func:`~ai37_agent_sdk.locale.locale_variant_chain`,
+    где оно есть (``es-MX`` → ``es-MX``, затем ``es``), иначе из русской базы: язык без перевода
+    (``pl`` или сам ``ru``) видит базу. Нормативы, порядок и гейты плиток всегда из базы. В
+    результате нет ``i18n``: это то, что отдаёт каталог.
+
+    Ждёт нормализованный профиль (из :func:`normalize_agent_showcase_profile` или
+    :func:`parse_agent_showcase_extension`) — ключи переводов в нём уже канонические.
+    """
+    base = {key: value for key, value in profile.items() if key != "i18n"}
+    i18n = profile.get("i18n") or {}
+    variants = [i18n[tag] for tag in locale_variant_chain(locale) if tag in i18n]
+    localized = _overlay_text(base, cast(list[Mapping[str, Any]], variants))
+    if "capabilities" in profile:
+        localized["capabilities"] = [
+            _overlay_text(capability, _tile_variants(variants, capability["id"]))
+            for capability in profile["capabilities"]
+        ]
+    return cast(AgentShowcaseProfile, localized)

@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a31] - 2026-11-19
+
+Переводы карточек агентов (AI-37/docs#589, срез 5); паритет с TS `0.1.0-alpha.39`.
+
+### Added
+
+- `showcase/v1` и `routing/v1`: необязательный `i18n` в нормализации (`AgentShowcaseVariant`,
+  `AgentShowcaseCapabilityVariant`, `AgentRoutingVariant`); `localize_agent_showcase_profile` и
+  `localize_agent_routing_profile` — та же семантика, что в TS, общие векторы
+  `contract/a2a-extension-i18n.vectors.json`.
+- `ai37_agent_sdk.locale`: `locale_variant_chain` (цепочка без `en` в конце) и `pick_locale_variant`.
+
 ## [0.1.0a30] - 2026-11-18
 
 Локаль пользователя (AI-37/docs#589, срез 3); паритет с TS `0.1.0-alpha.38`.

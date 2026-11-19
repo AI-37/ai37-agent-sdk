@@ -14,7 +14,9 @@ import {
   friendlyBillingMessage,
   localeChain,
   localeNativeName,
+  localeVariantChain,
   normalizeLocale,
+  pickLocaleVariant,
   resolveRequestLocale,
   t,
   userLocaleInstruction,
@@ -38,6 +40,8 @@ interface LocaleVectors {
   supportedLocales: string[]
   canonicalLocaleTag: [unknown, string | null][]
   localeChain: [string | null, string[]][]
+  localeVariantChain: [string | null, string[]][]
+  pickLocaleVariant: { variants: Record<string, string> | null; locale: string | null; expected: string | null }[]
   normalizeLocale: [string | null, string][]
   resolveRequestLocale: { metadata: unknown; claims: Record<string, unknown> | null; expected: string }[]
   userLocaleInstruction: Record<string, string>
@@ -60,6 +64,14 @@ describe('общие векторы contract/locale.vectors.json', () => {
 
   it.each(VECTORS.localeChain)('localeChain(%j) → %j', (raw, expected) => {
     expect(localeChain(raw ?? undefined)).toEqual(expected)
+  })
+
+  it.each(VECTORS.localeVariantChain)('localeVariantChain(%j) → %j (без en в конце)', (raw, expected) => {
+    expect(localeVariantChain(raw ?? undefined)).toEqual(expected)
+  })
+
+  it.each(VECTORS.pickLocaleVariant)('pickLocaleVariant %j', ({ variants, locale, expected }) => {
+    expect(pickLocaleVariant(variants, locale ?? undefined) ?? null).toBe(expected)
   })
 
   it.each(VECTORS.normalizeLocale)('normalizeLocale(%j) → %j (В8)', (raw, expected) => {
