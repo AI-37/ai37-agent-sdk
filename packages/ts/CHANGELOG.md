@@ -3,6 +3,28 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.39] - 2026-11-19
+
+Переводы карточек агентов (план docs `plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 5);
+паритет с Python `0.1.0a31`.
+
+### Added
+
+- `showcase/v1`: необязательный `i18n` — тег BCP-47 → перевод `title`, `summary`, `computes`, `starter`,
+  `examples` и плиток `capabilities` (по `id`). Нормативы, порядок и гейт плитки (`skill`) не
+  переводятся. Нормализация оставляет переводы, приводит ключи к каноническому регистру и отбрасывает
+  кривые ключи и пустые переводы, не трогая базу. `localizeAgentShowcaseProfile(profile, locale)` —
+  витрина на языке: каждое поле из первого перевода по цепочке, иначе русская база; язык без перевода
+  (`pl`) видит базу.
+- `routing/v1`: необязательный `i18n` — `domains` и `excludes` на других языках. Битый перевод
+  отбрасывается сам, базовые списки остаются строгими. `localizeAgentRoutingProfile(profile, locale)` —
+  русская база плюс переводы по цепочке: перевод только добавляет фразы.
+- `localeVariantChain()` — цепочка `localeChain()` без `en` в конце; `pickLocaleVariant(variants,
+  locale)` — вариант из словаря `тег → значение` по этой цепочке или `undefined`.
+- Контракт: схемы `a2a-showcase-extension` и `a2a-routing-extension` (поле аддитивное, URI прежние),
+  общие векторы `contract/a2a-extension-i18n.vectors.json`, `localeVariantChain` и `pickLocaleVariant`
+  в `contract/locale.vectors.json`.
+
 ## [0.1.0-alpha.38] - 2026-11-18
 
 Локаль пользователя (план docs `plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 3); паритет с
