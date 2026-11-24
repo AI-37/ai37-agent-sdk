@@ -1,13 +1,13 @@
 """Тесты MCP-сервера: graceful-degradation при отсутствии ``mcp`` SDK + резолв tools.
 
-``mcp`` SDK в этой среде НЕ установлен — покрываем soft-import (понятная ошибка) и чистый
-резолвер tools/release, не требующий сервера.
+``mcp`` SDK стоит в dev-группе (им проверяется MCP Apps, ``test_mcp_apps.py``), поэтому его
+отсутствие здесь изображаем: прячем модули ``mcp*`` из ``sys.modules`` на время теста.
 """
 
 from __future__ import annotations
 
-import importlib.util
 import json
+import sys
 
 import pytest
 
@@ -24,7 +24,12 @@ from ai37_agent_host.mcp import (
 )
 from ai37_agent_host.mcp import mcp_server as mcp_server_mod
 
-_MCP_INSTALLED = importlib.util.find_spec("mcp") is not None
+
+@pytest.fixture
+def without_mcp_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Импорт ``mcp`` и его модулей падает с ``ImportError``, как в установке без группы ``mcp``."""
+    for name in [m for m in sys.modules if m == "mcp" or m.startswith("mcp.")] + ["mcp"]:
+        monkeypatch.setitem(sys.modules, name, None)
 
 
 def _tool(name: str) -> McpToolDef:
@@ -36,14 +41,14 @@ def _tool(name: str) -> McpToolDef:
     )
 
 
-@pytest.mark.skipif(_MCP_INSTALLED, reason="проверяем поведение БЕЗ установленного mcp SDK")
+@pytest.mark.usefixtures("without_mcp_sdk")
 def test_build_server_raises_clear_error_without_mcp():
     with pytest.raises(MissingMcpDependencyError) as exc:
         build_mcp_server(ServerInfo(name="s", version="1.0.0"), McpOptions(tools=[_tool("a")]))
     assert "mcp" in str(exc.value)
 
 
-@pytest.mark.skipif(_MCP_INSTALLED, reason="проверяем поведение БЕЗ установленного mcp SDK")
+@pytest.mark.usefixtures("without_mcp_sdk")
 def test_create_asgi_app_raises_clear_error_without_mcp():
     with pytest.raises(MissingMcpDependencyError):
         create_mcp_asgi_app(ServerInfo(name="s", version="1.0.0"), McpOptions(tools=[_tool("a")]))

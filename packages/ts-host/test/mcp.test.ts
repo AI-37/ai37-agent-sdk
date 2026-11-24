@@ -267,7 +267,9 @@ describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () 
 
     const res = await tool.handler({ query: 'дом 12 этажей' }, undefined)
     expect(seen).toBe('дом 12 этажей')
-    expect(res.content[0].text).toBe('эхо:дом 12 этажей:org=none')
+    expect(res.content).toEqual([
+      { type: 'text', text: 'эхо:дом 12 этажей:org=none' },
+    ])
     // input-required — не ошибка (диалоговый агент не завершает задачу).
     expect(res.isError).toBe(false)
   })
@@ -285,7 +287,7 @@ describe('bridgeHandlerToMcpTool — мост A2A-скилла в MCP-tool', () 
       renderResult: (r) => `status=${r.status}`,
     })
     const res = await tool.handler({ query: 'x' }, undefined)
-    expect(res.content[0].text).toBe('status=failed')
+    expect(res.content).toEqual([{ type: 'text', text: 'status=failed' }])
     expect(res.isError).toBe(true)
   })
 })

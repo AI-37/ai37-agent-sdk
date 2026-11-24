@@ -58,6 +58,9 @@ asyncpg = ">=0.29"
 aiosqlite = ">=0.20"
 # Тесты turn-спана на настоящем клиенте Langfuse v5 (propagate_attributes, наследование traceparent).
 langfuse = ">=5.0,<6"
+# MCP-поверхность (mcp_server.py) проверяется настоящим клиентом python `mcp` SDK поверх
+# in-memory транспорта. Линия 1.x — на ней lowlevel `Server`, который собирает хост.
+mcp = ">=1.27,<2"
 
 # Опциональные зависимости объявлены extras выше: redis, postgres, observability (langfuse v5 —
 # тянет opentelemetry-sdk и OTLP-экспортёр). Ещё не объявлены, подключаются по мере надобности:

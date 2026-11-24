@@ -2,7 +2,66 @@ import type { Request, Response } from 'express'
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js'
 import type { AgentContext } from '@ai37/agent-sdk'
 import { currentCtx } from '../als'
-import type { McpOptions, McpToolDef } from './types'
+import {
+  MCP_APP_MIME_TYPE,
+  MCP_APP_RESOURCE_URI_META_KEY,
+  type McpOptions,
+  type McpResourceDef,
+  type McpResourceUi,
+  type McpToolDef,
+  type McpToolUi,
+} from './types'
+
+/** `_meta` инструмента с view: новый ключ `ui` и legacy `ui/resourceUri` — хосты читают оба. */
+function toolUiMeta(ui: McpToolUi): Record<string, unknown> {
+  return { ui, [MCP_APP_RESOURCE_URI_META_KEY]: ui.resourceUri }
+}
+
+/**
+ * `_meta` ресурса (CSP песочницы, рамка) — или ничего, если автор ничего не просил. Ключ без
+ * значения не кладём вовсе: in-memory транспорт не сериализует сообщения, и `_meta: undefined`
+ * дошёл бы до клиента как поле.
+ */
+function resourceUiMeta(
+  ui: McpResourceUi | undefined,
+): { _meta?: { ui: McpResourceUi } } {
+  return ui ? { _meta: { ui } } : {}
+}
+
+/**
+ * Текст ресурса, запомненный на процесс. `buildMcpServer` собирается на каждый запрос, поэтому
+ * кэш живёт здесь, по самому определению ресурса. Упавший `read` не запоминается.
+ */
+const resourceTextCache = new WeakMap<McpResourceDef, string>()
+
+async function readResourceText(r: McpResourceDef): Promise<string> {
+  const cached = resourceTextCache.get(r)
+  if (cached !== undefined) return cached
+  const text = await r.read()
+  resourceTextCache.set(r, text)
+  return text
+}
+
+/**
+ * Регистрирует ресурсы (view MCP App). `_meta.ui` кладётся и в `resources/list`, и в содержимое
+ * `resources/read`: хосты берут CSP из второго, а первое — запасной путь по спеке.
+ */
+function registerResources(server: McpServer, resources: McpResourceDef[]) {
+  for (const r of resources) {
+    const mimeType = r.mimeType ?? MCP_APP_MIME_TYPE
+    const meta = resourceUiMeta(r.ui)
+    server.registerResource(
+      r.name,
+      r.uri,
+      { description: r.description, mimeType, ...meta },
+      async () => ({
+        contents: [
+          { uri: r.uri, mimeType, text: await readResourceText(r), ...meta },
+        ],
+      }),
+    )
+  }
+}
 
 /**
  * Собирает `McpServer` из набора tool-определений. `ctx` (кто вызвал) прокидывается в каждый
@@ -14,6 +73,7 @@ export async function buildMcpServer(
   serverInfo: { name: string; version: string },
   tools: McpToolDef[],
   ctx: AgentContext | undefined,
+  resources: McpResourceDef[] = [],
 ): Promise<McpServer> {
   const [{ McpServer: McpServerCtor }, { z }] = await Promise.all([
     import('@modelcontextprotocol/sdk/server/mcp.js'),
@@ -37,6 +97,7 @@ export async function buildMcpServer(
         description: t.description,
         annotations: { ...(t.annotations ?? {}), title: t.title },
         inputSchema: t.inputSchema ?? defaultInputSchema,
+        ...(t.ui ? { _meta: toolUiMeta(t.ui) } : {}),
       },
       async (args: Record<string, unknown>, extra: { signal?: AbortSignal }) => {
         const result = await t.handler(args, ctx, extra?.signal)
@@ -47,6 +108,7 @@ export async function buildMcpServer(
       },
     )
   }
+  registerResources(server, resources)
   return server
 }
 
@@ -83,7 +145,7 @@ export function mcpHttpHandler(
     const tools = Array.isArray(resolved) ? resolved : resolved.tools
     const release = Array.isArray(resolved) ? undefined : resolved.release
 
-    const server = await buildMcpServer(serverInfo, tools, ctx)
+    const server = await buildMcpServer(serverInfo, tools, ctx, opts.resources)
     const { StreamableHTTPServerTransport } = await import(
       '@modelcontextprotocol/sdk/server/streamableHttp.js'
     )
