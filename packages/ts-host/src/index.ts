@@ -32,6 +32,8 @@ export {
   withPartnerInstructions,
   currentLocale,
   withUserLocale,
+  currentUserInstructions,
+  withUserInstructions,
   currentTraceId,
   currentSessionId,
   currentTurnId,
@@ -42,6 +44,12 @@ export {
   requestScope,
 } from './als'
 export type { HostScope, HostLangfuseScope, HostTurn } from './als'
+// Персональные инструкции пользователя (docs#740): нормализация и блок для промпта.
+export {
+  USER_INSTRUCTIONS_MAX,
+  normalizeUserInstructions,
+  userInstructionsBlock,
+} from './user-instructions'
 // Langfuse-наблюдаемость (v4/OTel): host сам открывает turn-спан хода; эти хелперы — для ручного
 // контроля/тестов. `injectTraceContext` форвардит W3C trace-context вниз по A2A.
 export {

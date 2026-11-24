@@ -76,12 +76,14 @@ export class HostExecutor implements AgentExecutor {
       ...optionalInputFields(rc, parsed, accepted, supportedCatalogIds),
     }
 
-    // Диалог, ход и локаль — в ALS: publishArtifact и прочие вызовы «от имени хода» берут их оттуда.
+    // Диалог, ход, локаль и инструкции пользователя — в ALS: publishArtifact и прочие вызовы «от имени хода» берут их оттуда.
     // Локаль: metadata.ai37.locale → claims → ru (currentLocale/withUserLocale в когниции).
     const scope = requestScope.getStore()
     if (scope) {
       scope.turn = { contextId: rc.contextId, taskId: rc.taskId }
       scope.locale = resolveRequestLocale(parsed.metadata.locale, ctx?.claims)
+      // Инструкции пользователя ставит оркестратор из своей БД; parse их уже нормализовал.
+      scope.userInstructions = parsed.metadata.user_instructions
     }
 
     // Progress stays native: node/reasoning → status-update, text → artifact-update.

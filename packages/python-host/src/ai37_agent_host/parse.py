@@ -20,6 +20,7 @@ from .types import (
     ContextFileRecognition,
     IntentEnvelope,
 )
+from .user_instructions import normalize_user_instructions
 
 
 @dataclass
@@ -125,6 +126,7 @@ def _to_ai37_metadata(raw: dict[str, Any]) -> Ai37Metadata:
         trace_id=raw.get("trace_id"),
         accepted_output_modes=raw.get("acceptedOutputModes"),
         locale=raw.get("locale") if isinstance(raw.get("locale"), str) else None,
+        user_instructions=normalize_user_instructions(raw.get("user_instructions")),
     )
 
 

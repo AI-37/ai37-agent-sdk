@@ -15,6 +15,7 @@ import type { A2uiComponent, A2uiAction, A2uiSnapshot, ContextFile } from '../ty
 import { dataPart, textPart } from '../parts'
 import { extractText, extractA2ui, isStaleTaskError, isTask } from './extract'
 import { injectTraceContext } from '../observability/langfuse'
+import { normalizeUserInstructions } from '../user-instructions'
 
 /**
  * Транспорт-агностичный вызов удалённого A2A-агента (relay). НЕ знает про LangChain/deepagents/NestJS
@@ -56,6 +57,12 @@ export interface RemoteA2aRequest {
    * локаль своего хода (`currentLocale()`), чтобы сабагент ответил на том же языке.
    */
   locale?: string
+  /**
+   * Персональные инструкции пользователя → `message.metadata.ai37.user_instructions`, после
+   * `normalizeUserInstructions`; пусто — поля нет. Оркестратор передаёт инструкции своего хода
+   * (`currentUserInstructions()`). `extraMetadata.ai37` это поле не перекрывает.
+   */
+  userInstructions?: string
   /**
    * Доп. поля в `message.metadata` (напр. relay hop-guard) — escape hatch. Ключ `ai37` сливается с
    * собранным конвертом (его поля важнее), а не заменяет его: интент скилла не стирает локаль и
@@ -101,7 +108,7 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 /**
  * ai37-конверт собираем единым объектом (НЕ перезаписываем по одному полю): context_refs (указатели),
- * context_files (манифест имён), confirm_mode и locale едут вместе. `extraMetadata.ai37` сливается
+ * context_files (манифест имён), confirm_mode, locale и user_instructions едут вместе. `extraMetadata.ai37` сливается
  * поверх — так интент скилла (chat-backend шлёт его через escape hatch) не стирает остальной конверт.
  */
 function buildAi37Envelope(req: RemoteA2aRequest, extraAi37: unknown): Record<string, unknown> {
@@ -112,6 +119,9 @@ function buildAi37Envelope(req: RemoteA2aRequest, extraAi37: unknown): Record<st
   if (req.confirmMode) ai37.confirm_mode = req.confirmMode
   if (req.locale) ai37.locale = req.locale
   if (isRecord(extraAi37)) Object.assign(ai37, extraAi37)
+  // После слияния: escape hatch (интент скилла) не затирает и не удаляет инструкции хода.
+  const userInstructions = normalizeUserInstructions(req.userInstructions)
+  if (userInstructions) ai37.user_instructions = userInstructions
   return ai37
 }
 

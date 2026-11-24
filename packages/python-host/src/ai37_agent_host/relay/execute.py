@@ -23,6 +23,7 @@ from google.protobuf.json_format import MessageToDict, ParseDict
 
 from ..observability.langfuse import inject_trace_context
 from ..types import A2uiAction, ContextFile
+from ..user_instructions import normalize_user_instructions
 from .extract import extract_a2ui, extract_text, is_stale_task_error
 
 RemoteA2aState = str  # 'completed' | 'input-required' | 'failed' | 'message'
@@ -53,6 +54,10 @@ class RemoteA2aRequest:
     #: Язык пользователя (тег BCP-47, как пришёл) → ``metadata.ai37.locale``. Оркестратор передаёт
     #: локаль своего хода (``current_locale()``), чтобы суб-агент ответил на том же языке.
     locale: str | None = None
+    #: Персональные инструкции пользователя → ``metadata.ai37.user_instructions``, после
+    #: :func:`normalize_user_instructions`; пусто — поля нет. Оркестратор передаёт инструкции своего
+    #: хода (``current_user_instructions()``). ``extra_metadata["ai37"]`` это поле не перекрывает.
+    user_instructions: str | None = None
     #: Доп. поля в ``message.metadata`` (напр. relay hop-guard) — escape hatch. Ключ ``ai37``
     #: сливается с собранным конвертом (его поля важнее), а не заменяет его: интент скилла не
     #: стирает локаль и ``context_refs`` хода.
@@ -147,7 +152,7 @@ def _action_dict(a: A2uiAction) -> dict[str, Any]:
 
 
 def _build_ai37_envelope(req: RemoteA2aRequest, extra_ai37: object) -> dict[str, Any]:
-    """ai37-конверт единым объектом: context_refs, context_files и locale едут вместе.
+    """ai37-конверт единым объектом: context_refs, context_files, locale и user_instructions вместе.
 
     ``extra_metadata["ai37"]`` сливается поверх — так интент скилла (его шлют через escape hatch)
     не стирает остальной конверт.
@@ -161,6 +166,10 @@ def _build_ai37_envelope(req: RemoteA2aRequest, extra_ai37: object) -> dict[str,
         ai37["locale"] = req.locale
     if isinstance(extra_ai37, dict):
         ai37.update(extra_ai37)
+    # После слияния: escape hatch (интент скилла) не затирает и не удаляет инструкции хода.
+    user_instructions = normalize_user_instructions(req.user_instructions)
+    if user_instructions:
+        ai37["user_instructions"] = user_instructions
     return ai37
 
 

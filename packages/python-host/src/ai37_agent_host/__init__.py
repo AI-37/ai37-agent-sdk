@@ -22,9 +22,11 @@ from .als import (
     current_supported_catalog_ids,
     current_trace_id,
     current_turn_context,
+    current_user_instructions,
     reset_scope,
     scope_context,
     set_scope,
+    with_user_instructions,
     with_user_locale,
 )
 from .artifacts import (
@@ -115,6 +117,11 @@ from .types import (
     TextEvent,
     ToolEvent,
 )
+from .user_instructions import (
+    USER_INSTRUCTIONS_MAX,
+    normalize_user_instructions,
+    user_instructions_block,
+)
 
 __all__ = [
     # types
@@ -149,6 +156,11 @@ __all__ = [
     "current_ctx",
     "current_locale",
     "with_user_locale",
+    "current_user_instructions",
+    "with_user_instructions",
+    "USER_INSTRUCTIONS_MAX",
+    "normalize_user_instructions",
+    "user_instructions_block",
     "current_bearer",
     "current_accepted_output_modes",
     "current_supported_catalog_ids",

@@ -143,6 +143,15 @@ export interface Ai37Metadata {
    * форвардит поле сабагентам (`RemoteA2aRequest.locale`).
    */
   locale?: string
+  /**
+   * Персональные инструкции пользователя по оформлению ответа (длина, структура, тон), до
+   * `USER_INSTRUCTIONS_MAX` символов. Ставит только оркестратор — из своей БД, после проверки при
+   * сохранении; relay форвардит (`RemoteA2aRequest.userInstructions`). Хост читает поле только из
+   * A2A-метаданных и нормализует (`normalizeUserInstructions`); из `forwardedProps.ai37` AG-UI оно
+   * отбрасывается. Когниция берёт его через `currentUserInstructions()` / `withUserInstructions()`
+   * — с низшим приоритетом, ниже `instructions` владельца.
+   */
+  user_instructions?: string
 }
 
 /**
