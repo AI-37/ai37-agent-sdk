@@ -142,6 +142,10 @@ class McpResourceDef:
     description: str | None = None
     mime_type: str = MCP_APP_MIME_TYPE
     ui: McpResourceUi | None = None
+    #: Тот же текст отдаётся и по любому адресу ``<uri_prefix><хвост без '/' и ','>``. Хост
+    #: кэширует ``tools/list``: после смены адреса view он спрашивает форму по старому и без этого
+    #: получил бы «Resource not found». В ``resources/list`` прежние адреса не попадают.
+    uri_prefix: str | None = None
 
 
 @dataclass

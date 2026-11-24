@@ -9,6 +9,16 @@ OAuth-discovery (protected-resource-metadata) и той же проверкой 
 
 from __future__ import annotations
 
+from .a2ui_app import (
+    A2uiApp,
+    A2uiAppBilling,
+    A2uiAppTool,
+    A2uiStep,
+    McpBilling,
+    a2ui_app,
+    a2ui_view_uri,
+    mcp_billing,
+)
 from .bridge import BridgeToolOptions, bridge_handler_to_mcp_tool
 from .challenge_guard import McpChallengeGuardMiddleware
 from .mcp_server import (
@@ -50,6 +60,15 @@ from .types import (
 )
 
 __all__ = [
+    # «A2UI внутри MCP App»
+    "A2uiApp",
+    "A2uiAppBilling",
+    "A2uiAppTool",
+    "A2uiStep",
+    "McpBilling",
+    "a2ui_app",
+    "a2ui_view_uri",
+    "mcp_billing",
     # types
     "MCP_APP_MIME_TYPE",
     "MCP_APP_RESOURCE_URI_META_KEY",

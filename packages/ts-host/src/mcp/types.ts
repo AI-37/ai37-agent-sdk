@@ -86,6 +86,12 @@ export interface McpResourceUi {
 export interface McpResourceDef {
   /** `ui://<агент>/<view>.html` — на него ссылается `McpToolDef.ui.resourceUri`. */
   uri: string
+  /**
+   * Тот же текст отдаётся и по любому адресу `<uriPrefix><хвост без '/'>`. Хост кэширует
+   * `tools/list`: после смены адреса view он спрашивает форму по старому и без этого получил бы
+   * «Resource not found». В `resources/list` прежние адреса не попадают.
+   */
+  uriPrefix?: string
   name: string
   description?: string
   /** По умолчанию `MCP_APP_MIME_TYPE`. */

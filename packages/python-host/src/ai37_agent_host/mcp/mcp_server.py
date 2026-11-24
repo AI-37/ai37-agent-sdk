@@ -280,7 +280,7 @@ def _register_resources(server: Any, mcp_types: Any, resources: list[McpResource
 
     @server.read_resource()
     async def _read_resource(uri: Any) -> list[Any]:  # pyright: ignore[reportUnusedFunction]
-        r = by_uri.get(str(uri))
+        r = by_uri.get(str(uri)) or _by_prefix(resources, str(uri))
         if r is None:
             # Зеркало TS SDK: неизвестный ресурс — InvalidParams с URI в тексте.
             raise McpError(
@@ -293,6 +293,18 @@ def _register_resources(server: Any, mcp_types: Any, resources: list[McpResource
                 content=await read_text(r), mime_type=r.mime_type, meta=_resource_ui_meta(r.ui)
             )
         ]
+
+
+def _by_prefix(resources: list[McpResourceDef], uri: str) -> McpResourceDef | None:
+    """Ресурс, отвечающий за прежний адрес ``<uri_prefix><хвост>`` — как шаблон ``{suffix}`` TS SDK:
+    хвост непустой, без ``/`` и ``,``."""
+    for r in resources:
+        if r.uri_prefix is None or not uri.startswith(r.uri_prefix):
+            continue
+        suffix = uri[len(r.uri_prefix) :]
+        if suffix and "/" not in suffix and "," not in suffix:
+            return r
+    return None
 
 
 _METHOD_NOT_ALLOWED_BODY = json.dumps(

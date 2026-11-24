@@ -88,8 +88,18 @@ export {
   bridgeHandlerToMcpTool,
   MCP_APP_MIME_TYPE,
   MCP_APP_RESOURCE_URI_META_KEY,
+  // «A2UI внутри MCP App»: форма и отчёт каталога во внешнем хосте (Claude, ChatGPT)
+  a2uiApp,
+  a2uiViewUri,
+  mcpBilling,
 } from './mcp'
 export type {
+  A2uiApp,
+  A2uiAppBilling,
+  A2uiAppNode,
+  A2uiAppOptions,
+  A2uiStep,
+  McpBilling,
   McpImageContent,
   McpOptions,
   McpResourceCsp,

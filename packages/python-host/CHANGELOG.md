@@ -4,6 +4,19 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a40]
+
+Построитель «A2UI внутри MCP App», паритет с `@ai37/agent-host` 0.12.0 (AI-37/docs#739 и #747, срез 1).
+
+### Added
+- `a2ui_app(...)` → `A2uiApp(tools, resources, view_uri, billing)`, `A2uiStep`, `A2uiAppTool`,
+  `A2uiAppBilling`: инструмент формы, app-only инструмент действий, ресурс view, `resource:<id>`,
+  проверка доступа и учёт по тем же правилам, что в TS. `run` — sync или async.
+- `a2ui_view_uri(view_base, html)` — тот же адрес, что у TS (sha256 от UTF-8).
+- `mcp_billing(billing)` → `McpBilling(check, meter)` для структурных инструментов агента.
+- `McpResourceDef.uri_prefix`: ресурс отвечает и на прежние адреса `<uri_prefix><хвост без '/' и ','>`.
+- Extra `a2ui` (`ai37-a2ui-catalog` >=0.50.0, Python 3.13+): помощники протокола подгружаются лениво.
+
 ## [0.1.0a39]
 
 Персональные инструкции пользователя, паритет с `@ai37/agent-host` 0.11.0 (AI-37/docs#740, срез 1).
