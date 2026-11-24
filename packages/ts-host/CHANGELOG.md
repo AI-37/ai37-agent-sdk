@@ -3,6 +3,28 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.11.0] - 2026-11-24
+
+Персональные инструкции пользователя (план `docs/plans/user-agent-instructions.md`, AI-37/docs#740,
+срез 1). Паритет с `ai37-agent-host` 0.1.0a39. Агент, который поле не читает, ведёт себя как раньше.
+
+### Added
+- `Ai37Metadata.user_instructions?: string` — поле конверта `metadata.ai37.user_instructions`.
+  Ставит только оркестратор (из своей БД, после проверки при сохранении), relay форвардит.
+- `HostScope.userInstructions?: string`: A2A-исполнитель кладёт сюда нормализованное значение из
+  `metadata.ai37.user_instructions`; `AgentInput.metadata.user_instructions` тоже нормализовано
+  (пусто — поля нет). AG-UI-роутер поле из `forwardedProps.ai37` отбрасывает: браузер — граница.
+- `USER_INSTRUCTIONS_MAX = 1500`, `normalizeUserInstructions(raw)`: NFC; `\r\n` → `\n`; без
+  управляющих символов (кроме `\n`, `\t`), zero-width и bidi; без пробелов в конце строк; не больше
+  одной пустой строки подряд; trim; обрезка до 1500 code points без разрыва суррогатных пар. Пусто
+  или не строка → `undefined`.
+- `userInstructionsBlock(text)` — блок «## Предпочтения пользователя (стиль и формат ответа)» с
+  текстом в `<user_preferences>`; тег-обёртка внутри текста экранируется в любом регистре. Пусто → `''`.
+- `currentUserInstructions()` и `withUserInstructions(systemPrompt, text?)` — дописывают блок в
+  конец системного промпта, как `withUserLocale`; без инструкций промпт не меняется.
+- `RemoteA2aRequest.userInstructions` → `metadata.ai37.user_instructions` (после нормализации, рядом с
+  `locale`). `extraMetadata.ai37` (интент скилла) это поле не затирает и не удаляет.
+
 ## [0.10.0] - 2026-11-24
 
 Инструкции MCP-сервера (план `docs/plans/mcp-apps-a2ui-bridge.md`, AI-37/docs#736, волна 2 по
