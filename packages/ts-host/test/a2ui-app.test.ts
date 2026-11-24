@@ -85,7 +85,7 @@ function options(overrides: Partial<A2uiAppOptions<DemoState>> = {}): A2uiAppOpt
         privilege: BillingPrivilegeCode.ElevatorCalcAllowed,
       },
       metricCode: 'demo_calls',
-      totalTokens: 1000,
+      totalTokens: '1000',
       skillId: (step) => `demo-${step.state.n}`,
     },
     calcActions: ['calc'],
@@ -194,7 +194,7 @@ describe('a2uiApp: ход формы и учёт', () => {
     expect(reportUsage).toHaveBeenCalledTimes(1)
     expect(reportUsage.mock.calls[0]?.[0]).toMatchObject({
       code: 'demo_calls',
-      properties: { skill_id: 'demo-4', total_tokens: 1000 },
+      properties: { skill_id: 'demo-4', total_tokens: '1000' },
     })
   })
 

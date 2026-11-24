@@ -65,8 +65,9 @@ class A2uiAppBilling(Generic[S]):
     skill_id: Callable[[A2uiStep[S]], str]
     #: Остаток токенов ``<= min_tokens`` — отказ «нет ресурсов».
     min_tokens: float = 0
-    #: ``properties.total_tokens`` события, если агент его шлёт.
-    total_tokens: int | None = None
+    #: ``properties.total_tokens`` события, если агент его шлёт. Строка — как у агентов из env:
+    #: формат события тот же, что в их A2A-пути.
+    total_tokens: int | str | None = None
 
 
 @dataclass

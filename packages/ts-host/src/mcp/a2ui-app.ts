@@ -52,8 +52,11 @@ export interface A2uiAppBilling<S = unknown> {
   minTokens?: number
   /** `BILLING_METRIC_CODE` агента. */
   metricCode: string
-  /** `properties.total_tokens` события, если агент его шлёт. */
-  totalTokens?: number
+  /**
+   * `properties.total_tokens` события, если агент его шлёт. Строка — как у агентов из env
+   * (`*_CALC_TOTAL_TOKENS`): формат события тот же, что в их A2A-пути.
+   */
+  totalTokens?: number | string
   /** `skill_id` события — тот же, что у структурного инструмента: для учёта это один расчёт. */
   skillId: (step: A2uiStep<S>) => string
 }

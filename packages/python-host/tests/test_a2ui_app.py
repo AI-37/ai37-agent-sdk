@@ -82,7 +82,7 @@ def _billing(**overrides: Any) -> A2uiAppBilling[Any]:
         "enabled": True,
         "requirement": BillingExecutionRequirement(feature="DemoAgent", privilege="DemoAllowed"),
         "metric_code": "demo_calls",
-        "total_tokens": 1000,
+        "total_tokens": "1000",
         "skill_id": lambda step: f"demo-{step.state['n']}",
     }
     fields.update(overrides)
@@ -222,7 +222,7 @@ async def test_расчёт_одно_событие_учёта_со_skill_id_а�
     ctx.report_usage.assert_called_once()
     kwargs = ctx.report_usage.call_args.kwargs
     assert kwargs["code"] == "demo_calls"
-    assert kwargs["properties"] == {"skill_id": "demo-4", "total_tokens": 1000}
+    assert kwargs["properties"] == {"skill_id": "demo-4", "total_tokens": "1000"}
 
 
 async def test_черновик_пустой_поток_без_проверки_и_учёта() -> None:

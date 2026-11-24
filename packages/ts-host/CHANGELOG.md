@@ -18,7 +18,7 @@ AI-37/docs#739 и #747, срез 1). Паритет с `ai37-agent-host` 0.1.0a4
   кэш хоста не держит старую форму.
 - Проверка доступа и учёт в построителе: доступ — при открытии формы и перед `calcActions`
   (черновик, навигация и ресурсы `/state` биллинга не трогают); учёт — одно событие на шаг с
-  `calculated: true`, `skill_id` даёт агент. Отказ — `isError` без `_meta` с понятным текстом из
+  `calculated: true`, `skill_id` даёт агент, `total_tokens` — число или строка, как агент шлёт его в A2A-пути. Отказ — `isError` без `_meta` с понятным текстом из
   `@ai37/agent-sdk` (`friendlyBillingMessage`, `billingUserMessage('NO_TOKENS')`), а не `BILLING_DENIED: …`.
 - `mcpBilling(billing)` → `{ check, meter }` — та же проверка и учёт для структурных MCP-инструментов агента.
 - `McpResourceDef.uriPrefix`: ресурс отвечает и на любой адрес `<uriPrefix><хвост без '/'>`
