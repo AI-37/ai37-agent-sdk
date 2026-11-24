@@ -24,6 +24,9 @@ import {
 import { main as cli } from '../src/cli/task-store'
 import { toAguiSnapshot, toTask } from '../src/build-task'
 
+// Каждый тест создаёт и удаляет свою базу: на загруженном self-hosted раннере это дольше 5 с по умолчанию.
+vi.setConfig({ testTimeout: 20_000, hookTimeout: 20_000 })
+
 vi.mock('../src/observability/langfuse', () => ({
   withTurnObservability: async (_context: unknown, run: () => Promise<unknown>) => run(),
   injectTraceContext: () => ({}),

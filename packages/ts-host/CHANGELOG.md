@@ -3,6 +3,18 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.10.0] - 2026-11-24
+
+Инструкции MCP-сервера (план `docs/plans/mcp-apps-a2ui-bridge.md`, AI-37/docs#736, волна 2 по
+приёмке владельца). Паритет с `ai37-agent-host` 0.1.0a38.
+
+### Added
+- `McpOptions.instructions?: string` → поле `instructions` в ответе `initialize`. Claude и ChatGPT
+  подмешивают его в контекст модели: так сервер подсказывает, какой инструмент брать на какой
+  запрос (например, форму вместо структурного расчёта). Текст видит любой авторизованный клиент —
+  секреты и персональные данные туда не кладут. Не задано или пусто — поля нет, как раньше.
+- `buildMcpServer(serverInfo, tools, ctx, resources?, instructions?)` — пятый необязательный аргумент.
+
 ## [0.9.0] - 2026-11-24
 
 MCP Apps на MCP-поверхности (план `docs/plans/mcp-apps-a2ui-bridge.md`, AI-37/docs#736, срез 1).

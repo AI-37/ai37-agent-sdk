@@ -211,7 +211,10 @@ def build_mcp_server(server_info: ServerInfo, opts: McpOptions) -> Any:
     ``Any``, чтобы host не тянул ``mcp`` в обязательные deps).
     """
     mcp_types, Server = _import_mcp()
-    server = Server(server_info.name, version=server_info.version)
+    # Пустую строку приравниваем к «не задано»: TS SDK пустые instructions в initialize не кладёт.
+    server = Server(
+        server_info.name, version=server_info.version, instructions=opts.instructions or None
+    )
 
     @server.list_tools()
     async def _list_tools() -> list[Any]:  # pyright: ignore[reportUnusedFunction]

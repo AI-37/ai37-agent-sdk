@@ -68,12 +68,14 @@ function registerResources(server: McpServer, resources: McpResourceDef[]) {
  * handler. `@modelcontextprotocol/sdk` и `zod` подгружаются ДИНАМИЧЕСКИ — это делает их
  * optional-peer'ами: потребители agent-host, не использующие `mcp`, их не тянут. Без ALS —
  * чтобы переиспользовать и вне agent-host (напр. в NestJS rag-factory со своим guard'ом).
+ * `instructions` — то же, что `McpOptions.instructions`: текст поля `instructions` в `initialize`.
  */
 export async function buildMcpServer(
   serverInfo: { name: string; version: string },
   tools: McpToolDef[],
   ctx: AgentContext | undefined,
   resources: McpResourceDef[] = [],
+  instructions?: string,
 ): Promise<McpServer> {
   const [{ McpServer: McpServerCtor }, { z }] = await Promise.all([
     import('@modelcontextprotocol/sdk/server/mcp.js'),
@@ -82,10 +84,11 @@ export async function buildMcpServer(
   const defaultInputSchema = {
     query: z.string().describe('Запрос на естественном языке'),
   }
-  const server = new McpServerCtor({
-    name: serverInfo.name,
-    version: serverInfo.version,
-  })
+  // Пустые `instructions` SDK в `initialize` не кладёт вовсе — Python-хост повторяет это у себя.
+  const server = new McpServerCtor(
+    { name: serverInfo.name, version: serverInfo.version },
+    { instructions },
+  )
   for (const t of tools) {
     server.registerTool(
       t.name,
@@ -145,7 +148,13 @@ export function mcpHttpHandler(
     const tools = Array.isArray(resolved) ? resolved : resolved.tools
     const release = Array.isArray(resolved) ? undefined : resolved.release
 
-    const server = await buildMcpServer(serverInfo, tools, ctx, opts.resources)
+    const server = await buildMcpServer(
+      serverInfo,
+      tools,
+      ctx,
+      opts.resources,
+      opts.instructions,
+    )
     const { StreamableHTTPServerTransport } = await import(
       '@modelcontextprotocol/sdk/server/streamableHttp.js'
     )
