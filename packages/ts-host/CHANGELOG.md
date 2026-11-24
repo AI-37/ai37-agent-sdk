@@ -3,6 +3,34 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.9.0] - 2026-11-24
+
+MCP Apps на MCP-поверхности (план `docs/plans/mcp-apps-a2ui-bridge.md`, AI-37/docs#736, срез 1).
+Хост без UI работает как раньше; хост MCP Apps (Claude, ChatGPT) рисует view рядом с ответом.
+Паритет с `ai37-agent-host` 0.1.0a37.
+
+### Added
+- `McpToolDef.ui` (`McpToolUi`: `resourceUri`, `visibility`): инструмент объявляет view. В
+  `tools/list` уходит `_meta.ui` и legacy-ключ `_meta["ui/resourceUri"]` — хосты читают оба.
+  `visibility: ['app']` — служебный инструмент view: в `tools/list` он есть, прячет его хост.
+- `McpOptions.resources` (`McpResourceDef`: `uri`, `name`, `description`, `mimeType`, `read`, `ui`):
+  `resources/list` и `resources/read`. MIME по умолчанию — `text/html;profile=mcp-app`, `_meta.ui`
+  ресурса (`csp`, `prefersBorder`) кладётся и в запись списка, и в содержимое. `read` зовётся один
+  раз на процесс; упавший не запоминается. Без `resources` сервер их не объявляет, как раньше.
+- `McpToolResult.structuredContent` и `McpToolResult._meta` доходят до клиента как есть. Поток
+  A2UI для view кладут в `_meta`: хост без UI отдаёт модели `structuredContent` вместо `content`.
+- Константы `MCP_APP_MIME_TYPE`, `MCP_APP_RESOURCE_URI_META_KEY` (спека MCP Apps 2026-01-26, без
+  зависимости от `@modelcontextprotocol/ext-apps`); типы `McpTextContent`, `McpImageContent`,
+  `McpToolVisibility`, `McpResourceCsp`, `McpResourceUi`.
+- `buildMcpServer(serverInfo, tools, ctx, resources?)` — четвёртый необязательный аргумент.
+
+### Changed
+- **BREAKING (только типы):** `McpToolResult.content` — `McpTextContent | McpImageContent`. Код,
+  который читает `content[0].text` без проверки `type`, перестаёт собираться;
+  `filter((b) => b.type === 'text')`, как в агрегаторе chat-backend, собирается без правок
+  (TS ≥ 5.5 сам выводит предикат). Агенты держат тесты вне `tsc`, их это не задевает. В рантайме
+  ничего не меняется.
+
 ## [0.8.0] - 2026-11-18
 
 Локаль хода (план `docs/plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 3). Требует
