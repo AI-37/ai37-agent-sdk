@@ -3,6 +3,29 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-sdk` (от которого зависит как peer).
 
+## [0.12.0] - 2026-11-24
+
+Построитель «A2UI внутри MCP App» (план `docs/plans/mcp-apps-agent-host-keo-thermal.md`,
+AI-37/docs#739 и #747, срез 1). Паритет с `ai37-agent-host` 0.1.0a40. Общая обвязка формы во внешнем
+хосте (Claude, ChatGPT) переехала сюда из агента лифтов, чтобы у КЕО и теплотеха не появились копии.
+
+### Added
+- `a2uiApp(opts)` → `{ tools, resources, viewUri, billing }`. Агент даёт чистые функции хода
+  (`open.run`, `action.run`, `resources`), построитель регистрирует инструмент формы, app-only
+  инструмент действий (`visibility: ['app']`) и ресурс view, разбирает `resource:<id>` и собирает
+  `_meta["ai37/a2ui"]` помощниками `@ai37/a2ui-mcp-app`. Исключение хода — `isError` с текстом.
+- Адрес view — `${viewBase}-${sha256(html)[:12]}.html` (`a2uiViewUri`): новый HTML — новый адрес,
+  кэш хоста не держит старую форму.
+- Проверка доступа и учёт в построителе: доступ — при открытии формы и перед `calcActions`
+  (черновик, навигация и ресурсы `/state` биллинга не трогают); учёт — одно событие на шаг с
+  `calculated: true`, `skill_id` даёт агент, `total_tokens` — число или строка, как агент шлёт его в A2A-пути. Отказ — `isError` без `_meta` с понятным текстом из
+  `@ai37/agent-sdk` (`friendlyBillingMessage`, `billingUserMessage('NO_TOKENS')`), а не `BILLING_DENIED: …`.
+- `mcpBilling(billing)` → `{ check, meter }` — та же проверка и учёт для структурных MCP-инструментов агента.
+- `McpResourceDef.uriPrefix`: ресурс отвечает и на любой адрес `<uriPrefix><хвост без '/'>`
+  (шаблон ресурса MCP SDK), в `resources/list` прежние адреса не попадают. Хост кэширует `tools/list`
+  и после смены адреса view спрашивает форму по старому — без этого «Resource not found».
+- `@ai37/a2ui-mcp-app` >=0.50.0 — optional peer, подгружается динамически.
+
 ## [0.11.0] - 2026-11-24
 
 Персональные инструкции пользователя (план `docs/plans/user-agent-instructions.md`, AI-37/docs#740,

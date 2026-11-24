@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "ai37-agent-host"
-version = "0.1.0a39"
+version = "0.1.0a40"
 description = "AI37 agent host (Python): A2A + AG-UI + MCP + file-aware store backends поверх a2a-sdk и ai37-agent-sdk. Порт @ai37/agent-host."
 authors = ["AI37"]
 license = "Apache-2.0"
@@ -39,11 +39,16 @@ asyncpg = { version = ">=0.29", optional = true }
 # `langfuse.langchain` делает `import langchain` (полный пакет), а агентам хватает langchain-core —
 # без него CallbackHandler не создаётся и колбэки хода пусты (AI-37/polimetrika-data-agent#8).
 langfuse = { version = ">=5.0,<6", optional = true }
+# Построитель «A2UI внутри MCP App» (mcp/a2ui_app.py) собирает поток A2UI помощниками каталога:
+# soft-import, нужен только агенту с формой во внешнем хосте. `pip install ai37-agent-host[a2ui]`.
+# Каталог требует Python 3.13+ — extra ставится только там.
+ai37-a2ui-catalog = { version = ">=0.50.0", optional = true, python = ">=3.13" }
 
 [tool.poetry.extras]
 redis = ["redis"]
 postgres = ["sqlalchemy", "asyncpg"]
 observability = ["langfuse"]
+a2ui = ["ai37-a2ui-catalog"]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.3"
@@ -61,6 +66,8 @@ langfuse = ">=5.0,<6"
 # MCP-поверхность (mcp_server.py) проверяется настоящим клиентом python `mcp` SDK поверх
 # in-memory транспорта. Линия 1.x — на ней lowlevel `Server`, который собирает хост.
 mcp = ">=1.27,<2"
+# Тесты построителя a2ui_app — на настоящих помощниках протокола каталога.
+ai37-a2ui-catalog = { version = ">=0.50.0", python = ">=3.13" }
 
 # Опциональные зависимости объявлены extras выше: redis, postgres, observability (langfuse v5 —
 # тянет opentelemetry-sdk и OTLP-экспортёр). Ещё не объявлены, подключаются по мере надобности:

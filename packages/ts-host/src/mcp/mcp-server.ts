@@ -46,20 +46,37 @@ async function readResourceText(r: McpResourceDef): Promise<string> {
  * Регистрирует ресурсы (view MCP App). `_meta.ui` кладётся и в `resources/list`, и в содержимое
  * `resources/read`: хосты берут CSP из второго, а первое — запасной путь по спеке.
  */
-function registerResources(server: McpServer, resources: McpResourceDef[]) {
+async function registerResources(
+  server: McpServer,
+  resources: McpResourceDef[],
+) {
+  const templates = resources.some((r) => r.uriPrefix !== undefined)
+    ? (await import('@modelcontextprotocol/sdk/server/mcp.js')).ResourceTemplate
+    : undefined
   for (const r of resources) {
     const mimeType = r.mimeType ?? MCP_APP_MIME_TYPE
     const meta = resourceUiMeta(r.ui)
+    const read = async (uri: URL) => ({
+      contents: [
+        { uri: uri.href, mimeType, text: await readResourceText(r), ...meta },
+      ],
+    })
     server.registerResource(
       r.name,
       r.uri,
       { description: r.description, mimeType, ...meta },
-      async () => ({
-        contents: [
-          { uri: r.uri, mimeType, text: await readResourceText(r), ...meta },
-        ],
-      }),
+      read,
     )
+    if (r.uriPrefix !== undefined && templates) {
+      // Точный адрес SDK ищет раньше шаблона, так что текущий view отвечает сам за себя.
+      // `{suffix}` в шаблоне MCP SDK — один сегмент без '/' и ','.
+      server.registerResource(
+        `${r.name} (прежние адреса)`,
+        new templates(`${r.uriPrefix}{suffix}`, { list: undefined }),
+        { description: r.description, mimeType, ...meta },
+        read,
+      )
+    }
   }
 }
 
@@ -111,7 +128,7 @@ export async function buildMcpServer(
       },
     )
   }
-  registerResources(server, resources)
+  await registerResources(server, resources)
   return server
 }
 

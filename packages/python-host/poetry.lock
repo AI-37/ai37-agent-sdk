@@ -38,6 +38,27 @@ sqlite = ["sqlalchemy[aiosqlite,asyncio] (>=2.0.0)"]
 telemetry = ["opentelemetry-api (>=1.33.0)", "opentelemetry-sdk (>=1.33.0)"]
 
 [[package]]
+name = "ai37-a2ui-catalog"
+version = "0.50.0"
+description = "Pydantic models and validation helpers for the AI37 A2UI catalog"
+optional = false
+python-versions = ">=3.13,<4.0"
+groups = ["main", "dev"]
+files = [
+    {file = "ai37_a2ui_catalog-0.50.0-py3-none-any.whl", hash = "sha256:0fa6c2025c4f7ee1709a974abce3d024be3c0e42ba5fe0f6d7e7850d606fbc22"},
+    {file = "ai37_a2ui_catalog-0.50.0.tar.gz", hash = "sha256:d58e40562d76f47b4568a1c896daf6e6ed7371d76179c8217be43da0ea1bc917"},
+]
+markers = {main = "python_version >= \"3.13\" and extra == \"a2ui\"", dev = "python_version >= \"3.13\""}
+
+[package.dependencies]
+pydantic = ">=2.11.7,<3.0.0"
+
+[package.source]
+type = "legacy"
+url = "https://pypi.app.sp-ai.ru/simple"
+reference = "ai37"
+
+[[package]]
 name = "ai37-agent-sdk"
 version = "0.1.0a30"
 description = "AI37 agent SDK (Python): JWKS auth + billing + A2A forward for ecosystem agents"
@@ -677,7 +698,7 @@ google-auth = ">=2.14.1,<3.0.0"
 googleapis-common-protos = ">=1.63.2,<2.0.0"
 proto-plus = [
     {version = ">=1.25.0,<2.0.0", markers = "python_version >= \"3.13\""},
-    {version = ">=1.24.0,<2.0.0", markers = "python_version < \"3.13\""},
+    {version = ">=1.24.0,<2.0.0"},
 ]
 protobuf = ">=5.29.6,<8.0.0"
 requests = ">=2.33.0,<3.0.0"
@@ -2415,6 +2436,7 @@ markers = {main = "extra == \"observability\" or python_version < \"3.13\""}
 dev = ["pytest", "setuptools"]
 
 [extras]
+a2ui = ["ai37-a2ui-catalog"]
 observability = ["langfuse"]
 postgres = ["asyncpg", "sqlalchemy"]
 redis = ["redis"]
@@ -2422,4 +2444,4 @@ redis = ["redis"]
 [metadata]
 lock-version = "2.1"
 python-versions = "^3.11"
-content-hash = "5c9ec81c7c8f3ef752886f252d846efec9a533808c7c2922d504bb03206c57f4"
+content-hash = "9a7a56418d2cf86f6481bc14f22cdc6b90839a8a97407287313bfb121d28d88e"
