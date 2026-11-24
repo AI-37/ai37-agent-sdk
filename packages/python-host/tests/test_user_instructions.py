@@ -146,6 +146,15 @@ def test_with_user_instructions_explicit_text_wins_empty_keeps_prompt() -> None:
         assert with_user_instructions(BASE, "  ") == BASE
 
 
+def test_with_user_instructions_explicit_none_does_not_read_scope() -> None:
+    # Оркестратор передаёт инструкции из БД; пусто в БД → None, клиентский текст хода не берётся.
+    with scope_context(HostScope(user_instructions="Клиентский текст")):
+        assert with_user_instructions(BASE, None) == BASE
+        assert with_user_instructions(BASE, "") == BASE
+        expected = f"{BASE}\n\n{user_instructions_block('Клиентский текст')}"
+        assert with_user_instructions(BASE) == expected
+
+
 # ───────────────────────── relay ─────────────────────────
 
 

@@ -142,6 +142,16 @@ describe('currentUserInstructions / withUserInstructions', () => {
       expect(withUserInstructions(base, '  ')).toBe(base)
     })
   })
+
+  it('явный undefined scope не читает: клиентские инструкции хода не подхватываются', () => {
+    requestScope.run({ userInstructions: 'Клиентский текст' }, () => {
+      const fromDb: string | undefined = undefined
+      expect(withUserInstructions(base, fromDb)).toBe(base)
+      expect(withUserInstructions(base, undefined)).toBe(base)
+      expect(withUserInstructions(base, '')).toBe(base)
+      expect(withUserInstructions(base)).toBe(`${base}\n\n${userInstructionsBlock('Клиентский текст')}`)
+    })
+  })
 })
 
 /** Агент отдаёт, что видит когниция: инструкции из scope и из конверта. */

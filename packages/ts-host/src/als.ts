@@ -180,12 +180,14 @@ export const currentUserInstructions = (): string | undefined =>
  * Дописывает к системному промпту блок «Предпочтения пользователя» (`userInstructionsBlock`) —
  * с низшим приоритетом, после правил агента и инструкции владельца. Агент зовёт её там же, где
  * `withUserLocale`: `new SystemMessage(withUserInstructions(withUserLocale(basePrompt)))`. Нет
- * инструкций → промпт не меняется. `text` не задан — инструкции хода.
+ * инструкций → промпт не меняется.
+ *
+ * Второй аргумент не передан — инструкции хода (`currentUserInstructions()`). Передан явно, даже
+ * `undefined` или `''`, — scope не читается: так оркестратор, который берёт инструкции из своей БД,
+ * не подхватит клиентские из A2A-конверта, когда в БД пусто.
  */
-export const withUserInstructions = (
-  systemPrompt: string,
-  text: string | undefined = currentUserInstructions(),
-): string => {
+export function withUserInstructions(systemPrompt: string, ...rest: [text?: string]): string {
+  const text = rest.length > 0 ? rest[0] : currentUserInstructions()
   const block = userInstructionsBlock(text)
   return block ? `${systemPrompt}\n\n${block}` : systemPrompt
 }

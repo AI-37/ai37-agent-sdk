@@ -15,7 +15,8 @@
   (AG-UI) поле из `forwardedProps.ai37` не берёт: браузер — граница.
 - `USER_INSTRUCTIONS_MAX`, `normalize_user_instructions`, `user_instructions_block` — те же правила
   и байт-в-байт тот же текст блока, что в TS.
-- `current_user_instructions()` и `with_user_instructions(system_prompt, text=None)`.
+- `current_user_instructions()` и `with_user_instructions(system_prompt, text=...)`. Без `text`
+  берутся инструкции хода; явный `text`, даже `None` или `""`, scope не читает (как в TS).
 - `RemoteA2aRequest.user_instructions` → `_build_ai37_envelope` (после нормализации, рядом с
   `locale`); `extra_metadata["ai37"]` поле не перекрывает.
 
