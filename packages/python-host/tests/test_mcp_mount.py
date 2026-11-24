@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-import importlib.util
+import sys
 import warnings
 from dataclasses import dataclass
 
@@ -17,7 +17,12 @@ from ai37_agent_host.mcp import (
     mount_mcp,
 )
 
-_MCP_INSTALLED = importlib.util.find_spec("mcp") is not None
+
+@pytest.fixture
+def without_mcp_sdk(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Импорт ``mcp`` и его модулей падает с ``ImportError``, как в установке без группы ``mcp``."""
+    for name in [m for m in sys.modules if m == "mcp" or m.startswith("mcp.")] + ["mcp"]:
+        monkeypatch.setitem(sys.modules, name, None)
 
 
 @dataclass
@@ -112,9 +117,7 @@ def test_mount_skips_on_non_http_scheme():
     assert app.router.routes == []
 
 
-@pytest.mark.skipif(
-    _MCP_INSTALLED, reason="без mcp SDK абсолютный URL доходит до create_mcp_asgi_app и падает"
-)
+@pytest.mark.usefixtures("without_mcp_sdk")
 def test_mount_absolute_url_reaches_mcp_dependency_error():
     from ai37_agent_host.mcp import MissingMcpDependencyError
 

@@ -1,13 +1,21 @@
 // MCP Resource Server слой agent-host: превращает агента в MCP-сервер (StreamableHTTP) с
 // OAuth-discovery (protected-resource-metadata) и той же проверкой токена, что A2A/AG-UI.
 export type {
+  McpImageContent,
   McpOptions,
+  McpResourceCsp,
+  McpResourceDef,
+  McpResourceUi,
+  McpTextContent,
   McpToolAnnotations,
   McpToolDef,
   McpToolResult,
   McpToolSet,
   McpToolsResolver,
+  McpToolUi,
+  McpToolVisibility,
 } from './types'
+export { MCP_APP_MIME_TYPE, MCP_APP_RESOURCE_URI_META_KEY } from './types'
 export {
   protectedResourceMetadataRouter,
   protectedResourceMetadataUrl,

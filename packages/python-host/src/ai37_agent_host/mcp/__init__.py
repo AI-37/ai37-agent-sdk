@@ -31,24 +31,42 @@ from .resource_metadata import (
     protected_resource_metadata_url,
 )
 from .types import (
+    MCP_APP_MIME_TYPE,
+    MCP_APP_RESOURCE_URI_META_KEY,
+    McpImageContent,
     McpOptions,
+    McpResourceCsp,
+    McpResourceDef,
+    McpResourceUi,
+    McpTextContent,
     McpToolAnnotations,
     McpToolDef,
     McpToolHandler,
     McpToolResult,
     McpToolSet,
     McpToolsResolver,
+    McpToolUi,
+    McpToolVisibility,
 )
 
 __all__ = [
     # types
+    "MCP_APP_MIME_TYPE",
+    "MCP_APP_RESOURCE_URI_META_KEY",
+    "McpImageContent",
     "McpOptions",
+    "McpResourceCsp",
+    "McpResourceDef",
+    "McpResourceUi",
+    "McpTextContent",
     "McpToolAnnotations",
     "McpToolDef",
     "McpToolHandler",
     "McpToolResult",
     "McpToolSet",
     "McpToolsResolver",
+    "McpToolUi",
+    "McpToolVisibility",
     # resource-metadata
     "ProtectedResourceMetadataOptions",
     "build_protected_resource_metadata",

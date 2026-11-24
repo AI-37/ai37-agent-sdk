@@ -2,12 +2,96 @@ import type { ZodRawShape } from 'zod'
 import type { AgentContext } from '@ai37/agent-sdk'
 
 /**
- * Результат одного MCP tool-вызова — подмножество `CallToolResult` MCP SDK
- * (только текстовый контент + флаг ошибки; этого достаточно для наших агентов).
+ * MIME ресурса MCP App — HTML-view, который хост рисует в песочнице рядом с ответом модели.
+ * Спека MCP Apps 2026-01-26 (`io.modelcontextprotocol/ui`), в `@modelcontextprotocol/ext-apps`
+ * это `RESOURCE_MIME_TYPE`. Держим строку у себя, чтобы не тянуть ext-apps в SDK ради константы.
+ */
+export const MCP_APP_MIME_TYPE = 'text/html;profile=mcp-app'
+
+/**
+ * Legacy-ключ `_meta` инструмента со ссылкой на view (та же спека, `RESOURCE_URI_META_KEY` в
+ * ext-apps). Хосты постарше читают только его, новые — `_meta.ui.resourceUri`; хост отдаёт оба.
+ */
+export const MCP_APP_RESOURCE_URI_META_KEY = 'ui/resourceUri'
+
+/** Текстовый блок результата (`TextContent` MCP). */
+export interface McpTextContent {
+  type: 'text'
+  text: string
+}
+
+/** Картинка в результате (`ImageContent` MCP): base64 без префикса `data:` и её MIME. */
+export interface McpImageContent {
+  type: 'image'
+  data: string
+  mimeType: string
+}
+
+/**
+ * Результат одного MCP tool-вызова — подмножество `CallToolResult` MCP SDK.
+ *
+ * `content` — то, что видит модель; читать текст — через сужение `block.type === 'text'`.
+ * `structuredContent` — JSON-результат для клиента. Осторожно: хост без UI (Claude Code) отдаёт
+ * модели `structuredContent` ВМЕСТО `content`, так что большой JSON сюда класть нельзя — модель
+ * получит его целиком. `_meta` модели не показывает ни один хост: это канал для view MCP App
+ * (так в нём едет поток A2UI, `_meta["ai37/a2ui"]`).
  */
 export interface McpToolResult {
-  content: Array<{ type: 'text'; text: string }>
+  content: Array<McpTextContent | McpImageContent>
   isError?: boolean
+  structuredContent?: Record<string, unknown>
+  _meta?: Record<string, unknown>
+}
+
+/** Кто видит инструмент: модель (`model`), view MCP App (`app`). По умолчанию — оба. */
+export type McpToolVisibility = 'model' | 'app'
+
+/**
+ * UI инструмента по MCP Apps: какой view хост рисует на его результат и кому инструмент виден.
+ * `visibility: ['app']` — служебный инструмент view (кнопки формы): модель его не видит, но в
+ * `tools/list` он есть — прячет его хост, а не сервер.
+ */
+export interface McpToolUi {
+  /** `ui://…` ресурса из `McpOptions.resources`. */
+  resourceUri: string
+  visibility?: McpToolVisibility[]
+}
+
+/**
+ * Источники, которые view разрешено трогать из песочницы (CSP хоста). Пусто — ничего: view
+ * живёт на том, что принёс в себе, и на вызовах инструментов через хост.
+ */
+export interface McpResourceCsp {
+  /** `connect-src`: fetch/XHR/WebSocket. */
+  connectDomains?: string[]
+  /** `img-src`/`script-src`/`style-src`/`font-src`/`media-src`. */
+  resourceDomains?: string[]
+  /** `frame-src`: вложенные iframe. */
+  frameDomains?: string[]
+  /** `base-uri`. */
+  baseUriDomains?: string[]
+}
+
+/** Пожелания view к хосту: CSP песочницы и рамка вокруг (`_meta.ui` ресурса). */
+export interface McpResourceUi {
+  csp?: McpResourceCsp
+  /** `true` — рамка и фон от хоста, `false` — без них, не задано — решает хост. */
+  prefersBorder?: boolean
+}
+
+/**
+ * Ресурс MCP-сервера; на практике — HTML-view MCP App (`ui://…`). `read` хост зовёт один раз на
+ * процесс и дальше отдаёт запомненный текст: view приезжает в образ зависимостью и не меняется.
+ */
+export interface McpResourceDef {
+  /** `ui://<агент>/<view>.html` — на него ссылается `McpToolDef.ui.resourceUri`. */
+  uri: string
+  name: string
+  description?: string
+  /** По умолчанию `MCP_APP_MIME_TYPE`. */
+  mimeType?: string
+  read: () => string | Promise<string>
+  ui?: McpResourceUi
 }
 
 /**
@@ -46,6 +130,8 @@ export interface McpToolDef {
   /** Хинты поведения (`readOnlyHint` / `destructiveHint` / …). Заголовок — в `title`, не здесь. */
   annotations?: McpToolAnnotations
   inputSchema?: ZodRawShape
+  /** UI по MCP Apps: view на результат и видимость. Без него инструмент такой же, как раньше. */
+  ui?: McpToolUi
   /** `signal` — отмена вызова MCP-клиентом (`notifications/cancelled`) или обрыв соединения. */
   handler: (
     args: Record<string, unknown>,
@@ -84,4 +170,6 @@ export interface McpOptions {
   scopes?: string[]
   /** Имя MCP-сервера в initialize (по умолчанию — `card.name`). */
   serverName?: string
+  /** Ресурсы сервера (view MCP App). Без них `resources/*` сервер не объявляет, как раньше. */
+  resources?: McpResourceDef[]
 }

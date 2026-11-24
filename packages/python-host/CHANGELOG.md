@@ -4,6 +4,34 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a37]
+
+MCP Apps на MCP-поверхности, паритет с `@ai37/agent-host` 0.9.0 (AI-37/docs#736, срез 1).
+
+### Added
+- `McpToolDef.ui` (`McpToolUi`: `resource_uri`, `visibility`) → `_meta.ui` и legacy
+  `_meta["ui/resourceUri"]` в `tools/list`. App-only инструмент (`visibility=["app"]`) в списке есть.
+- `McpOptions.resources` (`McpResourceDef`: `uri`, `name`, `read`, `description`, `mime_type`, `ui`)
+  → обработчики `resources/list` и `resources/read` low-level сервера. MIME по умолчанию —
+  `text/html;profile=mcp-app`, `_meta.ui` ресурса (`McpResourceUi`: `csp`, `prefers_border`) уходит
+  в camelCase и в список, и в содержимое. `read` (sync или async) — один раз на процесс. Без
+  `resources` обработчики не регистрируются, capability `resources` не объявляется.
+- `McpToolResult.structured_content` и `McpToolResult.meta` (`_meta`); блок
+  `{"type": "image", "data": ..., "mimeType": ...}` в `content` уходит как `ImageContent`.
+- Константы `MCP_APP_MIME_TYPE`, `MCP_APP_RESOURCE_URI_META_KEY`; типы `McpToolVisibility`,
+  `McpResourceCsp`, `McpTextContent`, `McpImageContent` (TypedDict).
+- `mcp` (>=1.27,<2) в dev-группе: MCP-поверхность проверяется настоящим клиентом SDK. Агенту с
+  MCP Apps нужен `mcp` ≥ 1.27 — раньше `resources/read` не умел `_meta`.
+
+### Changed
+- **BREAKING (только типы):** `McpToolResult.content` — `list[McpTextContent | McpImageContent]`
+  вместо `list[dict[str, str]]`, как в TS. Литералы `{"type": "text", "text": ...}` проходят mypy
+  как раньше; переменная, объявленная `list[dict[str, str]]`, — нет. В рантайме это те же словари.
+
+### Fixed
+- `is_error` доходит до клиента. Раньше хост отдавал только список текстовых блоков, и low-level
+  сервер всегда ставил `isError: false`; TS-хост флаг передавал.
+
 ## [0.1.0a36]
 
 Локаль хода, паритет с `@ai37/agent-host` 0.8.0 (AI-37/docs#589, срез 3). Требует
