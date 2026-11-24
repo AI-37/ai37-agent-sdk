@@ -153,12 +153,14 @@ class HostExecutor(AgentExecutor):
             task_state=_read_prior_state(context),
         )
 
-        # Диалог, ход и локаль — в ALS: publish_artifact и прочие вызовы «от имени хода» берут их
-        # оттуда. Локаль: metadata.ai37.locale → claims → ru (current_locale в когниции).
+        # Диалог, ход, локаль и инструкции пользователя — в ALS: publish_artifact и прочие вызовы
+        # «от имени хода» берут их оттуда. Локаль: metadata.ai37.locale → claims → ru
+        # (current_locale в когниции). Инструкции ставит оркестратор, parse их уже нормализовал.
         scope = current_scope()
         if scope is not None:
             scope.turn = HostTurn(context_id=context_id, task_id=task_id)
             scope.locale = resolve_request_locale(parsed.metadata.locale, agent_input.claims)
+            scope.user_instructions = parsed.metadata.user_instructions
 
         # keepalive: долгий вызов LLM не должен выглядеть для relay оркестратора как мёртвый агент.
         progress = A2aProgress(updater, task_id, keepalive_s=A2A_KEEPALIVE_S)

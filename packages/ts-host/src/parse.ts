@@ -1,5 +1,6 @@
 import type { RequestContext } from '@a2a-js/sdk/server'
 import type { Ai37Metadata, A2uiAction } from './types'
+import { normalizeUserInstructions } from './user-instructions'
 
 export interface ParsedMessage {
   text?: string
@@ -93,5 +94,10 @@ function readAi37Metadata(
   )?.ai37 as Ai37Metadata | undefined
   const nested = (data.metadata as Record<string, unknown> | undefined)?.ai37
   const fromData = (data.ai37 ?? nested) as Ai37Metadata | undefined
-  return { ...(fromData ?? {}), ...(fromMsg ?? {}) }
+  const merged: Ai37Metadata = { ...(fromData ?? {}), ...(fromMsg ?? {}) }
+  // Инструкции пользователя когниция видит уже нормализованными — и в конверте, и в scope.
+  const userInstructions = normalizeUserInstructions(merged.user_instructions)
+  if (userInstructions) merged.user_instructions = userInstructions
+  else delete merged.user_instructions
+  return merged
 }

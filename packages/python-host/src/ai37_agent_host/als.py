@@ -15,6 +15,8 @@ from typing import Any
 
 from ai37_agent_sdk import AgentContext, resolve_request_locale, user_locale_instruction
 
+from .user_instructions import user_instructions_block
+
 
 @dataclass
 class HostLangfuseScope:
@@ -61,6 +63,11 @@ class HostScope:
     #: → claim ``org_locale`` → ``ru``. Кладут executor и AG-UI-роутер; читает
     #: :func:`current_locale`.
     locale: str | None = None
+    #: Персональные инструкции пользователя (``metadata.ai37.user_instructions``), уже
+    #: нормализованные. Кладёт только A2A-executor: значение ставит оркестратор из своей БД. Из
+    #: ``forwardedProps`` браузера AG-UI-роутер его не берёт — иначе клиент обошёл бы проверку при
+    #: сохранении. Читает :func:`current_user_instructions`.
+    user_instructions: str | None = None
 
 
 _request_scope: contextvars.ContextVar[HostScope | None] = contextvars.ContextVar(
@@ -178,3 +185,28 @@ def current_langfuse_callbacks() -> list[Any]:
     scope = _request_scope.get()
     handler = scope.langfuse.handler if scope and scope.langfuse else None
     return [handler] if handler else []
+
+
+def current_user_instructions() -> str | None:
+    """Персональные инструкции пользователя текущего хода (нормализованные) или ``None``."""
+    scope = _request_scope.get()
+    return scope.user_instructions if scope else None
+
+
+#: Сентинел «аргумент не передан»: явный ``None`` значит «инструкций нет», а не «возьми из хода».
+_FROM_SCOPE: Any = object()
+
+
+def with_user_instructions(system_prompt: str, text: str | None = _FROM_SCOPE) -> str:
+    """Дописать к системному промпту блок «Предпочтения пользователя» (docs#740).
+
+    Низший приоритет: после правил агента и инструкции владельца. Агент зовёт её там же, где
+    :func:`with_user_locale`: ``with_user_instructions(with_user_locale(base_prompt))``. Нет
+    инструкций → промпт не меняется.
+
+    ``text`` не передан — инструкции хода (:func:`current_user_instructions`). Передан явно, даже
+    ``None`` или ``""``, — scope не читается: так оркестратор, который берёт инструкции из своей БД,
+    не подхватит клиентские из A2A-конверта, когда в БД пусто.
+    """
+    block = user_instructions_block(current_user_instructions() if text is _FROM_SCOPE else text)
+    return f"{system_prompt}\n\n{block}" if block else system_prompt

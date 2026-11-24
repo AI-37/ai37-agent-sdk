@@ -96,6 +96,9 @@ function lastUserText(messages?: Array<{ role?: string; content?: unknown }>): s
 function extractAi37(body: RunAgentInputLike): Ai37Metadata {
   const fp = (body.forwardedProps ?? {}) as Record<string, unknown>
   const ai37: Ai37Metadata = { ...((fp.ai37 ?? {}) as Ai37Metadata) }
+  // Инструкции пользователя ставит только сервер-оркестратор (A2A-конверт). Браузер — граница:
+  // из forwardedProps поле не берём, иначе клиент обошёл бы проверку при сохранении.
+  delete ai37.user_instructions
   if (!ai37.thread_id) {
     if (typeof fp.thread_id === 'string') ai37.thread_id = fp.thread_id
     else if (body.threadId) ai37.thread_id = body.threadId

@@ -7,6 +7,7 @@ import {
 // `import type` — тип стирается при сборке, поэтому als.ts НЕ тянет @langchain/langgraph-checkpoint
 // в рантайм (пакет — optional peer). Держит als.ts «лёгким», как и langfuse-типы (`unknown`).
 import type { BaseCheckpointSaver } from '@langchain/langgraph-checkpoint'
+import { userInstructionsBlock } from './user-instructions'
 
 /**
  * Request-scope: JWT-guard кладёт сюда verified `AgentContext`, executor/handler
@@ -39,6 +40,13 @@ export interface HostScope {
    * `org_locale` → `ru`. Кладут A2A-исполнитель и AG-UI-роутер; читается через `currentLocale()`.
    */
   locale?: string
+  /**
+   * Персональные инструкции пользователя (`metadata.ai37.user_instructions`), уже нормализованные.
+   * Кладёт только A2A-исполнитель: значение ставит оркестратор из своей БД. Из `forwardedProps`
+   * браузера AG-UI-роутер его не берёт — иначе клиент обошёл бы проверку при сохранении. Читается
+   * через `currentUserInstructions()` / `withUserInstructions()`.
+   */
+  userInstructions?: string
   /**
    * Per-turn Langfuse-наблюдаемость (turn-спан + LangChain `CallbackHandler`). Заполняется
    * executor'ом/AG-UI-роутером внутри `withTurnObservability` ДО вызова handler'а, поэтому
@@ -163,6 +171,26 @@ export const currentLocale = (): string => {
  */
 export const withUserLocale = (systemPrompt: string, locale: string = currentLocale()): string =>
   `${systemPrompt}\n\n${userLocaleInstruction(locale)}`
+
+/** Персональные инструкции пользователя текущего хода (нормализованные) или undefined. */
+export const currentUserInstructions = (): string | undefined =>
+  requestScope.getStore()?.userInstructions
+
+/**
+ * Дописывает к системному промпту блок «Предпочтения пользователя» (`userInstructionsBlock`) —
+ * с низшим приоритетом, после правил агента и инструкции владельца. Агент зовёт её там же, где
+ * `withUserLocale`: `new SystemMessage(withUserInstructions(withUserLocale(basePrompt)))`. Нет
+ * инструкций → промпт не меняется.
+ *
+ * Второй аргумент не передан — инструкции хода (`currentUserInstructions()`). Передан явно, даже
+ * `undefined` или `''`, — scope не читается: так оркестратор, который берёт инструкции из своей БД,
+ * не подхватит клиентские из A2A-конверта, когда в БД пусто.
+ */
+export function withUserInstructions(systemPrompt: string, ...rest: [text?: string]): string {
+  const text = rest.length > 0 ? rest[0] : currentUserInstructions()
+  const block = userInstructionsBlock(text)
+  return block ? `${systemPrompt}\n\n${block}` : systemPrompt
+}
 
 /**
  * Стабильный id Langfuse-трейса текущего хода (или undefined, если трассировка выключена).

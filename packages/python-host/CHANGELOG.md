@@ -4,6 +4,22 @@
 публикуется в PyPI независимо от TS-пакетов. Файл заведён с `0.1.0a17`: до него чейнджлога
 у пакета не было, ранние версии описаны только в истории коммитов.
 
+## [0.1.0a39]
+
+Персональные инструкции пользователя, паритет с `@ai37/agent-host` 0.11.0 (AI-37/docs#740, срез 1).
+
+### Added
+- `Ai37Metadata.user_instructions` — поле конверта `metadata.ai37.user_instructions`;
+  `_to_ai37_metadata` разбирает его через `normalize_user_instructions`.
+- `HostScope.user_instructions`: A2A-executor кладёт сюда нормализованное значение. `extract_ai37`
+  (AG-UI) поле из `forwardedProps.ai37` не берёт: браузер — граница.
+- `USER_INSTRUCTIONS_MAX`, `normalize_user_instructions`, `user_instructions_block` — те же правила
+  и байт-в-байт тот же текст блока, что в TS.
+- `current_user_instructions()` и `with_user_instructions(system_prompt, text=...)`. Без `text`
+  берутся инструкции хода; явный `text`, даже `None` или `""`, scope не читает (как в TS).
+- `RemoteA2aRequest.user_instructions` → `_build_ai37_envelope` (после нормализации, рядом с
+  `locale`); `extra_metadata["ai37"]` поле не перекрывает.
+
 ## [0.1.0a38]
 
 Инструкции MCP-сервера, паритет с `@ai37/agent-host` 0.10.0 (AI-37/docs#736, волна 2).

@@ -117,6 +117,12 @@ class Ai37Metadata:
     #: локаль хода (``resolve_request_locale``: это поле → claim ``locale`` → claim ``org_locale``
     #: → ``ru``) и кладёт в ``HostScope.locale``; когниция берёт её через :func:`current_locale`.
     locale: str | None = None
+    #: Персональные инструкции пользователя по оформлению ответа (длина, структура, тон), уже
+    #: нормализованные (:func:`normalize_user_instructions`). Ставит только оркестратор — из своей
+    #: БД; relay форвардит (``RemoteA2aRequest.user_instructions``). Хост читает поле только из
+    #: A2A-метаданных; из ``forwardedProps.ai37`` AG-UI его не берёт. Когниция — через
+    #: :func:`current_user_instructions` / :func:`with_user_instructions`.
+    user_instructions: str | None = None
 
 
 @dataclass
