@@ -25,6 +25,7 @@ from .types import (
     BillingRuntimeFeature,
     BillingRuntimePrivilege,
     BillingRuntimeState,
+    BillingRuntimeSubject,
     BillingUsageEventInput,
 )
 
@@ -49,5 +50,6 @@ __all__ = [
     "BillingRuntimeFeature",
     "BillingRuntimePrivilege",
     "BillingRuntimeState",
+    "BillingRuntimeSubject",
     "BillingUsageEventInput",
 ]

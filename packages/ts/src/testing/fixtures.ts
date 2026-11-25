@@ -2,6 +2,7 @@
 import type {
   BillingRuntimeFeature,
   BillingRuntimeState,
+  BillingRuntimeSubject,
 } from '../billing/types'
 
 const BASE: BillingRuntimeState = {
@@ -69,6 +70,32 @@ function featureDenied(
   return { ...BASE, features: [featureGrant(feature, privilege, false)], ...overrides }
 }
 
+// Участник организации для блока subject: по умолчанию EDITOR без групп.
+function subjectMember(
+  overrides: Partial<BillingRuntimeSubject> = {},
+): BillingRuntimeSubject {
+  return {
+    userUuid: 'user-test',
+    role: 'EDITOR',
+    groupIds: [],
+    member: true,
+    ...overrides,
+  }
+}
+
+// Не участник: так billing отвечает на sub, которого нет среди активных участников.
+function subjectNotMember(
+  overrides: Partial<BillingRuntimeSubject> = {},
+): BillingRuntimeSubject {
+  return {
+    userUuid: 'user-outsider',
+    role: null,
+    groupIds: [],
+    member: false,
+    ...overrides,
+  }
+}
+
 export const fixtures = {
   runtimeState: {
     active,
@@ -76,5 +103,9 @@ export const fixtures = {
     trial,
     feature_allowed: featureAllowed,
     feature_denied: featureDenied,
+  },
+  subject: {
+    member: subjectMember,
+    not_member: subjectNotMember,
   },
 }

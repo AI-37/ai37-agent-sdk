@@ -1,5 +1,6 @@
 // billing-типы (+ поле llmKey, v1.2).
 // Источник истины по форме runtime state — contract/billing-runtime-state.schema.json.
+import type { OrgRole } from '../auth/types'
 import type { BillingFeatureCode, BillingPrivilegeCode } from '../codes'
 
 export type BillingRuntimePrivilegeValueType =
@@ -27,6 +28,28 @@ export interface BillingRuntimeFeature {
   privileges: BillingRuntimePrivilege[]
 }
 
+/**
+ * Кто спрашивает: роль и группы пользователя в этой организации. Billing кладёт блок в state,
+ * только когда запрос пришёл с `?subject=<sub>`. Что из этого пускать — решает сам сервис.
+ */
+export interface BillingRuntimeSubject {
+  userUuid: string
+  /** Роль в организации; `null`, если пользователь не её участник. */
+  role: OrgRole | null
+  /** id групп организации, где состоит пользователь. У не-участника пусто. */
+  groupIds: string[]
+  /** `false` — пользователь не активный участник организации. */
+  member: boolean
+}
+
+export interface BillingRuntimeStateOptions {
+  /**
+   * `sub` пользователя: billing добавит в ответ блок `subject` с его ролью и группами. Кэш state
+   * ведётся отдельно на каждого пользователя. Пустая строка — то же, что без параметра.
+   */
+  subject?: string
+}
+
 export interface BillingRuntimeState {
   orgId: string
   billingOrgId: string
@@ -49,6 +72,8 @@ export interface BillingRuntimeState {
   snapshotUpdatedAt?: string
   snapshotVersion?: number
   stale: boolean
+  /** Роль и группы пользователя; есть, только если state запрошен с `{ subject }`. */
+  subject?: BillingRuntimeSubject
 }
 
 export interface BillingUsageEventInput {
@@ -90,15 +115,20 @@ export interface BillingExecutionRequirement {
 export interface BillingClient {
   getRuntimeStateByBillingOrgId(
     billingOrgId: string,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState>
   /**
    * State продукта по организации (`GET .../customers/by-org/{orgId}/state`): для сервисов, у
    * которых есть только org_id. Продукт billing берёт из токена, аккаунт биллинга находит сам.
    */
-  getRuntimeStateByOrgId(orgId: string): Promise<BillingRuntimeState>
+  getRuntimeStateByOrgId(
+    orgId: string,
+    options?: BillingRuntimeStateOptions,
+  ): Promise<BillingRuntimeState>
   assertExecutionAllowed(
     billingOrgId: string,
     requirement?: BillingExecutionRequirement,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState>
   sendUsageEvent(event: BillingUsageEventInput): Promise<void>
 }

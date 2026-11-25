@@ -3,6 +3,30 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `package.json` этого пакета;
 публикуется независимо от `@ai37/agent-host` и Python-пакета.
 
+## [0.1.0-alpha.40] - 2026-11-25
+
+Роль и группы пользователя в runtime state (план docs `plans/project-access-org-groups.md`,
+AI-37/docs#749, срез S2); паритет с Python `0.1.0a32`.
+
+### Added
+
+- `BillingRuntimeSubject { userUuid, role, groupIds, member }` и необязательное поле `subject` у
+  `BillingRuntimeState`. Блок приходит, только если state запрошен с `{ subject }`; что пускать,
+  решает сам сервис.
+- Опция `{ subject }` (`BillingRuntimeStateOptions`) у `getRuntimeStateByOrgId`,
+  `getRuntimeStateByBillingOrgId` и третьим аргументом у `assertExecutionAllowed`: уходит в query
+  `?subject=<sub>`. Пустая строка — то же, что без параметра. Сервер, который параметр ещё не знает,
+  просто не присылает блок.
+- Блок `subject` принимается и в snake_case (`user_uuid`, `group_ids`), и в camelCase.
+- `InMemoryBillingClient`: `subjects` в конструкторе и `setSubject()`; неизвестный пользователь
+  получает `member: false` без групп. Фикстуры `fixtures.subject.member()` / `not_member()`.
+- Контракт: `subject` в `contract/billing-runtime-state.schema.json`.
+
+### Changed
+
+- Ключ кэша state — маршрут, id и subject: два пользователя одной организации не получают роль и
+  группы друг друга, запрос без subject и с ним кэшируются раздельно. TTL прежний.
+
 ## [0.1.0-alpha.39] - 2026-11-19
 
 Переводы карточек агентов (план docs `plans/platform-i18n-ru-en-es.md`, AI-37/docs#589, срез 5);

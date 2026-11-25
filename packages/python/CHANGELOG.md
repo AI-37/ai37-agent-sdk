@@ -3,6 +3,25 @@
 Формат: [Keep a Changelog](https://keepachangelog.com/). Версия — `pyproject.toml` этого пакета;
 публикуется в PyPI независимо от TS-пакетов.
 
+## [0.1.0a32] - 2026-11-25
+
+Роль и группы пользователя в runtime state (AI-37/docs#749, срез S2); паритет с TS
+`0.1.0-alpha.40`.
+
+### Added
+
+- `BillingRuntimeSubject(user_uuid, role, group_ids, member)` и необязательное поле `subject` у
+  `BillingRuntimeState`; блок принимается и в snake_case, и в camelCase.
+- Keyword-only `subject=` у `get_runtime_state_by_org_id`, `get_runtime_state_by_billing_org_id` и
+  `assert_execution_allowed` (и в протоколе `BillingClient`): уходит в query `?subject=<sub>`.
+  Пустая строка — то же, что `None`.
+- `InMemoryBillingClient`: `subjects=` в конструкторе и `set_subject()`; фикстуры
+  `fixtures.subject.member()` / `not_member()`.
+
+### Changed
+
+- Ключ кэша state — `(маршрут, id, subject)`. TTL прежний.
+
 ## [0.1.0a31] - 2026-11-19
 
 Переводы карточек агентов (AI-37/docs#589, срез 5); паритет с TS `0.1.0-alpha.39`.
