@@ -14,7 +14,7 @@ import {
   normalizeBillingBaseUrl,
 } from '../src'
 import type { BillingRuntimeState } from '../src'
-import { InMemoryBillingClient } from '../src/testing'
+import { fixtures, InMemoryBillingClient } from '../src/testing'
 
 describe('normalizeBillingBaseUrl', () => {
   it('removes duplicate trailing slash and api suffix', () => {
@@ -348,6 +348,166 @@ describe('createBillingAppsClient', () => {
       await expect(fake.getRuntimeStateByOrgId('any-org')).resolves.toEqual(
         buildRuntimeState(),
       )
+    })
+  })
+
+  describe('subject', () => {
+    // Billing отдаёт блок subject только на запрос с ?subject=; фейк повторяет это по URL.
+    function subjectAwareFetch(groupsByUser: Record<string, string[]>) {
+      return vi.fn().mockImplementation(async (url: string) => {
+        const sub = new URL(url).searchParams.get('subject')
+        const body: Record<string, unknown> = { ...buildRuntimeState() }
+        if (sub !== null) {
+          body.subject = {
+            user_uuid: sub,
+            role: 'EDITOR',
+            group_ids: groupsByUser[sub] ?? [],
+            member: sub in groupsByUser,
+          }
+        }
+        return new Response(JSON.stringify(body), { status: 200 })
+      })
+    }
+
+    function buildClient(fetchMock: ReturnType<typeof vi.fn>) {
+      return createBillingAppsClient({
+        baseUrl: 'https://billing.example.com',
+        authToken: 'ds-apps-token',
+        usageIngestToken: 'ds-apps-token',
+        fetch: fetchMock as typeof fetch,
+        runtimeStateCacheTtlMs: 10_000,
+      })
+    }
+
+    it('gives two users of one org their own groups, not each other\'s from cache', async () => {
+      const fetchMock = subjectAwareFetch({ alice: ['g-design'], bob: ['g-sales'] })
+      const client = buildClient(fetchMock)
+
+      const alice = await client.getRuntimeStateByOrgId('org-1', { subject: 'alice' })
+      const bob = await client.getRuntimeStateByOrgId('org-1', { subject: 'bob' })
+      const aliceAgain = await client.getRuntimeStateByOrgId('org-1', { subject: 'alice' })
+
+      expect(alice.subject).toEqual({
+        userUuid: 'alice',
+        role: 'EDITOR',
+        groupIds: ['g-design'],
+        member: true,
+      })
+      expect(bob.subject?.groupIds).toEqual(['g-sales'])
+      expect(aliceAgain.subject?.groupIds).toEqual(['g-design'])
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('keeps requests with and without subject apart in the cache', async () => {
+      const fetchMock = subjectAwareFetch({ alice: ['g-design'] })
+      const client = buildClient(fetchMock)
+
+      const plain = await client.getRuntimeStateByOrgId('org-1')
+      const withSubject = await client.getRuntimeStateByOrgId('org-1', { subject: 'alice' })
+      const plainAgain = await client.getRuntimeStateByOrgId('org-1')
+
+      expect(plain.subject).toBeUndefined()
+      expect(withSubject.subject?.userUuid).toBe('alice')
+      expect(plainAgain.subject).toBeUndefined()
+      expect(fetchMock).toHaveBeenCalledTimes(2)
+    })
+
+    it('sends subject as an encoded query parameter on both routes', async () => {
+      const fetchMock = subjectAwareFetch({})
+      const client = buildClient(fetchMock)
+
+      await client.getRuntimeStateByOrgId('org/1', { subject: 'a b&c=d#e' })
+      await client.getRuntimeStateByBillingOrgId('bo-1', { subject: 'u:1' })
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://billing.example.com/api/v1/billing/customers/by-org/org%2F1/state?subject=a%20b%26c%3Dd%23e',
+      )
+      expect(fetchMock.mock.calls[1]?.[0]).toBe(
+        'https://billing.example.com/api/v1/billing/customers/by-billing-org/bo-1/state?subject=u%3A1',
+      )
+    })
+
+    it('treats an empty subject as no subject', async () => {
+      const fetchMock = subjectAwareFetch({})
+      const client = buildClient(fetchMock)
+
+      await client.getRuntimeStateByOrgId('org-1', { subject: '' })
+      await client.getRuntimeStateByOrgId('org-1')
+
+      expect(fetchMock.mock.calls[0]?.[0]).toBe(
+        'https://billing.example.com/api/v1/billing/customers/by-org/org-1/state',
+      )
+      expect(fetchMock).toHaveBeenCalledTimes(1)
+    })
+
+    it('parses a non-member and a camelCase block the same way', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              ...buildRuntimeState(),
+              subject: { user_uuid: 'eve', role: null, group_ids: [], member: false },
+            }),
+            { status: 200 },
+          ),
+        )
+        .mockResolvedValueOnce(
+          new Response(
+            JSON.stringify({
+              ...buildRuntimeState(),
+              subject: { userUuid: 'ann', role: 'OWNER', groupIds: ['g-1'], member: true },
+            }),
+            { status: 200 },
+          ),
+        )
+      const client = buildClient(fetchMock)
+
+      const eve = await client.getRuntimeStateByOrgId('org-1', { subject: 'eve' })
+      const ann = await client.getRuntimeStateByOrgId('org-1', { subject: 'ann' })
+
+      expect(eve.subject).toEqual({ userUuid: 'eve', role: null, groupIds: [], member: false })
+      expect(ann.subject).toEqual({ userUuid: 'ann', role: 'OWNER', groupIds: ['g-1'], member: true })
+    })
+
+    it('parses a state without the subject block as before (server without support)', async () => {
+      const fetchMock = vi
+        .fn()
+        .mockResolvedValue(new Response(JSON.stringify(buildRuntimeState()), { status: 200 }))
+      const client = buildClient(fetchMock)
+
+      const state = await client.getRuntimeStateByOrgId('org-1', { subject: 'alice' })
+
+      expect(state).toEqual(buildRuntimeState())
+      expect('subject' in state).toBe(false)
+    })
+
+    it('assertExecutionAllowed forwards subject and returns the block', async () => {
+      const fetchMock = subjectAwareFetch({ alice: ['g-design'] })
+      const client = buildClient(fetchMock)
+
+      const state = await client.assertExecutionAllowed('org-1', undefined, { subject: 'alice' })
+
+      expect(fetchMock.mock.calls[0]?.[0]).toContain('/by-billing-org/org-1/state?subject=alice')
+      expect(state.subject?.groupIds).toEqual(['g-design'])
+    })
+
+    it('InMemoryBillingClient serves subjects per user and none without subject', async () => {
+      const fake = new InMemoryBillingClient({
+        runtimeState: fixtures.runtimeState.active(),
+        subjects: [fixtures.subject.member({ userUuid: 'alice', groupIds: ['g-design'] })],
+      })
+      fake.setSubject(fixtures.subject.member({ userUuid: 'bob', role: 'OWNER' }))
+
+      const alice = await fake.getRuntimeStateByOrgId('org', { subject: 'alice' })
+      const bob = await fake.assertExecutionAllowed('bo', undefined, { subject: 'bob' })
+      const stranger = await fake.getRuntimeStateByBillingOrgId('bo', { subject: 'eve' })
+      const plain = await fake.getRuntimeStateByOrgId('org')
+
+      expect(alice.subject?.groupIds).toEqual(['g-design'])
+      expect(bob.subject?.role).toBe('OWNER')
+      expect(stranger.subject).toEqual(fixtures.subject.not_member({ userUuid: 'eve' }))
+      expect(plain.subject).toBeUndefined()
     })
   })
 

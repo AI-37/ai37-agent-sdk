@@ -29,5 +29,7 @@ export type {
   BillingRuntimePrivilegeConfig,
   BillingRuntimePrivilegeValueType,
   BillingRuntimeState,
+  BillingRuntimeStateOptions,
+  BillingRuntimeSubject,
   BillingUsageEventInput,
 } from './types'

@@ -7,6 +7,7 @@ from ..billing.types import (
     BillingRuntimeFeature,
     BillingRuntimePrivilege,
     BillingRuntimeState,
+    BillingRuntimeSubject,
 )
 
 _BASE = BillingRuntimeState(
@@ -56,6 +57,23 @@ def _feature_denied(feature: str, privilege: str, **overrides: Any) -> BillingRu
     return replace(_BASE, features=[_feature_grant(feature, privilege, False)], **overrides)
 
 
+def _subject_member(**overrides: Any) -> BillingRuntimeSubject:
+    # Участник организации для блока subject: по умолчанию EDITOR без групп.
+    return replace(
+        BillingRuntimeSubject(user_uuid="user-test", role="EDITOR", member=True), **overrides
+    )
+
+
+def _subject_not_member(**overrides: Any) -> BillingRuntimeSubject:
+    # Не участник: так billing отвечает на sub, которого нет среди активных участников.
+    return replace(BillingRuntimeSubject(user_uuid="user-outsider"), **overrides)
+
+
+class _SubjectFixtures:
+    member = staticmethod(_subject_member)
+    not_member = staticmethod(_subject_not_member)
+
+
 class _RuntimeStateFixtures:
     active = staticmethod(_active)
     no_resources = staticmethod(_no_resources)
@@ -66,6 +84,7 @@ class _RuntimeStateFixtures:
 
 class _Fixtures:
     runtime_state = _RuntimeStateFixtures()
+    subject = _SubjectFixtures()
 
 
 fixtures = _Fixtures()

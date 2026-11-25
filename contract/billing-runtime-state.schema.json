@@ -54,6 +54,18 @@
     "trialEndsAt": { "type": ["string", "null"] },
     "snapshotUpdatedAt": { "type": "string" },
     "snapshotVersion": { "type": "number" },
-    "stale": { "type": "boolean" }
+    "stale": { "type": "boolean" },
+    "subject": {
+      "type": "object",
+      "description": "Роль и группы пользователя в организации (AI-37/docs#749). Есть, только если state запрошен с ?subject=<sub>. Ключи в snake_case по плану; SDK принимает и camelCase (userUuid, groupIds).",
+      "required": ["user_uuid", "group_ids", "member"],
+      "additionalProperties": true,
+      "properties": {
+        "user_uuid": { "type": "string" },
+        "role": { "type": ["string", "null"], "enum": ["OWNER", "EDITOR", "USER", null] },
+        "group_ids": { "type": "array", "items": { "type": "string" } },
+        "member": { "type": "boolean", "description": "false — sub не активный участник организации; тогда group_ids пуст, role может быть null." }
+      }
+    }
   }
 }

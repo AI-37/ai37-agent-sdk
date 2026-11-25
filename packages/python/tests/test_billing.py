@@ -14,8 +14,12 @@ from ai37_agent_sdk import (
     friendly_billing_message,
 )
 from ai37_agent_sdk.billing import BillingExecutionDeniedError
-from ai37_agent_sdk.billing.types import BillingRuntimeState, BillingUsageEventInput
-from ai37_agent_sdk.testing import InMemoryBillingClient
+from ai37_agent_sdk.billing.types import (
+    BillingRuntimeState,
+    BillingRuntimeSubject,
+    BillingUsageEventInput,
+)
+from ai37_agent_sdk.testing import InMemoryBillingClient, fixtures
 
 ACTIVE = {
     "orgId": "u1",
@@ -232,6 +236,137 @@ def test_in_memory_fake_serves_state_by_org_id():
     state = BillingRuntimeState.from_api(ACTIVE)
     fake = InMemoryBillingClient(runtime_state=state)
     assert fake.get_runtime_state_by_org_id("any-org") is state
+
+
+# --- блок subject: роль и группы пользователя, кэш по (маршрут, id, subject) ---
+
+
+def _subject_aware_handler(groups_by_user: dict[str, list[str]], seen: list[str]):
+    # Billing отдаёт блок subject только на запрос с ?subject=; фейк повторяет это по URL.
+    def handler(req: httpx.Request) -> httpx.Response:
+        seen.append(req.url.raw_path.decode())
+        sub = req.url.params.get("subject")
+        body = dict(ACTIVE)
+        if sub is not None:
+            body["subject"] = {
+                "user_uuid": sub,
+                "role": "EDITOR",
+                "group_ids": groups_by_user.get(sub, []),
+                "member": sub in groups_by_user,
+            }
+        return httpx.Response(200, json=body)
+
+    return handler
+
+
+def test_two_users_of_one_org_get_their_own_groups_from_cache():
+    seen: list[str] = []
+    client = _cached_client(
+        _subject_aware_handler({"alice": ["g-design"], "bob": ["g-sales"]}, seen)
+    )
+
+    alice = client.get_runtime_state_by_org_id("org-1", subject="alice")
+    bob = client.get_runtime_state_by_org_id("org-1", subject="bob")
+    alice_again = client.get_runtime_state_by_org_id("org-1", subject="alice")
+
+    assert alice.subject == BillingRuntimeSubject(
+        user_uuid="alice", role="EDITOR", group_ids=["g-design"], member=True
+    )
+    assert bob.subject is not None and bob.subject.group_ids == ["g-sales"]
+    assert alice_again.subject is not None and alice_again.subject.group_ids == ["g-design"]
+    assert len(seen) == 2
+
+
+def test_cache_keeps_requests_with_and_without_subject_apart():
+    seen: list[str] = []
+    client = _cached_client(_subject_aware_handler({"alice": ["g-design"]}, seen))
+
+    plain = client.get_runtime_state_by_org_id("org-1")
+    with_subject = client.get_runtime_state_by_org_id("org-1", subject="alice")
+    plain_again = client.get_runtime_state_by_org_id("org-1")
+
+    assert plain.subject is None
+    assert with_subject.subject is not None and with_subject.subject.user_uuid == "alice"
+    assert plain_again.subject is None
+    assert len(seen) == 2
+
+
+def test_subject_goes_to_query_encoded_on_both_routes():
+    seen: list[str] = []
+    client = _cached_client(_subject_aware_handler({}, seen))
+
+    client.get_runtime_state_by_org_id("org/1", subject="a b&c=d#e")
+    client.get_runtime_state_by_billing_org_id("bo-1", subject="u:1")
+
+    assert seen == [
+        "/api/v1/billing/customers/by-org/org%2F1/state?subject=a%20b%26c%3Dd%23e",
+        "/api/v1/billing/customers/by-billing-org/bo-1/state?subject=u%3A1",
+    ]
+
+
+def test_empty_subject_is_no_subject():
+    seen: list[str] = []
+    client = _cached_client(_subject_aware_handler({}, seen))
+
+    client.get_runtime_state_by_org_id("org-1", subject="")
+    client.get_runtime_state_by_org_id("org-1")
+
+    assert seen == ["/api/v1/billing/customers/by-org/org-1/state"]
+
+
+def test_subject_block_parses_non_member_and_camelcase():
+    eve = BillingRuntimeState.from_api(
+        {**ACTIVE, "subject": {"user_uuid": "eve", "role": None, "group_ids": [], "member": False}}
+    )
+    ann = BillingRuntimeState.from_api(
+        {
+            **ACTIVE,
+            "subject": {"userUuid": "ann", "role": "OWNER", "groupIds": ["g-1"], "member": True},
+        }
+    )
+
+    assert eve.subject == BillingRuntimeSubject(user_uuid="eve")
+    assert ann.subject == BillingRuntimeSubject(
+        user_uuid="ann", role="OWNER", group_ids=["g-1"], member=True
+    )
+
+
+def test_state_without_subject_block_parses_as_before():
+    # Сервер без поддержки параметра просто не присылает блок.
+    client = _cached_client(lambda req: httpx.Response(200, json=ACTIVE))
+
+    state = client.get_runtime_state_by_org_id("org-1", subject="alice")
+
+    assert state == BillingRuntimeState.from_api(ACTIVE)
+    assert state.subject is None
+
+
+def test_assert_execution_allowed_forwards_subject():
+    seen: list[str] = []
+    client = _cached_client(_subject_aware_handler({"alice": ["g-design"]}, seen))
+
+    state = client.assert_execution_allowed("org-1", subject="alice")
+
+    assert seen == ["/api/v1/billing/customers/by-billing-org/org-1/state?subject=alice"]
+    assert state.subject is not None and state.subject.group_ids == ["g-design"]
+
+
+def test_in_memory_fake_serves_subjects_per_user():
+    fake = InMemoryBillingClient(
+        runtime_state=fixtures.runtime_state.active(),
+        subjects=[fixtures.subject.member(user_uuid="alice", group_ids=["g-design"])],
+    )
+    fake.set_subject(fixtures.subject.member(user_uuid="bob", role="OWNER"))
+
+    alice = fake.get_runtime_state_by_org_id("org", subject="alice")
+    bob = fake.assert_execution_allowed("bo", subject="bob")
+    stranger = fake.get_runtime_state_by_billing_org_id("bo", subject="eve")
+    plain = fake.get_runtime_state_by_org_id("org")
+
+    assert alice.subject is not None and alice.subject.group_ids == ["g-design"]
+    assert bob.subject is not None and bob.subject.role == "OWNER"
+    assert stranger.subject == fixtures.subject.not_member(user_uuid="eve")
+    assert plain.subject is None
 
 
 # --- информативность отказа (explain_denial / BillingExecutionDeniedError / friendly) ---

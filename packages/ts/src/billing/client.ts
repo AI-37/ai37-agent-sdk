@@ -14,6 +14,8 @@ import type {
   BillingClientOptions,
   BillingExecutionRequirement,
   BillingRuntimeState,
+  BillingRuntimeStateOptions,
+  BillingRuntimeSubject,
   BillingUsageEventInput,
 } from './types'
 
@@ -30,6 +32,9 @@ const RUNTIME_STATE_ID_LABEL: Record<RuntimeStateRoute, string> = {
   'by-org': 'orgId',
 }
 
+// Ключ кэша state: маршрут, id и sub пользователя (`null` — запрос без subject).
+type RuntimeStateCacheKey = [RuntimeStateRoute, string, string | null]
+
 export function createBillingClient(
   options: BillingClientOptions,
 ): BillingClient {
@@ -43,26 +48,27 @@ export function createBillingClient(
   const timeoutMs = options.timeoutMs ?? 5000
   const runtimeStateCacheTtlMs = options.runtimeStateCacheTtlMs ?? 5000
   const fetchImpl = resolveFetch(options.fetch)
-  // Один кэш на оба способа адресации: ключ `<маршрут>:<id>`, поэтому state по billingOrgId и по
-  // orgId не подменяют друг друга, даже если строки id совпали.
+  // Один кэш на оба способа адресации и на всех пользователей: ключ — JSON `[маршрут, id, subject]`.
+  // State по billingOrgId и по orgId не подменяют друг друга, даже если строки id совпали, а два
+  // пользователя одной организации не получают роль и группы друг друга. JSON, а не склейка через
+  // разделитель: в id и sub может оказаться любой символ.
   const runtimeStateCache = new LRUCache<string, BillingRuntimeState>({
     max: 10_000,
     ttl: Math.max(runtimeStateCacheTtlMs, 1),
     fetchMethod: async (cacheKey) => {
-      const separator = cacheKey.indexOf(':')
-      return fetchRuntimeState(
-        cacheKey.slice(0, separator) as RuntimeStateRoute,
-        cacheKey.slice(separator + 1),
-      )
+      const [route, id, subject] = JSON.parse(cacheKey) as RuntimeStateCacheKey
+      return fetchRuntimeState(route, id, subject)
     },
   })
 
   async function fetchRuntimeState(
     route: RuntimeStateRoute,
     id: string,
+    subject: string | null,
   ): Promise<BillingRuntimeState> {
+    const query = subject ? `?subject=${encodeURIComponent(subject)}` : ''
     const response = await fetchImpl(
-      `${baseUrl}/api/v1/billing/customers/${route}/${encodeURIComponent(id)}/state`,
+      `${baseUrl}/api/v1/billing/customers/${route}/${encodeURIComponent(id)}/state${query}`,
       {
         method: 'GET',
         headers: {
@@ -77,14 +83,16 @@ export function createBillingClient(
       `Billing state request failed for ${RUNTIME_STATE_ID_LABEL[route]}=${id}`,
     )
 
-    return (await response.json()) as BillingRuntimeState
+    return parseRuntimeState(await response.json())
   }
 
   async function getCachedRuntimeState(
     route: RuntimeStateRoute,
     id: string,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState> {
-    const cacheKey = `${route}:${id}`
+    const key: RuntimeStateCacheKey = [route, id, options?.subject || null]
+    const cacheKey = JSON.stringify(key)
     const state = await runtimeStateCache.fetch(cacheKey)
 
     if (!state) {
@@ -102,21 +110,24 @@ export function createBillingClient(
 
   async function getRuntimeStateByBillingOrgId(
     billingOrgId: string,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState> {
-    return getCachedRuntimeState('by-billing-org', billingOrgId)
+    return getCachedRuntimeState('by-billing-org', billingOrgId, options)
   }
 
   async function getRuntimeStateByOrgId(
     orgId: string,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState> {
-    return getCachedRuntimeState('by-org', orgId)
+    return getCachedRuntimeState('by-org', orgId, options)
   }
 
   async function assertExecutionAllowed(
     billingOrgId: string,
     requirement?: BillingExecutionRequirement,
+    options?: BillingRuntimeStateOptions,
   ): Promise<BillingRuntimeState> {
-    const state = await getRuntimeStateByBillingOrgId(billingOrgId)
+    const state = await getRuntimeStateByBillingOrgId(billingOrgId, options)
     if (
       state.entitlementStatus !== 'active' ||
       state.remainingTotalTokens <= 0 ||
@@ -163,5 +174,28 @@ function buildUsageEventPayload(event: BillingUsageEventInput) {
       timestamp: event.timestamp ?? Math.floor(Date.now() / 1000),
       properties: event.properties ?? {},
     },
+  }
+}
+
+// Блок subject в плане описан в snake_case (`user_uuid`, `group_ids`), остальной state billing
+// отдаёт в camelCase. Принимаем оба написания и приводим к camelCase, чтобы клиент не зависел
+// от того, как сервер в итоге сериализует блок.
+function parseRuntimeState(raw: unknown): BillingRuntimeState {
+  const state = raw as BillingRuntimeState & { subject?: unknown }
+  if (state.subject === undefined || state.subject === null) {
+    const { subject: _absent, ...rest } = state
+    return rest
+  }
+  return { ...state, subject: parseRuntimeSubject(state.subject) }
+}
+
+function parseRuntimeSubject(raw: unknown): BillingRuntimeSubject {
+  const block = raw as Record<string, unknown>
+  const groupIds = block.groupIds ?? block.group_ids
+  return {
+    userUuid: String(block.userUuid ?? block.user_uuid ?? ''),
+    role: (block.role ?? null) as BillingRuntimeSubject['role'],
+    groupIds: Array.isArray(groupIds) ? groupIds.map(String) : [],
+    member: block.member === true,
   }
 }

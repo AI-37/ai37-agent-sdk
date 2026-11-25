@@ -24,13 +24,16 @@ __all__ = ["HttpBillingClient", "create_billing_client", "has_required_access"]
 # которых есть только org_id). В тексте ошибки — то же имя id, что и в TS-клиенте.
 _RUNTIME_STATE_ID_LABEL = {"by-billing-org": "billingOrgId", "by-org": "orgId"}
 
+# Ключ кэша state: маршрут, id и sub пользователя (None — запрос без subject).
+_CacheKey = tuple[str, str, str | None]
+
 
 class HttpBillingClient:
     """Клиент billing-сервиса.
 
     Эндпоинты: GET .../api/v1/billing/customers/by-billing-org/{id}/state,
     GET .../api/v1/billing/customers/by-org/{org_id}/state, POST .../api/v1/events.
-    runtime state кэшируется по маршруту и id (TTL).
+    runtime state кэшируется по маршруту, id и subject (TTL).
     """
 
     def __init__(
@@ -55,50 +58,58 @@ class HttpBillingClient:
         self._usage_token = usage_ingest_token
         self._ttl = runtime_state_cache_ttl_ms / 1000
         self._client = http_client or httpx.Client(timeout=timeout_ms / 1000)
-        self._cache: dict[str, tuple[float, BillingRuntimeState]] = {}
+        self._cache: dict[_CacheKey, tuple[float, BillingRuntimeState]] = {}
 
     def _auth_headers(self) -> dict[str, str]:
         return {"Authorization": f"Bearer {self._token}"}
 
-    def _fetch_state(self, route: str, id_: str) -> BillingRuntimeState:
+    def _fetch_state(self, route: str, id_: str, subject: str | None) -> BillingRuntimeState:
         encoded = quote(id_, safe="")
         url = f"{self._base}/api/v1/billing/customers/{route}/{encoded}/state"
+        if subject:
+            url += f"?subject={quote(subject, safe='')}"
         response = self._client.get(url, headers=self._auth_headers())
         label = _RUNTIME_STATE_ID_LABEL[route]
         ensure_ok(response, f"Billing state request failed for {label}={id_}")
         return BillingRuntimeState.from_api(response.json())
 
-    def _cached_state(self, route: str, id_: str) -> BillingRuntimeState:
-        # Ключ кэша — пара (маршрут, id): state по billing_org_id и по org_id не подменяют друг
-        # друга, даже если строки id совпали.
-        key = f"{route}:{id_}"
+    def _cached_state(self, route: str, id_: str, subject: str | None) -> BillingRuntimeState:
+        # Ключ кэша — (маршрут, id, subject): state по billing_org_id и по org_id не подменяют
+        # друг друга, даже если строки id совпали, а два пользователя одной организации не
+        # получают роль и группы друг друга.
+        key: _CacheKey = (route, id_, subject or None)
         if self._ttl > 0:
             hit = self._cache.get(key)
             if hit is not None and (time.monotonic() - hit[0]) < self._ttl:
                 return hit[1]
-        state = self._fetch_state(route, id_)
+        state = self._fetch_state(route, id_, key[2])
         if self._ttl > 0:
             self._cache[key] = (time.monotonic(), state)
         return state
 
     def get_runtime_state_by_billing_org_id(
-        self, billing_org_id: str
+        self, billing_org_id: str, *, subject: str | None = None
     ) -> BillingRuntimeState:
-        return self._cached_state("by-billing-org", billing_org_id)
+        return self._cached_state("by-billing-org", billing_org_id, subject)
 
-    def get_runtime_state_by_org_id(self, org_id: str) -> BillingRuntimeState:
+    def get_runtime_state_by_org_id(
+        self, org_id: str, *, subject: str | None = None
+    ) -> BillingRuntimeState:
         """State продукта по организации: для сервисов, у которых есть только org_id.
 
         Продукт billing берёт из токена, аккаунт биллинга по организации находит сам.
+        С ``subject`` в state приходит блок ``subject`` с ролью и группами пользователя.
         """
-        return self._cached_state("by-org", org_id)
+        return self._cached_state("by-org", org_id, subject)
 
     def assert_execution_allowed(
         self,
         billing_org_id: str,
         requirement: BillingExecutionRequirement | None = None,
+        *,
+        subject: str | None = None,
     ) -> BillingRuntimeState:
-        state = self.get_runtime_state_by_billing_org_id(billing_org_id)
+        state = self.get_runtime_state_by_billing_org_id(billing_org_id, subject=subject)
         if (
             state.entitlement_status != "active"
             or state.remaining_total_tokens <= 0
